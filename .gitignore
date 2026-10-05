@@ -1,0 +1,29 @@
+# Secrets / local environment
+.env
+.env.*
+!.env.example
+
+# Runtime/private data
+users.json
+paid_sms.json
+user_stats.json
+referral_data.json
+banned_users.json
+withdraw_requests.json
+activity_logs.json
+datarange.json
+system_config.json
+user_otp_rates.json
+required_channels.json
+fake_otp_config.json
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
