@@ -4544,49 +4544,6 @@ async def miniapp_admin_api(request):
     return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
 
 
-# ==================== STANDALONE WEBSITE ====================
-WEB_USERS_FILE = "web_users.json"
-web_sessions = {}
-web_orders = {}
-web_history = {}
-
-def _web_load_users():
-    return load_data(WEB_USERS_FILE)
-
-def _web_hash(password, salt=None):
-    salt = salt or os.urandom(16).hex()
-    digest = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
-    return salt, digest
-
-def _web_user(request):\n    return "public"\n
-def _web_order_view(o):
-    age=max(0,int(time.time()-o["created_at"]))
-    return {"id":o["id"],"label":o["label"],"number_masked":o["number_masked"],"range":o["range"],"status":o["status"],"remaining_seconds":max(0,3600-age)}
-
-async def web_dashboard(request):
-    username=_web_user(request)
-    if not username:return web.json_response({"error":"unauthorized"},status=401)
-    users=_web_load_users(); active=[_web_order_view(o) for o in web_orders.get(username,[]) if o["status"]=="Aktiv"]
-    return web.json_response({"user":{"username":username},"balance":format_balance(users.get(username,{}).get("balance",0)),"orders":active,"history":web_history.get(username,[])[-20:][::-1]})
-
-async def web_orders_api(request):
-    username=_web_user(request)
-    if not username:return web.json_response({"error":"unauthorized"},status=401)
-    body=await request.json(); action=body.get("action")
-    if action=="create_test":
-        o={"id":f"W{int(time.time()*1000)}","label":"Test sifarişi","number_masked":"+994 50 *** ** 67","range":"Sandbox","status":"Aktiv","created_at":time.time()}; web_orders.setdefault(username,[]).append(o); return web.json_response({"ok":True,"order":_web_order_view(o)})
-    if action=="cancel":
-        for o in web_orders.get(username,[]):
-            if o["id"]==str(body.get("id","")) and o["status"]=="Aktiv": o["status"]="Ləğv edildi"; web_history.setdefault(username,[]).append(_web_order_view(o)); return web.json_response({"ok":True})
-    return web.json_response({"error":"not_found"},status=404)
-
-async def web_test_sms(request):
-    username=_web_user(request); oid=request.query.get("order_id","")
-    if not username:return web.json_response({"error":"unauthorized"},status=401)
-    if not any(o["id"]==oid for o in web_orders.get(username,[])):return web.json_response({"error":"not_found"},status=404)
-    return web.json_response({"messages":[{"sender":"Sandbox","text":"Bu test SMS-dir. Kod: 583921","label":"Test məlumatı","is_test":True}]})
-
-
 async def post_init(application):
     for _ in range(20):
         asyncio.create_task(worker())
@@ -4646,11 +4603,6 @@ async def run_combined_server():
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
-    server.router.add_get("/web-api/dashboard", web_dashboard)
-    server.router.add_post("/web-api/orders", web_orders_api)
-    server.router.add_get("/web-api/test-sms", web_test_sms)
-    server.router.add_get("/", lambda request: web.FileResponse("site/index.html"))
-    server.router.add_static("/site/", path="site", show_index=False)
     server.router.add_get("/health", health)
 
     port = int(os.environ.get("PORT", "8080"))
