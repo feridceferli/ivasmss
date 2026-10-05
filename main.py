@@ -507,7 +507,7 @@ def add_required_channel(link, label=None, chat_id=None):
         if ch.get("link") == link:
             return False, "এই লিংক ইতিমধ্যে আছে।"
     if not label:
-        label = link.replace("https://t.me/betrunaz", "").replace("@", "")
+        label = link.replace("https://t.me/", "").replace("@", "")
         if label.startswith("+"):
             label = "Channel " + label
         else:
@@ -1595,12 +1595,12 @@ async def monitor_loop(app):
                                 [
                                     InlineKeyboardButton(
                                         "‼️ PANEL",
-                                        url="https://t.me/betrunaz",
+                                        url="betrunaz",
                                         style="danger",
                                     ),
                                     InlineKeyboardButton(
                                         "📢 CHANNEL",
-                                        url="https://t.me/betrunaz",
+                                        url="betrunaz",
                                         style="success",
                                     ),
                                 ]
@@ -1712,7 +1712,7 @@ async def fake_otp_loop(app):
                     [
                         [
                             InlineKeyboardButton(
-                                "‼️ PANEL", url="https://t.me/betrunaz", style="danger"
+                                "‼️ PANEL", url="betrunaz", style="danger"
                             ),
                             InlineKeyboardButton(
                                 "📢 CHANNEL",
