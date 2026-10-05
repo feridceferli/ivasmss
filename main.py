@@ -33,8 +33,8 @@ from bot_localization import install_azerbaijani_localization, normalize_button_
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://feridceferli.github.io/ivasmss/").strip()
 
-# ==================== VOLTX SMS API CONFIGURATION ====================
-API_KEY = os.environ.get("VOLTX_API_KEY")
+# ==================== AZE SMS PANEL API CONFIGURATION ====================
+API_KEY = os.environ.get("AZE_SMS_API_KEY") or os.environ.get("VOLTX_API_KEY")
 BASE_URL = "https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api"
 HEADERS = {"mauthapi": API_KEY, "Content-Type": "application/json"}
 
@@ -57,7 +57,7 @@ ADMINS = [5152261397]
 OTP_GROUP_ID =-1003812747446
 
 # ==================== XOŞ GƏLİŞ MESAJI ====================
-WELCOME_MESSAGE = """⚡️💎 VOLT X SMS 💎⚡️
+WELCOME_MESSAGE = """🇦🇿💎 AZE SMS PANEL 💎🇦🇿
 
 🌍 Virtual nömrə platforması
 📩 Birdəfəlik kodların ani çatdırılması
@@ -69,7 +69,7 @@ WELCOME_MESSAGE = """⚡️💎 VOLT X SMS 💎⚡️
 ✨ Daha çox xidmət...
 
 💎 Premium xidmət keyfiyyətindən
-⚡️ VOLT X SMS ilə yararlanın!"""
+🇦🇿 Aze Sms Panel ilə yararlanın!"""
 
 # ==================== OTP RATE CONFIGURATION ====================
 DEFAULT_OTP_RATE = 0.20
@@ -4434,7 +4434,7 @@ def main():
         name
         for name, value in {
             "BOT_TOKEN": BOT_TOKEN,
-            "VOLTX_API_KEY": API_KEY,
+            "AZE_SMS_API_KEY": API_KEY,
         }.items()
         if not value
     ]
