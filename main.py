@@ -4057,7 +4057,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = _build_services_keyboard(services)
         await query.message.edit_text(
             "📡✨ 𝗦𝗘𝗟𝗘𝗖𝗧 𝗬𝗢𝗨𝗥 𝗦𝗘𝗥𝗩𝗜𝗖𝗘 ✨📡\n\n"
-            "<blockquote>📱 নিচ থেকে একটি <b>Service</b> সিলেক্ট করুন:</blockquote>",
+            "<blockquote>📱 Aşağıdan birini <b>Service</b>Seçin:</blockquote>",
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -4084,8 +4084,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         if not num:
             await query.message.reply_text(
-                "❌ <b>এই রেঞ্জে বর্তমানে কোনো নম্বর নেই!</b>\n\n"
-                "<blockquote>⚠️ দয়া করে অন্য রেঞ্জ নির্বাচন করুন বা পরে আবার চেষ্টা করুন।</blockquote>",
+                "❌ <b>Hal-hazırda bu diapazonda Nömrələr yoxdur!</b>\n\n"
+                "<blockquote>⚠️ Xahiş edirəm başqa bir sıra seçin və ya sonra yenidən cəhd edin.</blockquote>",
                 parse_mode="HTML",
                 reply_markup=InlineKeyboardMarkup(
                     [
@@ -4193,7 +4193,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         keyboard = _build_services_keyboard(services)
         await query.edit_message_text(
             "📡✨ 𝗦𝗘𝗟𝗘𝗖𝗧 𝗬𝗢𝗨𝗥 𝗦𝗘𝗥𝗩𝗜𝗖𝗘 ✨📡\n\n"
-            "<blockquote>✨ নিচ থেকে আপনার পছন্দের <b>Service</b> নির্বাচন করুন:</blockquote>",
+            "<blockquote>✨ Aşağıdakı siyahıdan seçiminiz. <b>Service</b> Seçin:</blockquote>",
             parse_mode="HTML",
             reply_markup=keyboard,
         )
