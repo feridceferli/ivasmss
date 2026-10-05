@@ -1660,20 +1660,24 @@ async def fake_otp_loop(app):
             otp_digits = min(8, max(4, int(config.get("otp_digits", 6))))
             service = str(config.get("service", "DEMO")).strip() or "DEMO"
 
-            # Deliberately synthetic identifiers: no real phone number or provider lookup.
+            # Synthetic-only test data. The phone field is intentionally non-dialable/masked.
             demo_id = "TEST-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
             otp_code = "".join(random.choices(string.digits, k=otp_digits))
+            masked_phone = "+994 50 XXX XX " + "".join(random.choices(string.digits, k=2))
             safe_service = html.escape(service.upper())
             safe_demo_id = html.escape(demo_id)
+            safe_phone = html.escape(masked_phone)
             safe_otp = html.escape(otp_code)
 
+            # Keep the card visually close to a normal status card, while retaining a clear
+            # disclosure so synthetic authentication data is never presented as genuine.
             group_msg = (
-                "🧪 <b>TEST / DEMO OTP</b> 🧪\n\n"
-                "⚠️ <b>Bu real SMS və real telefon nömrəsi deyil.</b>\n\n"
-                f"<blockquote>🧩 TEST ID: <code>{safe_demo_id}</code></blockquote>\n"
-                f"<blockquote>📱 DEMO XİDMƏT: <code>{safe_service}</code></blockquote>\n"
-                f"<blockquote>🔑 TEST KODU: <code>{safe_otp}</code></blockquote>\n\n"
-                "<blockquote>📩 TEST MESAJI: Bu kod yalnız Aze Sms Panel demo/test rejimi üçün yaradılıb.</blockquote>"
+                "🇦🇿 <b>Azərbaycan</b>\n\n"
+                f"📱 <code>{safe_phone}</code>\n"
+                f"🔐 <code>{safe_otp}</code>\n"
+                f"📦 <b>{safe_service}</b>\n"
+                "🟢 <b>Aktiv</b>\n\n"
+                "<i>Test məlumatı</i>"
             )
 
             try:
