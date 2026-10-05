@@ -1589,7 +1589,7 @@ async def monitor_loop(app):
                             )
                         else:
                             user_rate = get_user_otp_rate(uid)
-                            balance_msg = f"💵 ADD BALANCE FOR {user_rate:.2f} BDT"
+                            balance_msg = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
                         user_msg = (
                             f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n\n"
                             f"<blockquote>📶 RANGE: <code>{num_range_info}</code></blockquote>\n"
@@ -2010,7 +2010,7 @@ async def perform_otp_search(update, context, target_num):
                             user_rate = get_user_otp_rate(int(uid))
                             await update_db_balance(uid, user_rate)
                             add_otp_received(uid)
-                            payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} BDT"
+                            payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
                         else:
                             payment_status = (
                                 "⚠️ এই OTP‑তে কোনো টাকা যোগ করা হয়নি (Telegram/WhatsApp)"
@@ -2061,12 +2061,12 @@ async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     total_reward = float(successful_refers) * REFERRAL_PRICE
     refer_msg = (
         f"🎁 <b>REFER AND EARN SYSTEM</b> 🎁\n\n"
-        f"<blockquote>🚀 INVITE FRIENDS &amp; EARN {int(REFERRAL_PRICE)} BDT EACH! 💸</blockquote>\n\n"
+        f"<blockquote>🚀 INVITE FRIENDS &amp; EARN {int(REFERRAL_PRICE)} AZN EACH! 💸</blockquote>\n\n"
         f"<b>🔗 YOUR REFERRAL LINK:</b>\n"
         f"<blockquote><code>{referral_link}</code></blockquote>\n\n"
         f"<b>📊 YOUR STATS:</b>\n"
         f"<blockquote>👥 TOTAL REFERS: {successful_refers}\n"
-        f"💰 TOTAL EARNED: {format_balance(total_reward)} BDT</blockquote>\n\n"
+        f"💰 TOTAL EARNED: {format_balance(total_reward)} AZN</blockquote>\n\n"
         f"✨ <b>SHARE LINK &amp; EARN MONEY!</b> ✨"
     )
     await update.message.reply_text(
@@ -2119,9 +2119,9 @@ async def withdraw_method_selected(update: Update, context: ContextTypes.DEFAULT
         max_with = config["max_withdraw"]
         msg = (
             f"<blockquote>💸 SEND YOUR AMOUNT!\n"
-            f"💵 TOTAL BALANCE: {format_balance(balance)} BDT</blockquote>\n\n"
-            f"<blockquote>📉 MINIMUM WITHDRAW {min_with} BDT</blockquote>\n"
-            f"<blockquote>📈 MAXIMUM WITHDRAW {max_with} BDT</blockquote>"
+            f"💵 TOTAL BALANCE: {format_balance(balance)} AZN</blockquote>\n\n"
+            f"<blockquote>📉 MINIMUM WITHDRAW {min_with} AZN</blockquote>\n"
+            f"<blockquote>📈 MAXIMUM WITHDRAW {max_with} AZN</blockquote>"
         )
         await update.message.reply_text(
             msg, parse_mode="HTML", reply_markup=cancel_keyboard()
@@ -2155,7 +2155,7 @@ async def withdraw_amount_received(update: Update, context: ContextTypes.DEFAULT
     max_with = config["max_withdraw"]
     if amount < min_with or amount > max_with:
         await update.message.reply_text(
-            f"📉 MIN: {min_with} BDT | MAX: {max_with} BDT",
+            f"📉 MIN: {min_with} AZN | MAX: {max_with} AZN",
             reply_markup=cancel_keyboard(),
         )
         return
@@ -2251,7 +2251,7 @@ async def process_withdraw_confirm(update: Update, context: ContextTypes.DEFAULT
         f"✅ <b>WITHDRAWAL REQUEST SUBMITTED</b> ✅\n\n"
         f"<blockquote>📝 METHOD: <code>{method}</code>\n"
         f"📞 NUMBER: <code>{payment_number}</code>\n"
-        f"💰 AMOUNT: <code>{format_balance(amount)} BDT</code>\n"
+        f"💰 AMOUNT: <code>{format_balance(amount)} AZN</code>\n"
         f"🆔 ID: <code>{payment_id}</code></blockquote>",
         parse_mode="HTML",
     )
@@ -2266,7 +2266,7 @@ async def process_withdraw_confirm(update: Update, context: ContextTypes.DEFAULT
         f"<blockquote>🆔 USER: <code>{uid}</code>\n"
         f"📝 METHOD: <code>{method}</code>\n"
         f"📞 NUMBER: <code>{payment_number}</code>\n"
-        f"💰 AMOUNT: <code>{format_balance(amount)} BDT</code>\n"
+        f"💰 AMOUNT: <code>{format_balance(amount)} AZN</code>\n"
         f"🆔 ID: <code>{payment_id}</code></blockquote>"
     )
     admin_kb = InlineKeyboardMarkup(
@@ -2329,13 +2329,13 @@ async def admin_approve_withdraw(update, context, payment_id):
             f"🎉 <b>WITHDRAWAL APPROVED!</b>\n\n"
             f"<blockquote>📝 METHOD: <code>{method}</code>\n"
             f"📞 NUMBER: <code>{payment_number}</code>\n"
-            f"💰 AMOUNT: <code>{format_balance(amount)} BDT</code></blockquote>",
+            f"💰 AMOUNT: <code>{format_balance(amount)} AZN</code></blockquote>",
             parse_mode="HTML",
         )
     except:
         pass
     await query.message.edit_text(
-        f"✅ APPROVED | User: {uid} | Amount: {format_balance(amount)} BDT"
+        f"✅ APPROVED | User: {uid} | Amount: {format_balance(amount)} AZN"
     )
 
 
@@ -2360,7 +2360,7 @@ async def admin_reject_withdraw(update, context, payment_id):
     except:
         pass
     await query.message.edit_text(
-        f"❌ REJECTED | User: {uid} | Amount: {format_balance(amount)} BDT"
+        f"❌ REJECTED | User: {uid} | Amount: {format_balance(amount)} AZN"
     )
 
 
@@ -2422,14 +2422,14 @@ async def process_add_balance_amount(update, context):
     new_balance = await update_db_balance(uid, amount)
     await update.message.reply_text(
         f"✅ **ADD BALANCE SUCCESSFUL**\n🆔 USER: `{uid}`\n"
-        f"💰 ADDED: `{format_balance(amount)} BDT`\n"
-        f"📈 NEW BALANCE: `{format_balance(new_balance)} BDT`",
+        f"💰 ADDED: `{format_balance(amount)} AZN`\n"
+        f"📈 NEW BALANCE: `{format_balance(new_balance)} AZN`",
         parse_mode="Markdown",
     )
     try:
         await context.bot.send_message(
             uid,
-            f"🎉 ADMIN ADDED `{format_balance(amount)} BDT` TO YOUR ACCOUNT!\n💵 NEW BALANCE: `{format_balance(new_balance)} BDT`",
+            f"🎉 ADMIN ADDED `{format_balance(amount)} AZN` TO YOUR ACCOUNT!\n💵 NEW BALANCE: `{format_balance(new_balance)} AZN`",
             parse_mode="Markdown",
         )
     except:
@@ -2454,7 +2454,7 @@ async def process_remove_balance_amount(update, context):
     old_balance = get_user(uid).get("balance", 0)
     if amount > old_balance:
         await update.message.reply_text(
-            f"❌ INSUFFICIENT BALANCE! Current: {format_balance(old_balance)} BDT"
+            f"❌ INSUFFICIENT BALANCE! Current: {format_balance(old_balance)} AZN"
         )
         context.user_data["remove_balance_mode"] = False
         context.user_data["pending_remove_user"] = None
@@ -2462,14 +2462,14 @@ async def process_remove_balance_amount(update, context):
     new_balance = await update_db_balance(uid, -amount)
     await update.message.reply_text(
         f"✅ **REMOVE BALANCE SUCCESSFUL**\n🆔 USER: `{uid}`\n"
-        f"💸 REMOVED: `{format_balance(amount)} BDT`\n"
-        f"📉 NEW BALANCE: `{format_balance(new_balance)} BDT`",
+        f"💸 REMOVED: `{format_balance(amount)} AZN`\n"
+        f"📉 NEW BALANCE: `{format_balance(new_balance)} AZN`",
         parse_mode="Markdown",
     )
     try:
         await context.bot.send_message(
             uid,
-            f"⚠️ ADMIN REMOVED `{format_balance(amount)} BDT` FROM YOUR ACCOUNT!\n💵 NEW BALANCE: `{format_balance(new_balance)} BDT`",
+            f"⚠️ ADMIN REMOVED `{format_balance(amount)} AZN` FROM YOUR ACCOUNT!\n💵 NEW BALANCE: `{format_balance(new_balance)} AZN`",
             parse_mode="Markdown",
         )
     except:
@@ -2584,7 +2584,7 @@ async def admin_change_min_withdraw_amount(update, context):
             raise ValueError
         update_min_withdraw(new_min)
         await update.message.reply_text(
-            f"✅ মিনিমাম উইথড্র অ্যামাউন্ট পরিবর্তন করে {new_min} BDT করা হয়েছে।",
+            f"✅ মিনিমাম উইথড্র অ্যামাউন্ট পরিবর্তন করে {new_min} AZN করা হয়েছে।",
             reply_markup=system_config_keyboard(),
         )
     except:
@@ -2599,7 +2599,7 @@ async def admin_change_otp_rate_start(update, context):
     context.user_data["admin_otp_rate_mode"] = True
     current_rate = get_otp_rate()
     await update.message.reply_text(
-        f"💲 বর্তমান OTP রেট: `{current_rate:.2f} BDT`\n\nসেন্ড দ্য নিউ রেট (শুধু সংখ্যা, যেমন: `0.25`):\n\n<blockquote>সাবধান: এটি সব নতুন OTP-তে প্রযোজ্য হবে।</blockquote>",
+        f"💲 বর্তমান OTP রেট: `{current_rate:.2f} AZN`\n\nসেন্ড দ্য নিউ রেট (শুধু সংখ্যা, যেমন: `0.25`):\n\n<blockquote>সাবধান: এটি সব নতুন OTP-তে প্রযোজ্য হবে।</blockquote>",
         parse_mode="HTML",
         reply_markup=cancel_keyboard(),
     )
@@ -2614,7 +2614,7 @@ async def admin_change_otp_rate_amount(update, context):
             raise ValueError
         update_otp_rate(new_rate)
         await update.message.reply_text(
-            f"✅ OTP রেট পরিবর্তন করে `{new_rate:.2f} BDT` করা হয়েছে।\n\nনতুন OTP গুলো এই হারে যুক্ত হবে।",
+            f"✅ OTP রেট পরিবর্তন করে `{new_rate:.2f} AZN` করা হয়েছে।\n\nনতুন OTP গুলো এই হারে যুক্ত হবে।",
             parse_mode="HTML",
             reply_markup=system_config_keyboard(),
         )
@@ -2660,8 +2660,8 @@ async def admin_set_user_otp_rate_user(update, context):
     current_rate = get_user_otp_rate(uid_int)
     global_rate = get_otp_rate()
     await update.message.reply_text(
-        f"বর্তমান ইউজার রেট: `{current_rate:.2f} BDT`\n"
-        f"গ্লোবাল রেট: `{global_rate:.2f} BDT`\n\n"
+        f"বর্তমান ইউজার রেট: `{current_rate:.2f} AZN`\n"
+        f"গ্লোবাল রেট: `{global_rate:.2f} AZN`\n\n"
         "নতুন রেট ইনপুট দিন (শুধু সংখ্যা, যেমন: 0.25):\n"
         "রেট 0 দিলে কাস্টম রেট মুছে যাবে এবং গ্লোবাল রেট ব্যবহার হবে।",
         parse_mode="Markdown",
@@ -2699,13 +2699,13 @@ async def admin_set_user_otp_rate_amount(update, context):
     set_user_otp_rate(uid, rate)
     if rate > 0:
         await update.message.reply_text(
-            f"✅ ইউজার `{uid}` এর জন্য OTP রেট `{rate:.2f} BDT` সেট করা হয়েছে।",
+            f"✅ ইউজার `{uid}` এর জন্য OTP রেট `{rate:.2f} AZN` সেট করা হয়েছে।",
             parse_mode="Markdown",
             reply_markup=system_config_keyboard(),
         )
     else:
         await update.message.reply_text(
-            f"✅ ইউজার `{uid}` এর কাস্টম OTP রেট মুছে ফেলা হয়েছে। এখন গ্লোবাল রেট `{get_otp_rate():.2f} BDT` প্রযোজ্য হবে।",
+            f"✅ ইউজার `{uid}` এর কাস্টম OTP রেট মুছে ফেলা হয়েছে। এখন গ্লোবাল রেট `{get_otp_rate():.2f} AZN` প্রযোজ্য হবে।",
             parse_mode="Markdown",
             reply_markup=system_config_keyboard(),
         )
@@ -2752,8 +2752,8 @@ async def admin_view_user_otp_rate(update, context):
         f"📊 **USER OTP RATE INFO**\n"
         f"🆔 ইউজার: `{uid_int}`\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🎯 কাস্টম রেট: `{custom_rate:.2f} BDT`\n"
-        f"🌐 গ্লোবাল রেট: `{global_rate:.2f} BDT`\n"
+        f"🎯 কাস্টম রেট: `{custom_rate:.2f} AZN`\n"
+        f"🌐 গ্লোবাল রেট: `{global_rate:.2f} AZN`\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
         f"🔹 {'এই ইউজারের জন্য কাস্টম রেট সক্রিয়।' if has_custom else 'এই ইউজারের জন্য কাস্টম রেট নেই, গ্লোবাল রেট ব্যবহার হবে।'}"
     )
@@ -3225,7 +3225,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<blockquote>🏷️ NAME: <b>{full_name}</b></blockquote>\n"
             f"<blockquote>🆔 USERNAME: @{username}</blockquote>\n"
             f"<blockquote>🗝️ TELEGRAM ID: <code>{uid}</code></blockquote>\n\n"
-            f"<blockquote>💵 BALANCE: <b>{format_balance(user_data.get('balance', 0))} BDT</b></blockquote>\n\n"
+            f"<blockquote>💵 BALANCE: <b>{format_balance(user_data.get('balance', 0))} AZN</b></blockquote>\n\n"
             f"✨ <b>TODAY</b>\n"
             f"<blockquote>📱 NUMBERS: {stats['today_numbers']}\n🔑 OTPS: {stats['today_otps']}</blockquote>\n\n"
             f"🔥 <b>LAST 7 DAYS</b>\n"
@@ -3240,7 +3240,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         balance = get_user(uid)["balance"]
         await update.message.reply_text(
             f"💰 <b>YOUR CURRENT BALANCE</b>\n\n"
-            f"<blockquote>💵 TOTAL: <b>{format_balance(balance)} BDT</b></blockquote>",
+            f"<blockquote>💵 TOTAL: <b>{format_balance(balance)} AZN</b></blockquote>",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -3525,15 +3525,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if user_db:
             total_bal = sum(v.get("balance", 0) for v in user_db.values())
             lines = [
-                f"{i}. {uid_}: {v.get('balance', 0):.2f} BDT"
+                f"{i}. {uid_}: {v.get('balance', 0):.2f} AZN"
                 for i, (uid_, v) in enumerate(user_db.items(), 1)
             ]
-            content = f"💰 TOTAL BALANCE: {total_bal:.2f} BDT\n\n" + "\n".join(lines)
+            content = f"💰 TOTAL BALANCE: {total_bal:.2f} AZN\n\n" + "\n".join(lines)
             f = io.BytesIO(content.encode())
             f.name = f"BALANCES_{total_bal:.0f}.txt"
             await update.message.reply_document(
                 document=f,
-                caption=f"💵 Total Balance: {total_bal:.2f} BDT",
+                caption=f"💵 Total Balance: {total_bal:.2f} AZN",
                 reply_markup=user_management_keyboard(),
             )
         else:
@@ -3829,7 +3829,7 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     balance = get_user(uid)["balance"]
     await update.message.reply_text(
-        f"💰 BALANCE: `{format_balance(balance)} BDT`",
+        f"💰 BALANCE: `{format_balance(balance)} AZN`",
         parse_mode="Markdown",
         reply_markup=main_keyboard(uid),
     )
@@ -3850,7 +3850,7 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"🏷️ NAME: `{user.full_name}`\n"
         f"🆔 USERNAME: @{user.username or 'No username'}\n"
         f"🗝️ ID: `{uid}`\n\n"
-        f"💵 BALANCE: {format_balance(user_data.get('balance', 0))} BDT\n\n"
+        f"💵 BALANCE: {format_balance(user_data.get('balance', 0))} AZN\n\n"
         f"✨ TODAY: 📱 {stats['today_numbers']} | 🔑 {stats['today_otps']}\n"
         f"🔥 7 DAYS: 📱 {stats['last7d_numbers']} | 🔑 {stats['last7d_otps']}\n"
         f"🌐 ALL TIME: 📱 {stats['total_numbers']} | 🔑 {stats['total_otps']}"
@@ -3959,7 +3959,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     try:
                         await context.bot.send_message(
                             referrer_id,
-                            f"🎉 <b>NEW REFERRAL!</b>\n\n<blockquote>🗝️ ID: <code>{uid}</code>\n💰 REWARD: {format_balance(REFERRAL_PRICE)} BDT\n👥 TOTAL REFERS: {new_count}</blockquote>",
+                            f"🎉 <b>NEW REFERRAL!</b>\n\n<blockquote>🗝️ ID: <code>{uid}</code>\n💰 REWARD: {format_balance(REFERRAL_PRICE)} AZN\n👥 TOTAL REFERS: {new_count}</blockquote>",
                             parse_mode="HTML",
                         )
                     except:
@@ -4146,7 +4146,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         min_with = config["min_withdraw"]
         if balance < min_with:
             await query.message.reply_text(
-                f"<blockquote>💵 BALANCE: {format_balance(balance)} BDT\n📉 MIN WITHDRAW: {min_with} BDT</blockquote>",
+                f"<blockquote>💵 BALANCE: {format_balance(balance)} AZN\n📉 MIN WITHDRAW: {min_with} AZN</blockquote>",
                 parse_mode="HTML",
             )
             return
@@ -4267,7 +4267,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         ]
         content = (
             f"📊 USER DATA REPORT — {target_uid}\n"
-            f"💰 BALANCE: {user_info.get('balance', 0):.2f} BDT\n"
+            f"💰 BALANCE: {user_info.get('balance', 0):.2f} AZN\n"
             f"━━━━━━━━━━━━━━━━━━\n"
             f"TODAY NUMBERS: {stats['today_numbers']}\n"
             f"TODAY OTPS: {stats['today_otps']}\n"
@@ -4326,7 +4326,7 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif action == "balance":
         balance = get_user(uid).get("balance", 0)
         await update.message.reply_text(
-            f"💰 <b>BALANS</b>\n\n<blockquote>💵 {format_balance(balance)} BDT</blockquote>",
+            f"💰 <b>BALANS</b>\n\n<blockquote>💵 {format_balance(balance)} AZN</blockquote>",
             parse_mode="HTML",
         )
     elif action == "profile":
@@ -4340,7 +4340,7 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
             f"<blockquote>🏷️ Ad: <b>{name}</b></blockquote>\n"
             f"<blockquote>🆔 Username: @{username}</blockquote>\n"
             f"<blockquote>🔑 Telegram ID: <code>{uid}</code></blockquote>\n"
-            f"<blockquote>💰 Balans: <b>{format_balance(user_data.get('balance', 0))} BDT</b></blockquote>\n\n"
+            f"<blockquote>💰 Balans: <b>{format_balance(user_data.get('balance', 0))} AZN</b></blockquote>\n\n"
             f"📊 Bu gün: {stats['today_numbers']} nömrə / {stats['today_otps']} OTP\n"
             f"🌐 Ümumi: {stats['total_numbers']} nömrə / {stats['total_otps']} OTP"
         )
