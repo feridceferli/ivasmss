@@ -4381,7 +4381,7 @@ def validate_telegram_init_data(init_data: str, max_age: int = 86400):
         data = dict(parse_qsl(init_data, keep_blank_values=True))
         received_hash = data.pop("hash", "")
         auth_date = int(data.get("auth_date", "0"))
-        if not received_hash or not auth_date or abs(int(time.time()) - auth_date) > max_age:
+        if not received_hash or not auth_date or int(time.time()) - auth_date > max_age or auth_date - int(time.time()) > 300:
             return None
         check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
         secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
