@@ -92,6 +92,18 @@ ivasmss/
     └── app.js
 ```
 
+## 🔒 API və tokenləri gizli saxlamaq
+
+Real API açarları və bot tokenləri repository-də saxlanmamalıdır. Backend bu məlumatları **Environment Variables** vasitəsilə oxuyur.
+
+- Lokal işlədərkən `.env.example` faylını nümunə kimi istifadə edin və real dəyərləri yalnız öz kompüterinizdə saxlayın.
+- Render-də real `BOT_TOKEN` və `AZE_SMS_API_KEY` dəyərlərini servisin **Environment** bölməsinə əlavə edin.
+- `.gitignore` real `.env` və runtime məlumat fayllarının GitHub-a göndərilməsinin qarşısını alır.
+- `docs/` frontend fayllarına secret və API açarı yazmayın.
+
+> [!WARNING]
+> Əvvəllər GitHub-a real token/API açarı commit etmisinizsə, sonradan koddan silmək həmin sirri təhlükəsiz etmir. Köhnə açarı aid olduğu xidmətdə ləğv/rotate edib yeni açar yaradın.
+
 ## ⚙️ Environment Variables
 
 > [!CAUTION]
