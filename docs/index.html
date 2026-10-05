@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="az">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <title>VOLT X SMS</title>
+  <link rel="stylesheet" href="style.css">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <main class="app">
+    <section class="hero">
+      <div class="bolt">⚡</div>
+      <div>
+        <p class="eyebrow">TELEGRAM MINI APP</p>
+        <h1>VOLT X SMS</h1>
+        <p id="hello">Xoş gəlmisiniz</p>
+      </div>
+    </section>
+
+    <section class="status">
+      <span><i></i> Sistem aktivdir</span>
+      <span id="tgStatus">Telegram</span>
+    </section>
+
+    <section class="grid">
+      <button onclick="sendAction('get_number')"><b>📞</b><span>Nömrə al</span><small>Xidmət seç</small></button>
+      <button onclick="sendAction('search_otp')"><b>🔍</b><span>OTP axtar</span><small>Nömrə ilə axtar</small></button>
+      <button onclick="sendAction('get_2fa')"><b>⚡</b><span>2FA al</span><small>Kod yarat</small></button>
+      <button onclick="sendAction('balance')"><b>💰</b><span>Balans</span><small>Hesabını yoxla</small></button>
+      <button onclick="sendAction('profile')"><b>👤</b><span>Profil</span><small>Statistikan</small></button>
+      <button onclick="sendAction('leaderboard')"><b>🏆</b><span>Liderlər</span><small>Reytinq</small></button>
+    </section>
+
+    <button class="support" onclick="sendAction('support')">💬 Dəstək ilə əlaqə</button>
+    <p class="foot">VOLT X SMS • Mini App</p>
+  </main>
+  <script src="app.js"></script>
+</body>
+</html>

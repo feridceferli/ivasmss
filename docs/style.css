@@ -1,0 +1,10 @@
+:root{--bg:#071017;--card:#0e1b24;--line:#1d3441;--text:#f4fbff;--muted:#8ca3b1;--accent:#29d9ff}
+*{box-sizing:border-box}body{margin:0;background:var(--tg-theme-bg-color,var(--bg));color:var(--tg-theme-text-color,var(--text));font-family:Inter,system-ui,-apple-system,Segoe UI,sans-serif}
+body:before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 80% -10%,rgba(41,217,255,.18),transparent 38%);pointer-events:none}
+.app{max-width:520px;margin:auto;padding:22px 16px 32px}.hero{display:flex;align-items:center;gap:14px;padding:12px 4px 22px}.bolt{width:62px;height:62px;display:grid;place-items:center;border:1px solid var(--line);border-radius:18px;background:#0d202a;font-size:30px;box-shadow:0 0 30px rgba(41,217,255,.12)}
+.eyebrow{margin:0 0 3px;color:var(--accent);font-size:11px;letter-spacing:2px;font-weight:800}h1{margin:0;font-size:27px;letter-spacing:.5px}#hello{margin:4px 0 0;color:var(--muted);font-size:13px}
+.status{display:flex;justify-content:space-between;padding:11px 13px;border:1px solid var(--line);border-radius:14px;background:rgba(14,27,36,.75);font-size:12px;color:var(--muted);margin-bottom:14px}.status i{display:inline-block;width:8px;height:8px;border-radius:50%;background:#35e58b;margin-right:6px;box-shadow:0 0 12px #35e58b}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:11px}.grid button,.support{border:1px solid var(--line);background:linear-gradient(145deg,#10212b,#0b171f);color:var(--text);border-radius:18px;text-align:left;padding:17px;min-height:126px;box-shadow:0 8px 30px rgba(0,0,0,.16)}
+.grid button:active,.support:active{transform:scale(.98)}.grid b{display:block;font-size:25px;margin-bottom:15px}.grid span{display:block;font-size:16px;font-weight:800}.grid small{display:block;color:var(--muted);margin-top:5px}
+.support{width:100%;min-height:auto;margin-top:12px;text-align:center;font-weight:800;color:var(--accent)}.foot{text-align:center;color:var(--muted);font-size:11px;margin-top:20px}
+@media(max-width:350px){.grid{grid-template-columns:1fr}.grid button{min-height:100px}}
