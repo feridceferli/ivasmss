@@ -4401,7 +4401,12 @@ def validate_telegram_init_data(init_data: str, max_age: int = 86400):
         if not user.get("id"):
             return None, "missing_user"
         return user, None
-    except Exception:
+    except (ValueError, TypeError):
+        return None, "invalid_auth_date"
+    except json.JSONDecodeError:
+        return None, "invalid_user_json"
+    except Exception as exc:
+        print(f"Mini App initData parse error: {type(exc).__name__}: {exc}")
         return None, "invalid_init_data"
 
 
