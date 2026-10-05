@@ -29,7 +29,7 @@ from bot_localization import install_azerbaijani_localization, normalize_button_
 
 # ==================== CONFIG SECTION ====================
 
-BOT_TOKEN = "8559338131:AAFzkepz2TDjzZFsEKU0cxZ_8jHr-WKgWRI "
+BOT_TOKEN = "8559338131:AAHNoQUSorcxbZL-XTkuuvVsBPYy4pRgmrA"
 
 # ==================== VOLTX SMS API CONFIGURATION ====================
 API_KEY = " M48R9YJS4ES"
