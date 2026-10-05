@@ -32,7 +32,7 @@ from bot_localization import install_azerbaijani_localization, normalize_button_
 BOT_TOKEN = "8559338131:AAHNoQUSorcxbZL-XTkuuvVsBPYy4pRgmrA"
 
 # ==================== VOLTX SMS API CONFIGURATION ====================
-API_KEY = " M48R9YJS4ES"
+API_KEY = "M48R9YJS4ES"
 BASE_URL = "https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api"
 HEADERS = {"mauthapi": API_KEY, "Content-Type": "application/json"}
 
