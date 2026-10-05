@@ -1,62 +1,57 @@
-# Aze Sms Panel xidmeti --- Telegram Mini App
+# 🇦🇿 Aze SMS Panel
 
-Telegram botu, müasir Telegram Mini App interfeysi, istifadəçi paneli,
-admin idarəetməsi və Render + GitHub Pages üzərindən yerləşdirmə dəstəyi
-olan layihə.
+**Telegram Bot + Telegram Mini App idarəetmə paneli**
 
-> **Vacib:** Bu layihə yalnız qanuni və icazəli istifadə üçün nəzərdə
-> tutulub. Başqa şəxslərin hesablarına, mesajlarına, autentifikasiya
-> məlumatlarına və ya üçüncü tərəf xidmətlərinə icazəsiz giriş üçün
-> istifadə etməyin.
-https://t.me/xudafis
-## ✨ Xüsusiyyətlər
+Aze SMS Panel Python backend, Telegram bot və mobil uyğun Mini App interfeysini bir layihədə birləşdirir. Layihə Render üzərində backend, GitHub Pages üzərində isə Mini App frontend ilə işləmək üçün hazırlanıb.
 
--   🤖 Telegram bot interfeysi
--   📱 Müasir və mobil cihazlara uyğun Mini App
--   👤 İstifadəçi profili və şəxsi panel
--   💰 Balans məlumatlarının göstərilməsi
--   🏆 Liderlər cədvəli
--   🔗 Dəstək keçidləri
--   🛡️ Yalnız adminlər üçün idarəetmə paneli
--   👥 İstifadəçilərin idarə edilməsi
--   ⚙️ Sistem konfiqurasiyası
--   📢 Məcburi kanal və qrupların idarə edilməsi
--   🌐 GitHub Pages üzərindən frontend
--   🚀 Render üzərindən botun yerləşdirilməsi
--   🔐 Token və API açarlarının Environment Variables ilə qorunması
+> **Qeyd:** Layihədən yalnız qanuni və icazəli məqsədlər üçün istifadə edin. Token, API açarı və digər məxfi məlumatları repoya əlavə etməyin.
+
+<p align="center">
+  <a href="https://t.me/xudafis"><img src="https://img.shields.io/badge/Telegram-Admin-229ED9?style=for-the-badge&logo=telegram&logoColor=white" alt="Telegram Admin"></a>
+</p>
+
+## ✨ Əsas imkanlar
+
+- 🤖 Telegram bot interfeysi
+- 📱 Mobil cihazlara uyğun Telegram Mini App
+- 👤 İstifadəçi profili və şəxsi panel
+- 💰 AZN balans göstəricisi
+- 📊 Aktiv sifariş və tarixçə görünüşü
+- 🏆 Liderlər cədvəli
+- 🛡️ Admin idarəetmə paneli
+- 👥 İstifadəçilərin idarə edilməsi
+- ⚙️ Sistem konfiqurasiyası
+- 📢 Məcburi kanal və qrup idarəetməsi
+- 🔐 Telegram Mini App initData yoxlaması
+- ❤️ Health-check endpoint
+- 🌐 GitHub Pages frontend dəstəyi
+- 🚀 Render deployment dəstəyi
+- 🔒 Environment Variables ilə məxfi məlumatların qorunması
+
+## 👑 Admin və əlaqə
+
+Layihənin admini ilə Telegram üzərindən əlaqə:
+
+**Admin:** [@xudafis](https://t.me/xudafis)
+
+[![Admin ilə əlaqə](https://img.shields.io/badge/Admin%20ilə%20əlaqə-Telegram-229ED9?style=for-the-badge&logo=telegram&logoColor=white)](https://t.me/xudafis)
 
 ## 🖥️ Mini App
 
-Mini App Telegram-ın daxili brauzeri və mobil cihazlar üçün hazırlanıb.
-Frontend faylları `docs/` qovluğunda yerləşir:
-https://t.me/xudafis
-``` text
+Frontend faylları `docs/` qovluğundadır:
+
+```text
 docs/
 ├── index.html
 ├── style.css
 └── app.js
 ```
 
-GitHub Pages `/docs` qovluğundan yayımlandıqda bu qovluq Mini App-in
-frontend hissəsi kimi işləyir.
+GitHub Pages `main` branch-in `/docs` qovluğundan yayımlandıqda Mini App frontend işləyir.
 
-## 🛡️ Admin Panel
+## 📁 Layihə strukturu
 
-Admin əməliyyatları yalnız frontend səviyyəsində qorunmamalıdır. Python
-backend hər admin əməliyyatında Telegram istifadəçisinin admin
-səlahiyyətini ayrıca yoxlamalıdır.
-
-Admin panel vasitəsilə aşağıdakı bölmələr idarə oluna bilər:
-
--   İstifadəçilərin idarə edilməsi
--   Sistem parametrləri
--   Məcburi kanal və qruplar
--   Xidmət parametrləri
--   Sistem vəziyyəti
-
-## 📁 Layihənin strukturu
-
-``` text
+```text
 ivasmss/
 ├── main.py
 ├── bot_localization.py
@@ -69,206 +64,101 @@ ivasmss/
     ├── style.css
     └── app.js
 ```
-https://t.me/xudafis
+
 ## ⚙️ Environment Variables
 
-Gizli məlumatları birbaşa mənbə koduna yazmayın.
+Məxfi məlumatları mənbə koduna yazmayın. Hosting tərəfində Environment Variables istifadə edin:
 
-Hosting xidmətində tələb olunan dəyişənləri əlavə edin:
-
-``` env
+```env
 BOT_TOKEN=telegram_bot_tokeniniz
-VOLTX_API_KEY=api_acariniz
+AZE_SMS_API_KEY=api_acariniz
 WEBAPP_URL=https://ISTIFADECI_ADI.github.io/REPO_ADI/
 ```
 
-Deployment konfiqurasiyasından asılı olaraq aşağıdakı dəyişən də
-istifadə oluna bilər:
+Layihədə köhnə uyğunluq üçün `VOLTX_API_KEY` fallback olaraq dəstəklənə bilər. Render webhook URL-ni avtomatik qura bilmirsə:
 
-``` env
+```env
 WEBHOOK_URL=https://sizin-servisiniz.example/webhook
 ```
 
-### 🔐 Tokenləri GitHub-a yükləməyin
+## 🚀 Quraşdırma
 
-Real bot tokenini, API açarını, parolu, cookie-ni və digər məxfi
-məlumatları repoya commit etməyin.
-
-Token və ya API açarı təsadüfən yayımlanarsa, dərhal onu ləğv edib
-yenisini yaradın və hosting xidmətində dəyişdirin.
-
-## 🚀 Quraşdırma və Deployment
-
-### 1. GitHub
-
-Layihəni GitHub reposuna yükləyin.
-
-Frontend strukturu belə olmalıdır:
-
-``` text
-repository/
-├── main.py
-└── docs/
-    ├── index.html
-    ├── style.css
-    └── app.js
-```
-https://t.me/xudafis
-Aşağıdakı kimi səhv qovluq strukturu yaratmayın:
-
-``` text
-docs/docs/index.html
-```
-
-### 2. GitHub Pages
-
-Repository-də:
-
-1.  **Settings → Pages** bölməsinə keçin.
-2.  **Deploy from a branch** seçin.
-3.  Branch olaraq `main` seçin.
-4.  Folder olaraq `/docs` seçin.
-5.  **Save** düyməsinə basın.
-6.  GitHub saytın yayımlandığını bildirənə qədər gözləyin.
-
-GitHub Pages tərəfindən verilən HTTPS ünvanını `WEBAPP_URL` olaraq
-istifadə edin.
-
-### 3. Render
-
-GitHub reposuna bağlı Python Web Service yaradın.
-
-Render-də tələb olunan Environment Variables dəyişənlərini əlavə edin və
-son commit-i deploy edin.
-
-Tipik start command:
-
-``` bash
-python main.py
-```
-https://t.me/xudafis
-Layihənin istifadə etdiyiniz versiyasında fərqli start command tələb
-olunursa, həmin əmrdən istifadə edin.
-
-## 📲 Telegram Mini App qurulması
-
-Telegram botuna HTTPS Mini App URL-i qoşulmalıdır.
-
-Frontend, bot kodu və ya Environment Variables dəyişdirildikdən sonra
-Render-də yeni deploy başladın və test zamanı Telegram bot söhbətini
-yenidən açın.
-
-## 🧰 Lokal quraşdırma
-
-Virtual environment yaradın:
-
-``` bash
+```bash
+git clone https://github.com/feridceferli/ivasmss.git
+cd ivasms
 python -m venv .venv
 ```
 
 Linux/macOS:
 
-``` bash
+```bash
 source .venv/bin/activate
+pip install -r requirements.txt
+python main.py
 ```
 
 Windows:
 
-``` powershell
+```powershell
 .venv\Scripts\activate
-```
-
-Asılılıqları quraşdırın:
-
-``` bash
 pip install -r requirements.txt
-```
-
-Tələb olunan Environment Variables dəyişənlərini təyin etdikdən sonra
-botu başladın:
-
-``` bash
 python main.py
 ```
-https://t.me/xudafis
-## 🔧 Problemlərin həlli
 
-### Mini App 404 göstərir
+## 🌐 GitHub Pages
 
-Bunları yoxlayın:
+1. Repository-də **Settings → Pages** bölməsini açın.
+2. **Deploy from a branch** seçin.
+3. Branch: **main**.
+4. Folder: **/docs**.
+5. **Save** düyməsinə basın.
+6. Yaranan HTTPS ünvanını `WEBAPP_URL` kimi istifadə edin.
 
--   GitHub Pages aktivdir.
--   Pages `main` branch və `/docs` qovluğundan yayımlanır.
--   `docs/index.html` mövcuddur.
--   URL `https://` ilə başlayır.
--   `WEBAPP_URL` GitHub Pages-in tam və düzgün ünvanıdır.
--   `docs/docs/` kimi səhv qovluq strukturu yoxdur.
+## ☁️ Render
 
-### Mini App açılır, amma düymələr işləmir
+GitHub reposuna bağlı Python Web Service yaradın. Environment Variables əlavə etdikdən sonra start command:
 
-Bunları yoxlayın:
-
--   Render-də işləyən `main.py` ən son versiyadır.
--   Telegram Web App məlumatlarını qəbul edən uyğun backend handler
-    mövcuddur.
--   Mini App layihədə nəzərdə tutulan üsulla açılır.
--   Frontend JavaScript xətası yoxdur.
--   Render loglarında exception görünmür.
-
-### Bot Render-də başlamır
-
-Environment Variables dəyişənlərinin mövcudluğunu yoxlayın.
-
-Xüsusilə:
-
-``` text
-BOT_TOKEN
-VOLTX_API_KEY
-WEBAPP_URL
+```bash
+python main.py
 ```
-https://t.me/xudafis
-Son Render deploy loglarını da yoxlayın.
 
-## 🔒 Təhlükəsizlik
+Servisin işlədiyini yoxlamaq üçün backend-də `/health` endpoint-i mövcuddur.
 
--   Token və API açarlarını Environment Variables daxilində saxlayın.
--   Admin icazəsini həmişə backend-də yoxlayın.
--   Frontend JavaScript-dən gələn istifadəçi ID-sinə kor-koranə etibar
-    etməyin.
--   Mini App-dən gələn məlumatları backend-də yoxlayın.
--   Yalnız HTTPS istifadə edin.
--   Yayımlanmış tokenləri dərhal dəyişdirin.
--   Məxfi məlumatları loglara yazmayın.
--   Admin funksiyalarını yalnız səlahiyyətli istifadəçilərə açın.
--   Asılılıqları mütəmadi yeniləyin.
+## 🛡️ Admin təhlükəsizliyi
 
-## 🤝 Layihəyə töhfə
+Admin funksiyalarını yalnız frontend-də gizlətmək kifayət deyil. Backend hər admin əməliyyatında istifadəçinin səlahiyyətini ayrıca yoxlamalıdır.
 
-UI, sabitlik, sənədləşdirmə, əlçatanlıq və təhlükəsizliyi yaxşılaşdıran
-dəyişikliklər qəbul edilə bilər.
+- Admin icazəsini backend-də yoxlayın.
+- Telegram Mini App-dən gələn initData-nı serverdə doğrulayın.
+- Client tərəfindən göndərilən user ID-yə təkbaşına etibar etməyin.
+- Token/API açarlarını loglara yazmayın.
+- Yalnız HTTPS istifadə edin.
 
-Dəyişiklik göndərməzdən əvvəl:
+## 🔧 Tez-tez rast gəlinən problemlər
 
-1.  Botu mümkün olduqda lokal test edin.
-2.  Mini App-in mobil Telegram-da düzgün açıldığını yoxlayın.
-3.  Commit daxilində token və API açarı olmadığından əmin olun.
-4.  Təhlükəsizlik yoxlamalarını backend tərəfində saxlayın.
+**Mini App 404 göstərir:** GitHub Pages-in `main /docs` konfiqurasiyasını və `docs/index.html` faylını yoxlayın.
+
+**Mini App 401 göstərir:** Mini App-i birbaşa brauzer linkindən deyil, Telegram bot daxilindəki Mini App düyməsindən açın və Render-də düzgün `BOT_TOKEN` istifadə olunduğunu yoxlayın.
+
+**Render başlamır:** `BOT_TOKEN`, `AZE_SMS_API_KEY` və deployment URL dəyişənlərini yoxlayın. Son deploy logundakı ilk exception əsas səbəbi göstərir.
+
+## 🔐 Təhlükəsizlik
+
+- Real token və API açarlarını GitHub-a commit etməyin.
+- Sızmış tokenləri dərhal dəyişdirin.
+- Məxfi məlumatları frontend-ə yerləşdirməyin.
+- Admin endpointlərini server tərəfində qoruyun.
+- Asılılıqları mütəmadi yeniləyin.
+- İstifadə etdiyiniz API və platformaların qaydalarına əməl edin.
 
 ## 📄 Lisenziya
-https://t.me/xudafis
-Repository-də ayrıca `LICENSE` faylı olmadığı halda avtomatik olaraq
-açıq mənbə lisenziyası verilmir.
 
-Başqalarının layihəni hansı şərtlərlə istifadə, dəyişdirmə və
-paylaşmasına icazə verdiyinizi göstərmək üçün ayrıca `LICENSE` faylı
-əlavə edin.
+Repository-də ayrıca `LICENSE` faylı yoxdursa, layihəyə avtomatik açıq mənbə lisenziyası verilmir. Paylaşım və dəyişiklik şərtlərini müəyyən etmək üçün ayrıca lisenziya faylı əlavə etmək tövsiyə olunur.
 
-------------------------------------------------------------------------
-https://t.me/xudafis
-### Aze Sms Panel xidmeti
+---
 
-**Telegram Bot + Müasir Mini App**
-
-Layihəni istifadə edərkən təhlükəsizlik qaydalarına və istifadə
-etdiyiniz xidmətlərin şərtlərinə əməl edin.
-https://t.me/xudafis
+<p align="center">
+  <b>Aze SMS Panel</b><br>
+  Telegram Bot + Mini App<br><br>
+  <a href="https://t.me/xudafis">💬 Admin ilə Telegram-da əlaqə</a>
+</p>
