@@ -4395,6 +4395,25 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
                 [[InlineKeyboardButton("💬 DƏSTƏK", url=SUPPORT_LINK)]]
             ),
         )
+    elif action in {"admin_panel", "system_config", "user_management", "required_channels"}:
+        if not is_admin(uid):
+            await update.message.reply_text("⛔ Bu bölmə yalnız admin üçündür.")
+            return
+        if action == "admin_panel":
+            context.user_data["admin_mode"] = "main"
+            await update.message.reply_text("⚙️ ADMIN PANEL", reply_markup=admin_main_keyboard())
+        elif action == "system_config":
+            context.user_data["admin_mode"] = "main"
+            context.user_data["system_config_mode"] = "main"
+            await update.message.reply_text("⚙️ SYSTEM CONFIGURATION", reply_markup=system_config_keyboard())
+        elif action == "user_management":
+            context.user_data["admin_mode"] = "main"
+            context.user_data["user_management_mode"] = "main"
+            await update.message.reply_text("👥 USER MANAGEMENT", reply_markup=user_management_keyboard())
+        elif action == "required_channels":
+            context.user_data["admin_mode"] = "main"
+            context.user_data["required_channels_mode"] = "main"
+            await update.message.reply_text("🔗 REQUIRED CHANNELS", reply_markup=required_channels_keyboard())
     else:
         await update.message.reply_text("⚠️ Naməlum Mini App əməliyyatı.")
 

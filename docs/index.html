@@ -1,40 +1,51 @@
 <!doctype html>
 <html lang="az">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover" />
+  <meta name="theme-color" content="#0b1020" />
   <title>VOLT X SMS</title>
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <main class="app">
-    <section class="hero">
-      <div class="bolt">⚡</div>
-      <div>
-        <p class="eyebrow">TELEGRAM MINI APP</p>
-        <h1>VOLT X SMS</h1>
-        <p id="hello">Xoş gəlmisiniz</p>
+  <div class="glow g1"></div><div class="glow g2"></div>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand"><div class="logo">V</div><div><b>VOLT X SMS</b><span>Telegram Mini App</span></div></div>
+      <div class="status"><i></i><span id="tgStatus">Telegram</span></div>
+    </header>
+
+    <section class="hero card">
+      <div><p class="eyebrow">DASHBOARD</p><h1 id="hello">Salam 👋</h1><p>Nömrələr, profil və hesab alətlərini bir yerdən idarə et.</p></div>
+      <div class="avatar" id="avatar">V</div>
+    </section>
+
+    <section>
+      <div class="section-title"><h2>Sürətli əməliyyatlar</h2><span>Bot ilə bağlıdır</span></div>
+      <div class="grid">
+        <button class="action primary" data-action="get_number"><span class="ico">📱</span><b>Get Number</b><small>Yeni nömrə seç</small></button>
+        <button class="action" data-action="balance"><span class="ico">💰</span><b>Balance</b><small>Balansı yoxla</small></button>
+        <button class="action" data-action="profile"><span class="ico">👤</span><b>Profile</b><small>Hesab məlumatları</small></button>
+        <button class="action" data-action="leaderboard"><span class="ico">🏆</span><b>Leaderboard</b><small>Reytinq cədvəli</small></button>
+        <button class="action" data-action="support"><span class="ico">💬</span><b>Support</b><small>Dəstək xidməti</small></button>
       </div>
     </section>
 
-    <section class="status">
-      <span><i></i> Sistem aktivdir</span>
-      <span id="tgStatus">Telegram</span>
+    <section id="adminSection" class="admin card hidden">
+      <div class="admin-head"><div><p class="eyebrow">ADMIN</p><h2>System Control</h2></div><span class="shield">🛡️</span></div>
+      <p>İstifadəçilər, balans, sistem parametrləri və kanalları botun qorunan admin panelindən idarə et.</p>
+      <div class="admin-grid">
+        <button data-action="admin_panel">⚙️ <span>Admin Panel</span></button>
+        <button data-action="system_config">🧩 <span>System Config</span></button>
+        <button data-action="user_management">👥 <span>User Management</span></button>
+        <button data-action="required_channels">🔗 <span>Channels</span></button>
+      </div>
     </section>
 
-    <section class="grid">
-      <button onclick="sendAction('get_number')"><b>📞</b><span>Nömrə al</span><small>Xidmət seç</small></button>
-      <button onclick="sendAction('search_otp')"><b>🔍</b><span>OTP axtar</span><small>Nömrə ilə axtar</small></button>
-      <button onclick="sendAction('get_2fa')"><b>⚡</b><span>2FA al</span><small>Kod yarat</small></button>
-      <button onclick="sendAction('balance')"><b>💰</b><span>Balans</span><small>Hesabını yoxla</small></button>
-      <button onclick="sendAction('profile')"><b>👤</b><span>Profil</span><small>Statistikan</small></button>
-      <button onclick="sendAction('leaderboard')"><b>🏆</b><span>Liderlər</span><small>Reytinq</small></button>
-    </section>
-
-    <button class="support" onclick="sendAction('support')">💬 Dəstək ilə əlaqə</button>
-    <p class="foot">VOLT X SMS • Mini App</p>
+    <p class="foot">Secure connection via Telegram</p>
   </main>
+  <div id="toast" class="toast"></div>
   <script src="app.js"></script>
 </body>
 </html>
