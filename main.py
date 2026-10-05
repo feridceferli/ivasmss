@@ -442,29 +442,37 @@ def load_fake_otp_config():
     if not os.path.exists(FAKE_OTP_CONFIG_FILE):
         default = {
             "enabled": False,
-            "service": "facebook",
+            "service": "DEMO",
             "range": "",
             "interval": 10,
             "running": False,
             "otp_digits": 6,
+            "sent_count": 0,
         }
         save_fake_otp_config(default)
         return default
     try:
         with open(FAKE_OTP_CONFIG_FILE, "r") as f:
             config = json.load(f)
+            changed = False
             if "otp_digits" not in config:
                 config["otp_digits"] = 6
+                changed = True
+            if "sent_count" not in config:
+                config["sent_count"] = 0
+                changed = True
+            if changed:
                 save_fake_otp_config(config)
             return config
     except:
         default = {
             "enabled": False,
-            "service": "facebook",
+            "service": "DEMO",
             "range": "",
             "interval": 10,
             "running": False,
             "otp_digits": 6,
+            "sent_count": 0,
         }
         save_fake_otp_config(default)
         return default
@@ -873,7 +881,7 @@ def main_keyboard(user_id):
             [KeyboardButton(text="🚀 MINI APP", web_app=WebAppInfo(url=WEBAPP_URL))]
         )
     keyboard += [
-        [KeyboardButton(text="📞 GET NUMBER")],
+        [KeyboardButton(text="📞 GET NUMBER"), KeyboardButton(text="📋 ACTIVE NUMBERS")],
         [KeyboardButton(text="🔍 SEARCH OTP")],
         [KeyboardButton(text="⚡ GET 2FA"), KeyboardButton(text="💰 BALANCE")],
         [KeyboardButton(text="REFER AND EARN"), KeyboardButton(text="👤 PROFILE")],
@@ -943,12 +951,11 @@ def required_channels_keyboard():
 
 def fake_otp_keyboard():
     config = load_fake_otp_config()
-    status = "✅ চালু" if config.get("running", False) else "❌ বন্ধ"
+    status = "✅ AKTİV" if config.get("running", False) else "❌ DEAKTİV"
     keyboard = [
         [KeyboardButton(f"📊 STATUS: {status}")],
-        [KeyboardButton("▶️ START")],
-        [KeyboardButton("⏹ STOP")],
-        [KeyboardButton("⚙️ SETTINGS")],
+        [KeyboardButton("▶️ START"), KeyboardButton("⏹ STOP")],
+        [KeyboardButton("⚙️ SETTINGS"), KeyboardButton("📈 TEST STATİSTİKASI")],
         [KeyboardButton("🔙 BACK TO ADMIN")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1641,116 +1648,84 @@ async def monitor_loop(app):
 
 # ==================== FAKE OTP LOOP ====================
 async def fake_otp_loop(app):
-    """Background task to generate fake OTPs based on config."""
+    """Admin-controlled synthetic OTP demo generator. Never uses real numbers or real SMS data."""
     while True:
         try:
             config = load_fake_otp_config()
-            if config.get("running", False):
-                service = config.get("service", "facebook")
-                interval = config.get("interval", 10)
-                range_str = config.get("range", "")
-                otp_digits = config.get("otp_digits", 6)
+            if not config.get("running", False):
+                await asyncio.sleep(3)
+                continue
 
-                services = await fetch_services_cached()
-                if not services:
-                    ranges = ["880XXX"]
-                else:
-                    if service not in services:
-                        service = list(services.keys())[0] if services else "facebook"
-                    ranges = services.get(service, ["880XXX"])
+            interval = max(10, int(config.get("interval", 10)))
+            otp_digits = min(8, max(4, int(config.get("otp_digits", 6))))
+            service = str(config.get("service", "DEMO")).strip() or "DEMO"
 
-                if range_str:
-                    prefix = re.sub(r"[^0-9]", "", range_str)
-                    if not prefix:
-                        prefix = "880"
-                    num_len = 10 + random.randint(0, 2)
-                    remaining = num_len - len(prefix)
-                    if remaining < 0:
-                        remaining = 4
-                    random_digits = "".join(random.choices(string.digits, k=remaining))
-                    fake_number = prefix + random_digits
-                else:
-                    if not ranges:
-                        ranges = ["880XXX"]
-                    chosen_range = random.choice(ranges)
-                    prefix = re.sub(r"[^0-9]", "", chosen_range)
-                    if not prefix:
-                        prefix = "880"
-                    num_len = 10 + random.randint(0, 2)
-                    remaining = num_len - len(prefix)
-                    if remaining < 0:
-                        remaining = 4
-                    random_digits = "".join(random.choices(string.digits, k=remaining))
-                    fake_number = prefix + random_digits
+            # Deliberately synthetic identifiers: no real phone number or provider lookup.
+            demo_id = "TEST-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
+            otp_code = "".join(random.choices(string.digits, k=otp_digits))
+            safe_service = html.escape(service.upper())
+            safe_demo_id = html.escape(demo_id)
+            safe_otp = html.escape(otp_code)
 
-                otp_code = "".join(random.choices(string.digits, k=otp_digits))
+            group_msg = (
+                "🧪 <b>TEST / DEMO OTP</b> 🧪\n\n"
+                "⚠️ <b>Bu real SMS və real telefon nömrəsi deyil.</b>\n\n"
+                f"<blockquote>🧩 TEST ID: <code>{safe_demo_id}</code></blockquote>\n"
+                f"<blockquote>📱 DEMO XİDMƏT: <code>{safe_service}</code></blockquote>\n"
+                f"<blockquote>🔑 TEST KODU: <code>{safe_otp}</code></blockquote>\n\n"
+                "<blockquote>📩 TEST MESAJI: Bu kod yalnız Aze Sms Panel demo/test rejimi üçün yaradılıb.</blockquote>"
+            )
 
-                service_display = service.upper()
-                sms_templates = {
-                    "facebook": f"Your Facebook verification code is: {otp_code}",
-                    "instagram": f"Your Instagram confirmation code: {otp_code}",
-                    "whatsapp": f"Your WhatsApp code: {otp_code}",
-                    "telegram": f"Your Telegram login code: {otp_code}",
-                    "google": f"Your Google verification code: {otp_code}",
-                    "binance": f"Your Binance 2FA code: {otp_code}",
-                    "apple": f"Your Apple ID code: {otp_code}",
-                    "default": f"Your verification code is: {otp_code}",
-                }
-                sms_text = sms_templates.get(service, sms_templates["default"])
+            try:
+                await app.bot.send_message(OTP_GROUP_ID, group_msg, parse_mode="HTML")
+                config = load_fake_otp_config()
+                config["sent_count"] = int(config.get("sent_count", 0)) + 1
+                save_fake_otp_config(config)
+                log_global_activity("SYSTEM", "DEMO_OTP_SENT", {"test_id": demo_id})
+            except Exception as e:
+                print(f"❌ Demo OTP göndərilmədi: {e}")
 
-                country_flag, country_name = get_country_info(fake_number)
-                range_display = prefix + ("X" * (len(fake_number) - len(prefix)))
-                num_range_info = range_display
-                masked_number = f"+{mask_number(fake_number)}"
-                safe_full_sms = html.escape(sms_text)
-                safe_otp_code = html.escape(otp_code)
-
-                group_msg = (
-                    f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n\n"
-                    f"<blockquote>📶 RANGE: <code>{num_range_info}</code></blockquote>\n"
-                    f"<blockquote>🌍 COUNTRY: <code>{country_flag} {country_name}</code></blockquote>\n"
-                    f"<blockquote>📱 SERVICE: <code>{service_display}</code></blockquote>\n"
-                    f"<blockquote>📞 NUMBER: <code>{masked_number}</code></blockquote>\n"
-                    f"<blockquote>🔑 OTP: <code>{safe_otp_code}</code></blockquote>\n\n"
-                    f"<blockquote>📩 FULL SMS:\n<code>{safe_full_sms}</code></blockquote>"
-                )
-
-                group_buttons = InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "‼️ PANEL", url="betrunaz", style="danger"
-                            ),
-                            InlineKeyboardButton(
-                                "📢 CHANNEL",
-                                url="https://t.me/betrunaz",
-                                style="success",
-                            ),
-                        ]
-                    ]
-                )
-
-                try:
-                    await app.bot.send_message(
-                        OTP_GROUP_ID,
-                        group_msg,
-                        parse_mode="HTML",
-                        reply_markup=group_buttons,
-                    )
-                    log_global_activity(
-                        "SYSTEM",
-                        "FAKE_OTP_SENT",
-                        {"service": service, "number": fake_number, "otp": otp_code},
-                    )
-                except Exception as e:
-                    print(f"❌ Fake OTP send failed: {e}")
-
-                await asyncio.sleep(interval)
-            else:
-                await asyncio.sleep(5)
+            await asyncio.sleep(interval)
         except Exception as e:
-            print(f"Fake OTP loop error: {e}")
+            print(f"Demo OTP loop error: {e}")
             await asyncio.sleep(5)
+
+
+
+async def show_active_numbers(update, context):
+    """Show only the current user's active allocations and their local lifecycle status."""
+    uid = update.effective_user.id
+    now = datetime.now()
+    rows = []
+    for number, info in list(active_numbers.items()):
+        if info.get("uid") != uid:
+            continue
+        ts = info.get("timestamp") or now
+        age = max(0, int((now - ts).total_seconds()))
+        if age >= 3600:
+            continue
+        remaining = max(0, 3600 - age)
+        mins, secs = divmod(remaining, 60)
+        rows.append((ts, number, info.get("range", "—"), mins, secs))
+
+    rows.sort(reverse=True)
+    if not rows:
+        await update.message.reply_text(
+            "📋 <b>AKTİV NÖMRƏLƏR</b>\n\nHazırda aktiv nömrəniz yoxdur.",
+            parse_mode="HTML", reply_markup=main_keyboard(uid)
+        )
+        return
+
+    lines = [f"📋 <b>AKTİV NÖMRƏLƏR ({len(rows)})</b>", ""]
+    for i, (_, number, range_text, mins, secs) in enumerate(rows, 1):
+        lines.append(
+            f"<blockquote><b>{i}.</b> 📞 <code>+{normalize_number(number)}</code>\n"
+            f"📶 Range: <code>{html.escape(str(range_text))}</code>\n"
+            f"🟢 Status: AKTİV\n"
+            f"⏳ Qalan vaxt: {mins:02d}:{secs:02d}</blockquote>"
+        )
+    lines.append("\nℹ️ Bu status yalnız Aze Sms Panel-dəki aktiv sifariş vəziyyətini göstərir; üçüncü tərəf tətbiqlərində hesab mövcudluğunu yoxlamır.")
+    await update.message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=main_keyboard(uid))
 
 
 # ==================== WORKER & API ====================
@@ -2968,120 +2943,67 @@ async def admin_list_channels(update, context):
 
 # ==================== ADMIN PANEL - FAKE OTP ====================
 async def admin_fake_otp_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show fake OTP management menu."""
+    config = load_fake_otp_config()
+    status = "✅ AKTİV" if config.get("running", False) else "❌ DEAKTİV"
     await update.message.reply_text(
-        "⚡ **FAKE OTP SYSTEM** ⚡\n\n"
-        "এখান থেকে ফেক OTP চালু/বন্ধ এবং সেটিংস পরিবর্তন করতে পারেন।\n"
-        "ফেক OTP গ্রুপে রিয়েল OTP-এর মতো দেখাবে, কিন্তু ইউজারদের ব্যালেন্সে কোনো প্রভাব পড়বে না।",
-        reply_markup=fake_otp_keyboard(),
-    )
-
+        "🧪 **TEST OTP SİSTEMİ** 🧪\n\n"
+        "Bu rejim yalnız demo və botun test edilməsi üçündür. Real nömrə, real SMS və real autentifikasiya məlumatı istifadə etmir.\n\n"
+        f"📊 Status: {status}\n"
+        f"📈 Göndərilən test sayı: `{config.get('sent_count', 0)}`",
+        parse_mode="Markdown", reply_markup=fake_otp_keyboard())
 
 async def admin_fake_otp_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Start fake OTP generation."""
     config = load_fake_otp_config()
     if config.get("running", False):
-        await update.message.reply_text("⚠️ ফেক OTP ইতিমধ্যে চালু আছে।")
+        await update.message.reply_text("⚠️ Test OTP sistemi artıq aktivdir.", reply_markup=fake_otp_keyboard())
         return
     config["running"] = True
     save_fake_otp_config(config)
-    await update.message.reply_text(
-        "✅ **ফেক OTP চালু করা হয়েছে।**\n\nশীঘ্রই গ্রুপে ফেক OTP আসা শুরু হবে।",
-        reply_markup=fake_otp_keyboard(),
-    )
-
+    await update.message.reply_text("✅ Test OTP sistemi aktiv edildi. Sintetik test mesajları qrupa göndəriləcək.", reply_markup=fake_otp_keyboard())
 
 async def admin_fake_otp_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Stop fake OTP generation."""
     config = load_fake_otp_config()
-    if not config.get("running", False):
-        await update.message.reply_text("⚠️ ফেক OTP ইতিমধ্যে বন্ধ আছে।")
-        return
     config["running"] = False
     save_fake_otp_config(config)
-    await update.message.reply_text(
-        "⏹ **ফেক OTP বন্ধ করা হয়েছে।**", reply_markup=fake_otp_keyboard()
-    )
+    await update.message.reply_text("⏹ Test OTP sistemi dayandırıldı.", reply_markup=fake_otp_keyboard())
 
+async def admin_fake_otp_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    config = load_fake_otp_config()
+    await update.message.reply_text(
+        f"📈 **TEST STATİSTİKASI**\n\nGöndərilən sintetik test mesajları: `{config.get('sent_count', 0)}`\n"
+        f"Status: {'✅ AKTİV' if config.get('running', False) else '❌ DEAKTİV'}",
+        parse_mode="Markdown", reply_markup=fake_otp_keyboard())
 
 async def admin_fake_otp_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Show settings submenu with options to set service, range, interval, otp digits."""
     config = load_fake_otp_config()
-    service = config.get("service", "facebook")
-    range_val = config.get("range", "Not set (auto)")
-    interval = config.get("interval", 10)
-    otp_digits = config.get("otp_digits", 6)
-    status = "✅ চলছে" if config.get("running", False) else "❌ বন্ধ"
     msg = (
-        f"⚙️ **বর্তমান সেটিংস**\n\n"
-        f"📱 সার্ভিস: `{service}`\n"
-        f"📶 রেঞ্জ: `{range_val}`\n"
-        f"⏱ ইন্টারভ্যাল: `{interval} সেকেন্ড`\n"
-        f"🔢 OTP ডিজিট: `{otp_digits}`\n"
-        f"📊 স্ট্যাটাস: {status}\n\n"
-        "নিচের বাটনগুলোর মাধ্যমে পরিবর্তন করুন:"
+        "⚙️ **TEST OTP PARAMETRLƏRİ**\n\n"
+        f"🏷️ Test etiketi: `{config.get('service', 'DEMO')}`\n"
+        f"⏱ Interval: `{config.get('interval', 10)} saniyə`\n"
+        f"🔢 Kod uzunluğu: `{config.get('otp_digits', 6)}`\n\n"
+        "Test mesajları həmişə DEMO kimi işarələnir və real nömrələrdən istifadə etmir."
     )
-    keyboard = [
-        [KeyboardButton("📱 SET SERVICE")],
-        [KeyboardButton("📶 SET RANGE")],
-        [KeyboardButton("⏱ SET INTERVAL")],
-        [KeyboardButton("🔢 SET OTP DIGITS")],
-        [KeyboardButton("🔙 BACK TO FAKE OTP")],
-    ]
-    await update.message.reply_text(
-        msg,
-        parse_mode="Markdown",
-        reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True),
-    )
+    keyboard = [[KeyboardButton("📱 SET SERVICE")], [KeyboardButton("⏱ SET INTERVAL")],
+                [KeyboardButton("🔢 SET OTP DIGITS")], [KeyboardButton("🔙 BACK TO FAKE OTP")]]
+    await update.message.reply_text(msg, parse_mode="Markdown", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
     context.user_data["fake_otp_settings_mode"] = True
 
-
-async def admin_fake_otp_set_service(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    await update.message.reply_text(
-        "📱 **নতুন সার্ভিসের নাম লিখুন** (যেমন: facebook, instagram, whatsapp, telegram):\n\nবর্তমান: "
-        + load_fake_otp_config().get("service", "facebook"),
-        reply_markup=cancel_keyboard(),
-    )
+async def admin_fake_otp_set_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🏷️ Demo etiketi yazın (məsələn: TEST-SERVICE):", reply_markup=cancel_keyboard())
     context.user_data["fake_otp_setting"] = "service"
 
-
 async def admin_fake_otp_set_range(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text(
-        "📶 **নতুন রেঞ্জ লিখুন** (যেমন: 880XXX) অথবা ফাঁকা রাখতে 'auto' লিখুন (API থেকে রেঞ্জ নেবে):\n\nবর্তমান: "
-        + (load_fake_otp_config().get("range") or "auto"),
-        reply_markup=cancel_keyboard(),
-    )
-    context.user_data["fake_otp_setting"] = "range"
+    await update.message.reply_text("ℹ️ Demo rejimində real nömrə/range istifadə edilmir.", reply_markup=fake_otp_keyboard())
 
-
-async def admin_fake_otp_set_interval(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    await update.message.reply_text(
-        "⏱ **নতুন ইন্টারভ্যাল (সেকেন্ড) লিখুন** (শুধু সংখ্যা, যেমন: 10):\n\nবর্তমান: "
-        + str(load_fake_otp_config().get("interval", 10)),
-        reply_markup=cancel_keyboard(),
-    )
+async def admin_fake_otp_set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("⏱ Intervalı saniyə ilə yazın (minimum 10):", reply_markup=cancel_keyboard())
     context.user_data["fake_otp_setting"] = "interval"
 
-
-async def admin_fake_otp_set_otp_digits(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    await update.message.reply_text(
-        "🔢 **OTP ডিজিট সংখ্যা লিখুন** (৪-৮-এর মধ্যে, যেমন: 6):\n\nবর্তমান: "
-        + str(load_fake_otp_config().get("otp_digits", 6)),
-        reply_markup=cancel_keyboard(),
-    )
+async def admin_fake_otp_set_otp_digits(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.message.reply_text("🔢 Test kodunun uzunluğunu yazın (4-8):", reply_markup=cancel_keyboard())
     context.user_data["fake_otp_setting"] = "otp_digits"
 
-
-async def admin_fake_otp_process_setting(
-    update: Update, context: ContextTypes.DEFAULT_TYPE
-):
-    """Process user input for settings."""
+async def admin_fake_otp_process_setting(update: Update, context: ContextTypes.DEFAULT_TYPE):
     setting = context.user_data.get("fake_otp_setting")
     if not setting:
         return
@@ -3089,60 +3011,27 @@ async def admin_fake_otp_process_setting(
     if text == "❌ CANCEL":
         context.user_data["fake_otp_setting"] = None
         context.user_data["fake_otp_settings_mode"] = False
-        await update.message.reply_text(
-            "❌ বাতিল করা হয়েছে।", reply_markup=fake_otp_keyboard()
-        )
+        await update.message.reply_text("❌ Ləğv edildi.", reply_markup=fake_otp_keyboard())
         return
-
     config = load_fake_otp_config()
-    if setting == "service":
-        config["service"] = text.lower()
-        save_fake_otp_config(config)
-        await update.message.reply_text(
-            f"✅ সার্ভিস `{text}` সেট করা হয়েছে।", reply_markup=fake_otp_keyboard()
-        )
-    elif setting == "range":
-        if text.lower() == "auto":
-            config["range"] = ""
-        else:
-            config["range"] = text
-        save_fake_otp_config(config)
-        await update.message.reply_text(
-            f"✅ রেঞ্জ `{text}` সেট করা হয়েছে।", reply_markup=fake_otp_keyboard()
-        )
-    elif setting == "interval":
-        try:
+    try:
+        if setting == "service":
+            config["service"] = (text[:32] or "DEMO")
+        elif setting == "interval":
             val = int(text)
-            if val < 1:
-                raise ValueError
+            if val < 10: raise ValueError
             config["interval"] = val
-            save_fake_otp_config(config)
-            await update.message.reply_text(
-                f"✅ ইন্টারভ্যাল `{val}` সেকেন্ড সেট করা হয়েছে।",
-                reply_markup=fake_otp_keyboard(),
-            )
-        except:
-            await update.message.reply_text(
-                "❌ ভ্যালিড সংখ্যা দিন (১ বা তার বেশি)।", reply_markup=cancel_keyboard()
-            )
-            return
-    elif setting == "otp_digits":
-        try:
+        elif setting == "otp_digits":
             val = int(text)
-            if val < 4 or val > 8:
-                raise ValueError
+            if not 4 <= val <= 8: raise ValueError
             config["otp_digits"] = val
-            save_fake_otp_config(config)
-            await update.message.reply_text(
-                f"✅ OTP ডিজিট `{val}` সেট করা হয়েছে।", reply_markup=fake_otp_keyboard()
-            )
-        except:
-            await update.message.reply_text(
-                "❌ ৪-৮-এর মধ্যে ভ্যালিড সংখ্যা দিন।", reply_markup=cancel_keyboard()
-            )
-            return
+        save_fake_otp_config(config)
+    except ValueError:
+        await update.message.reply_text("❌ Dəyər düzgün deyil. Interval minimum 10 saniyə, kod uzunluğu 4-8 olmalıdır.", reply_markup=cancel_keyboard())
+        return
     context.user_data["fake_otp_setting"] = None
     context.user_data["fake_otp_settings_mode"] = False
+    await update.message.reply_text("✅ Parametr yadda saxlanıldı.", reply_markup=fake_otp_keyboard())
 
 
 # ==================== SHOW MAIN MENU HELPER ====================
@@ -3356,6 +3245,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await get_2fa_code(update, context)
         return
 
+    if text == "📋 ACTIVE NUMBERS":
+        await show_active_numbers(update, context)
+        return
+
     if text == "📞 GET NUMBER":
         await show_app_selection(update, context)
         return
@@ -3476,6 +3369,14 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         and is_admin(uid)
     ):
         await admin_fake_otp_settings(update, context)
+        return
+
+    if (
+        text == "📈 TEST STATİSTİKASI"
+        and context.user_data.get("admin_mode") == "main"
+        and is_admin(uid)
+    ):
+        await admin_fake_otp_stats(update, context)
         return
 
     # Required channels submenu
@@ -4359,6 +4260,8 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if action == "get_number":
         await show_app_selection(update, context)
+    elif action == "active_numbers":
+        await show_active_numbers(update, context)
     elif action == "search_otp":
         context.user_data["mode"] = "search_otp"
         await update.message.reply_text("🔍 OTP axtarmaq üçün nömrəni göndərin:")
