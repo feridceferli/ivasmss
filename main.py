@@ -26,6 +26,7 @@ from telegram.ext import (
     CallbackQueryHandler,
 )
 from telegram.error import TelegramError
+from aiohttp import web
 from bot_localization import install_azerbaijani_localization, normalize_button_input
 
 # ==================== CONFIG SECTION ====================
@@ -4372,8 +4373,98 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.message.reply_text("⚠️ Naməlum Mini App əməliyyatı.")
 
 
+# ==================== MINI APP HTTP API ====================
+def validate_telegram_init_data(init_data: str, max_age: int = 86400):
+    if not init_data or not BOT_TOKEN:
+        return None
+    try:
+        data = dict(parse_qsl(init_data, keep_blank_values=True))
+        received_hash = data.pop("hash", "")
+        auth_date = int(data.get("auth_date", "0"))
+        if not received_hash or not auth_date or abs(int(time.time()) - auth_date) > max_age:
+            return None
+        check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
+        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
+        expected = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected, received_hash):
+            return None
+        return json.loads(data.get("user", "{}"))
+    except Exception:
+        return None
+
+
+def _miniapp_cors(resp):
+    resp.headers["Access-Control-Allow-Origin"] = "https://feridceferli.github.io"
+    resp.headers["Access-Control-Allow-Headers"] = "X-Telegram-Init-Data, Content-Type"
+    resp.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    resp.headers["Vary"] = "Origin"
+    return resp
+
+
+async def miniapp_dashboard(request):
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user = validate_telegram_init_data(request.headers.get("X-Telegram-Init-Data", ""))
+    if not tg_user or not tg_user.get("id"):
+        return _miniapp_cors(web.json_response({"error": "unauthorized"}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+
+    user = get_user(uid)
+    stats = get_user_stats(uid)
+    now = datetime.now()
+    orders = []
+    for number, info in list(active_numbers.items()):
+        if int(info.get("uid", 0)) != uid:
+            continue
+        ts = info.get("timestamp") or now
+        age = max(0, int((now - ts).total_seconds()))
+        if age >= 3600:
+            continue
+        # Deliberately expose lifecycle metadata only; never SMS/OTP content.
+        orders.append({
+            "label": "Aktiv sifariş",
+            "number_masked": "+" + mask_number(normalize_number(number)),
+            "range": str(info.get("range", "—")),
+            "status": "SMS gözlənilir",
+            "remaining_seconds": max(0, 3600 - age),
+        })
+
+    payload = {
+        "user": {
+            "id": uid,
+            "first_name": tg_user.get("first_name", ""),
+            "last_name": tg_user.get("last_name", ""),
+            "username": tg_user.get("username", ""),
+            "is_admin": is_admin(uid),
+        },
+        "balance": format_balance(user.get("balance", 0)),
+        "stats": {
+            "today_numbers": stats.get("today_numbers", 0),
+            "total_numbers": stats.get("total_numbers", 0),
+        },
+        "orders": orders,
+    }
+    return _miniapp_cors(web.json_response(payload))
+
+
+async def start_miniapp_api():
+    api = web.Application()
+    api.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
+    api.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
+    api.router.add_get("/health", lambda request: web.json_response({"ok": True}))
+    runner = web.AppRunner(api)
+    await runner.setup()
+    port = int(os.environ.get("API_PORT", "8081"))
+    await web.TCPSite(runner, "0.0.0.0", port).start()
+    print(f"Mini App API listening on {port}")
+
+
 # ==================== MAIN & POST INIT ====================
 async def post_init(application):
+    if os.environ.get("ENABLE_MINIAPP_API", "0") == "1":
+        asyncio.create_task(start_miniapp_api())
     for _ in range(20):
         asyncio.create_task(worker())
     asyncio.create_task(monitor_loop(application))
