@@ -4375,22 +4375,34 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
 # ==================== MINI APP HTTP API ====================
 def validate_telegram_init_data(init_data: str, max_age: int = 86400):
-    if not init_data or not BOT_TOKEN:
-        return None
+    if not init_data:
+        return None, "missing_init_data"
+    if not BOT_TOKEN:
+        return None, "missing_bot_token"
     try:
         data = dict(parse_qsl(init_data, keep_blank_values=True))
         received_hash = data.pop("hash", "")
         auth_date = int(data.get("auth_date", "0"))
-        if not received_hash or not auth_date or int(time.time()) - auth_date > max_age or auth_date - int(time.time()) > 300:
-            return None
+        now = int(time.time())
+        if not received_hash:
+            return None, "missing_hash"
+        if not auth_date:
+            return None, "missing_auth_date"
+        if now - auth_date > max_age:
+            return None, "expired_init_data"
+        if auth_date - now > 300:
+            return None, "future_auth_date"
         check_string = "\n".join(f"{k}={v}" for k, v in sorted(data.items()))
-        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode(), hashlib.sha256).digest()
-        expected = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
-        if not hmac.compare_digest(expected, received_hash):
-            return None
-        return json.loads(data.get("user", "{}"))
+        secret_key = hmac.new(b"WebAppData", BOT_TOKEN.encode("utf-8"), hashlib.sha256).digest()
+        expected = hmac.new(secret_key, check_string.encode("utf-8"), hashlib.sha256).hexdigest()
+        if not hmac.compare_digest(expected.lower(), received_hash.lower()):
+            return None, "hash_mismatch"
+        user = json.loads(data.get("user", "{}"))
+        if not user.get("id"):
+            return None, "missing_user"
+        return user, None
     except Exception:
-        return None
+        return None, "invalid_init_data"
 
 
 def _miniapp_cors(resp):
@@ -4404,9 +4416,10 @@ def _miniapp_cors(resp):
 async def miniapp_dashboard(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
-    tg_user = validate_telegram_init_data(request.headers.get("X-Telegram-Init-Data", ""))
-    if not tg_user or not tg_user.get("id"):
-        return _miniapp_cors(web.json_response({"error": "unauthorized"}, status=401))
+    tg_user, auth_error = validate_telegram_init_data(request.headers.get("X-Telegram-Init-Data", ""))
+    if not tg_user:
+        print(f"Mini App auth rejected: {auth_error}")
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": auth_error}, status=401))
     uid = int(tg_user["id"])
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
