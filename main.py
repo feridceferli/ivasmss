@@ -84,8 +84,8 @@ DEFAULT_PAYMENT_METHODS = {
 }
 
 # ==================== SUPPORT & DEVELOPER LINKS ====================
-SUPPORT_LINK = "https://t.me/xudafis"
-DEVELOPER_LINK = "https://t.me/xudafis"
+SUPPORT_LINK = "https://t.me/betrunaz"
+DEVELOPER_LINK = "https://t.me/betrunaz"
 
 request_queue = asyncio.Queue()
 MAX_WORKERS = 5000
