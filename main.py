@@ -31,7 +31,7 @@ from bot_localization import install_azerbaijani_localization, normalize_button_
 # ==================== CONFIG SECTION ====================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "").strip()
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://feridceferli.github.io/ivasmss/").strip()
 
 # ==================== VOLTX SMS API CONFIGURATION ====================
 API_KEY = os.environ.get("VOLTX_API_KEY")
