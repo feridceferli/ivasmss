@@ -2763,30 +2763,59 @@ async def admin_show_all_users(update, context):
     uid = update.effective_user.id
     if not is_admin(uid):
         return
+
     user_db = load_data(USER_DATA_FILE)
-    all_uids = list(user_db.keys())
-    total_users = len(all_uids)
+    total_users = len(user_db)
     if total_users == 0:
         await update.message.reply_text(
-            "📊 মোট ইউজার: 0\nকোনো ইউজার রেজিস্টার্ড নেই।",
+            "👥 Ümumi istifadəçi: 0\nHələ /start verən istifadəçi yoxdur.",
             reply_markup=user_management_keyboard(),
         )
         return
-    user_list_sorted = sorted(all_uids, key=int)
-    if total_users <= 50:
-        lines = [f"{i + 1}. `{uid}`" for i, uid in enumerate(user_list_sorted)]
-        user_list_text = "\n".join(lines)
-        msg = f"📊 **মোট ইউজার:** `{total_users}`\n\n**ইউজার লিস্ট:**\n{user_list_text}"
+
+    def sort_key(item):
+        user_id, info = item
+        return info.get("joined_at", "") or ""
+
+    users = sorted(user_db.items(), key=sort_key, reverse=True)
+    lines = []
+    for i, (user_id, info) in enumerate(users, 1):
+        first = str(info.get("first_name", "") or "").strip()
+        last = str(info.get("last_name", "") or "").strip()
+        full_name = (first + " " + last).strip() or "Adsız istifadəçi"
+        username = str(info.get("username", "") or "").strip()
+        joined = str(info.get("joined_at", "") or "Məlum deyil")
+        uname_text = f"@{username}" if username else "username yoxdur"
+        lines.append(
+            f"{i}. {full_name} | {uname_text} | ID: {user_id} | Qoşulub: {joined}"
+        )
+
+    if total_users <= 30:
+        text_lines = []
+        for i, (user_id, info) in enumerate(users, 1):
+            first = str(info.get("first_name", "") or "").strip()
+            last = str(info.get("last_name", "") or "").strip()
+            full_name = html.escape((first + " " + last).strip() or "Adsız istifadəçi")
+            username = str(info.get("username", "") or "").strip()
+            joined = html.escape(str(info.get("joined_at", "") or "Məlum deyil"))
+            uname_text = f"@{html.escape(username)}" if username else "username yoxdur"
+            text_lines.append(
+                f"{i}. 👤 <b>{full_name}</b>\n"
+                f"   🔗 {uname_text}\n"
+                f"   🆔 <code>{user_id}</code>\n"
+                f"   📅 {joined}"
+            )
+        msg = f"👥 <b>START VERƏN İSTİFADƏÇİLƏR</b>\n📊 Ümumi: <b>{total_users}</b>\n\n" + "\n\n".join(text_lines)
         await update.message.reply_text(
-            msg, parse_mode="Markdown", reply_markup=user_management_keyboard()
+            msg, parse_mode="HTML", reply_markup=user_management_keyboard()
         )
     else:
-        content = f"Total Users: {total_users}\n\n" + "\n".join(user_list_sorted)
-        f = io.BytesIO(content.encode())
-        f.name = f"all_users_{total_users}.txt"
+        content = f"Aze Sms Panel - /start istifadəçiləri\nÜmumi: {total_users}\n\n" + "\n".join(lines)
+        f = io.BytesIO(content.encode("utf-8"))
+        f.name = f"START_USERS_{total_users}.txt"
         await update.message.reply_document(
             document=f,
-            caption=f"📊 মোট ইউজার: {total_users}\nইউজার আইডি লিস্ট সংযুক্ত।",
+            caption=f"👥 /start verən istifadəçilər: {total_users}",
             reply_markup=user_management_keyboard(),
         )
 
@@ -3852,6 +3881,24 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     is_new_user = uid_str not in existing_data
     if is_new_user:
         get_user(uid)
+
+    # /start verən istifadəçinin əsas profil məlumatlarını saxla / yenilə.
+    # Beləliklə admin paneldə yalnız ID yox, ad və username də görünür.
+    try:
+        tg_user = update.effective_user
+        db = load_data(USER_DATA_FILE)
+        record = db.get(uid_str, {})
+        record["user_id"] = uid_str
+        record["first_name"] = tg_user.first_name or ""
+        record["last_name"] = tg_user.last_name or ""
+        record["username"] = tg_user.username or ""
+        if not record.get("joined_at"):
+            record["joined_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        record["last_start_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        db[uid_str] = record
+        save_data(db, USER_DATA_FILE)
+    except Exception as e:
+        print(f"User profile save error: {e}")
 
     channels = load_required_channels()
     if channels:
