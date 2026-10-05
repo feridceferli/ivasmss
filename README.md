@@ -153,7 +153,9 @@ Admin funksiyalarını yalnız frontend-də gizlətmək kifayət deyil. Backend 
 
 ## 📄 Lisenziya
 
-Repository-də ayrıca `LICENSE` faylı yoxdursa, layihəyə avtomatik açıq mənbə lisenziyası verilmir. Paylaşım və dəyişiklik şərtlərini müəyyən etmək üçün ayrıca lisenziya faylı əlavə etmək tövsiyə olunur.
+Bu layihə **GNU General Public License v3.0 (GPL-3.0)** altında yayımlanır. İstifadə, dəyişdirmə və paylaşma şərtləri üçün repository-dəki [`LICENSE`](LICENSE) faylına baxın.
+
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
 ---
 
