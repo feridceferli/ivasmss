@@ -1,4 +1,4 @@
-# VOLT X SMS --- Telegram Mini App
+# Aze Sms Panel xidmeti --- Telegram Mini App
 
 Telegram botu, müasir Telegram Mini App interfeysi, istifadəçi paneli,
 admin idarəetməsi və Render + GitHub Pages üzərindən yerləşdirmə dəstəyi
@@ -265,7 +265,7 @@ paylaşmasına icazə verdiyinizi göstərmək üçün ayrıca `LICENSE` faylı
 
 ------------------------------------------------------------------------
 https://t.me/xudafis
-### VOLT X SMS
+### Aze Sms Panel xidmeti
 
 **Telegram Bot + Müasir Mini App**
 
