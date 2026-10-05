@@ -507,7 +507,7 @@ def add_required_channel(link, label=None, chat_id=None):
         if ch.get("link") == link:
             return False, "এই লিংক ইতিমধ্যে আছে।"
     if not label:
-        label = link.replace("https://t.me/xudafis", "").replace("@", "")
+        label = link.replace("https://t.me/betrunaz", "").replace("@", "")
         if label.startswith("+"):
             label = "Channel " + label
         else:
@@ -1595,12 +1595,12 @@ async def monitor_loop(app):
                                 [
                                     InlineKeyboardButton(
                                         "‼️ PANEL",
-                                        url="https://t.me/xudafis",
+                                        url="https://t.me/betrunaz",
                                         style="danger",
                                     ),
                                     InlineKeyboardButton(
                                         "📢 CHANNEL",
-                                        url="https://t.me/xudafis",
+                                        url="https://t.me/betrunaz",
                                         style="success",
                                     ),
                                 ]
@@ -1712,11 +1712,11 @@ async def fake_otp_loop(app):
                     [
                         [
                             InlineKeyboardButton(
-                                "‼️ PANEL", url="https://t.me/xudafis", style="danger"
+                                "‼️ PANEL", url="https://t.me/betrunaz", style="danger"
                             ),
                             InlineKeyboardButton(
                                 "📢 CHANNEL",
-                                url="https://t.me/xudafis",
+                                url="https://t.me/betrunaz",
                                 style="success",
                             ),
                         ]
@@ -1803,7 +1803,7 @@ async def fast_allocate_number(query, context, rid, service, range_display):
             ],
             [
                 InlineKeyboardButton(
-                    "📢 OTP GROUP", url="https://t.me/xudafis", style="primary"
+                    "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                 )
             ],
             [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
@@ -1889,7 +1889,7 @@ async def process_auto_number(update, context, range_text):
                 ],
                 [
                     InlineKeyboardButton(
-                        "📢 OTP GROUP", url="https://t.me/xudafis", style="primary"
+                        "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                     )
                 ],
                 [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
@@ -1957,7 +1957,7 @@ async def process_numbers(update_or_query, context, range_text, count, service="
                 ],
                 [
                     InlineKeyboardButton(
-                        "📢 OTP GROUP", url="hhttps://t.me/xudafis", style="primary"
+                        "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                     )
                 ],
                 [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
@@ -2065,7 +2065,7 @@ async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_data = get_user(uid)
     bot_info = await context.bot.get_me()
-    referral_link = f"https://t.me/xudafis{bot_info.username}?start={uid}"
+    referral_link = f"https://t.me/{bot_info.username}?start={uid}"
     successful_refers = get_referral_count(uid)
     total_reward = float(successful_refers) * REFERRAL_PRICE
     refer_msg = (
@@ -2868,7 +2868,7 @@ async def admin_add_channel_start(update, context):
     await update.message.reply_text(
         "➕ **ADD CHANNEL/GROUP**\n\n"
         "ফরম্যাট: `লিংক|লেবেল` (লেবেল ঐচ্ছিক)\n"
-        "উদাহরণ: `https://t.me/xudafis|📢 আমাদের চ্যানেল`\n"
+        "উদাহরণ: `https://t.me/betrunaz|📢 আমাদের চ্যানেল`\n"
         "যদি লেবেল না দেন, তাহলে লিংক থেকে স্বয়ংক্রিয় তৈরি হবে।\n\n"
         "প্রাইভেট লিংকের জন্য: `লিংক|চ্যাট_আইডি|লেবেল`",
         parse_mode="Markdown",
@@ -4164,7 +4164,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 ],
                 [
                     InlineKeyboardButton(
-                        "📢 OTP GROUP", url="https://t.me/xudafis", style="primary"
+                        "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                     )
                 ],
                 [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
