@@ -8,7 +8,7 @@ olan layihə.
 > tutulub. Başqa şəxslərin hesablarına, mesajlarına, autentifikasiya
 > məlumatlarına və ya üçüncü tərəf xidmətlərinə icazəsiz giriş üçün
 > istifadə etməyin.
-
+https://t.me/xudafis
 ## ✨ Xüsusiyyətlər
 
 -   🤖 Telegram bot interfeysi
@@ -29,7 +29,7 @@ olan layihə.
 
 Mini App Telegram-ın daxili brauzeri və mobil cihazlar üçün hazırlanıb.
 Frontend faylları `docs/` qovluğunda yerləşir:
-
+https://t.me/xudafis
 ``` text
 docs/
 ├── index.html
@@ -69,7 +69,7 @@ ivasmss/
     ├── style.css
     └── app.js
 ```
-
+https://t.me/xudafis
 ## ⚙️ Environment Variables
 
 Gizli məlumatları birbaşa mənbə koduna yazmayın.
@@ -113,7 +113,7 @@ repository/
     ├── style.css
     └── app.js
 ```
-
+https://t.me/xudafis
 Aşağıdakı kimi səhv qovluq strukturu yaratmayın:
 
 ``` text
@@ -146,7 +146,7 @@ Tipik start command:
 ``` bash
 python main.py
 ```
-
+https://t.me/xudafis
 Layihənin istifadə etdiyiniz versiyasında fərqli start command tələb
 olunursa, həmin əmrdən istifadə edin.
 
@@ -190,7 +190,7 @@ botu başladın:
 ``` bash
 python main.py
 ```
-
+https://t.me/xudafis
 ## 🔧 Problemlərin həlli
 
 ### Mini App 404 göstərir
@@ -226,7 +226,7 @@ BOT_TOKEN
 VOLTX_API_KEY
 WEBAPP_URL
 ```
-
+https://t.me/xudafis
 Son Render deploy loglarını da yoxlayın.
 
 ## 🔒 Təhlükəsizlik
@@ -255,7 +255,7 @@ Dəyişiklik göndərməzdən əvvəl:
 4.  Təhlükəsizlik yoxlamalarını backend tərəfində saxlayın.
 
 ## 📄 Lisenziya
-
+https://t.me/xudafis
 Repository-də ayrıca `LICENSE` faylı olmadığı halda avtomatik olaraq
 açıq mənbə lisenziyası verilmir.
 
@@ -264,10 +264,11 @@ paylaşmasına icazə verdiyinizi göstərmək üçün ayrıca `LICENSE` faylı
 əlavə edin.
 
 ------------------------------------------------------------------------
-
+https://t.me/xudafis
 ### VOLT X SMS
 
 **Telegram Bot + Müasir Mini App**
 
 Layihəni istifadə edərkən təhlükəsizlik qaydalarına və istifadə
 etdiyiniz xidmətlərin şərtlərinə əməl edin.
+https://t.me/xudafis
