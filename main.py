@@ -4002,7 +4002,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.edit_text(
             f"📡✨ {service.upper()} - AVAILABLE COUNTRIES ✨📡\n\n"
             f"<blockquote>📱 Service: <b>{html.escape(service)}</b></blockquote>\n"
-            f"<blockquote>🌍 হট দেশগুলো (🔥) আগে দেখানো হয়েছে:</blockquote>",
+            f"<blockquote>🌍 🔥isti ölkələr göstərilir:</blockquote>",
             parse_mode="HTML",
             reply_markup=keyboard,
         )
