@@ -23,8 +23,11 @@ async function load(){
   el('balance').textContent=(d.balance??'0')+' AZN';
   const orders=d.orders||[];el('activeCount').textContent=orders.length;
   el('ordersList').innerHTML=orders.length?orders.map(orderHtml).join(''):'<p class="muted">Aktiv sifariş yoxdur.</p>';
-  if(d.user){el('pName').textContent=[d.user.first_name,d.user.last_name].filter(Boolean).join(' ')||'—';el('pUser').textContent=d.user.username?'@'+d.user.username:'—';el('pId').textContent=d.user.id||'—'}
+  if(d.user){el('pName').textContent=[d.user.first_name,d.user.last_name].filter(Boolean).join(' ')||'—';el('pUser').textContent=d.user.username?'@'+d.user.username:'—';el('pId').textContent=d.user.id||'—';if(d.user.is_admin){el('adminTab').hidden=false;loadAdmin()}} if(d.support_url)el('support').href=d.support_url
  }catch(e){el('status').textContent='○';console.error('Dashboard API:',e);msg('Backend xətası: '+(e?.message||'naməlum xəta'));}
 }
+async function loadAdmin(){try{const d=await api('/api/admin');el('userCount').textContent=d.user_count;el('adminUsers').innerHTML=d.users.map(x=>'<div class="order"><div><b>'+x.name+'</b><small>ID '+x.id+' · '+x.balance+' AZN</small></div><div><button onclick="adminAction(\''+x.id+'\',\''+(x.banned?'unban':'ban')+'\')">'+(x.banned?'Ban aç':'Ban et')+'</button><button onclick="changeBalance(\''+x.id+'\')">Balans</button></div></div>').join('')||'<p class="muted">İstifadəçi yoxdur.</p>'}catch(e){console.error(e)}}
+async function adminAction(id,action){try{await api('/api/admin',{method:'POST',body:JSON.stringify({action,user_id:id})});msg('Yeniləndi');loadAdmin()}catch(e){msg(e.message)}}
+async function changeBalance(id){const raw=prompt('Balansa əlavə/çıxılacaq məbləğ (məs: 5 və ya -5)');if(raw===null)return;const amount=Number(raw);if(!Number.isFinite(amount))return msg('Məbləğ yanlışdır');try{await api('/api/admin',{method:'POST',body:JSON.stringify({action:'balance',user_id:id,amount})});msg('Balans yeniləndi');loadAdmin()}catch(e){msg(e.message)}}
 el('newTest').onclick=async()=>{try{await api('/api/orders',{method:'POST',body:JSON.stringify({action:'create_test'})});msg('Test sifarişi yaradıldı');await loadOrders();await load()}catch(e){msg(e.message)}};
 el('refresh').onclick=()=>{load();loadOrders()};load();loadOrders();setInterval(()=>{load();loadOrders()},10000);
