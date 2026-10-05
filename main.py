@@ -4464,7 +4464,11 @@ async def miniapp_dashboard(request):
         "stats": {
             "today_numbers": stats.get("today_numbers", 0),
             "total_numbers": stats.get("total_numbers", 0),
+            "last24h_numbers": stats.get("last24h_numbers", 0),
+            "last7d_numbers": stats.get("last7d_numbers", 0),
         },
+        "referrals": {"count": get_referral_count(uid), "reward": REFERRAL_PRICE},
+        "support_url": SUPPORT_LINK,
         "orders": orders,
     }))
 
@@ -4513,6 +4517,31 @@ async def miniapp_test_sms(request):
     owned=any(o["id"]==oid for o in miniapp_orders.get(uid,[]))
     if not owned: return _miniapp_cors(web.json_response({"error":"not_found"},status=404))
     return _miniapp_cors(web.json_response({"messages":[{"id":"demo-1","sender":"Sandbox","text":"Bu test SMS-dir. Kod: 583921","code":"583921","is_test":True,"label":"Test məlumatı"}]}))
+
+
+async def miniapp_admin_api(request):
+    if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user: return _miniapp_cors(web.json_response({"error":"unauthorized","reason":err},status=401))
+    uid=int(tg_user["id"])
+    if not is_admin(uid): return _miniapp_cors(web.json_response({"error":"forbidden"},status=403))
+    users=load_data(USER_DATA_FILE)
+    if request.method=="GET":
+        rows=[]
+        for user_id,data in list(users.items())[-100:]:
+            rows.append({"id":user_id,"name":data.get("full_name") or data.get("username") or "İstifadəçi","balance":format_balance(data.get("balance",0)),"banned":is_user_banned(user_id)})
+        cfg=load_system_config()
+        return _miniapp_cors(web.json_response({"user_count":len(users),"users":rows,"config":{"min_withdraw":cfg.get("min_withdraw"),"max_withdraw":cfg.get("max_withdraw"),"payment_methods":cfg.get("payment_methods",{})}}))
+    body=await request.json(); action=body.get("action"); target=str(body.get("user_id",""))
+    if action in ("ban","unban") and target:
+        (ban_user if action=="ban" else unban_user)(target)
+        return _miniapp_cors(web.json_response({"ok":True}))
+    if action=="balance" and target:
+        try: amount=float(body.get("amount",0))
+        except: return _miniapp_cors(web.json_response({"error":"invalid_amount"},status=400))
+        new_balance=await update_db_balance(target,amount)
+        return _miniapp_cors(web.json_response({"ok":True,"balance":format_balance(new_balance)}))
+    return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
 
 
 async def post_init(application):
@@ -4573,6 +4602,7 @@ async def run_combined_server():
     server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
+    server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_get("/health", health)
 
     port = int(os.environ.get("PORT", "8080"))
