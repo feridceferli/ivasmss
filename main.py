@@ -4,6 +4,10 @@ import re
 import json
 import html
 import os  # <--- Webhook & PORT এর জন্য ইম্পোর্ট যোগ করা হয়েছে
+import hmac
+import hashlib
+import time
+from urllib.parse import parse_qsl
 import httpx
 import pyotp
 import random
