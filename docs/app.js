@@ -14,12 +14,12 @@ async function load(){
  try{
   el('status').textContent='●';
   const r=await fetch(API_BASE+'/api/dashboard',{headers:{'X-Telegram-Init-Data':tg.initData}});
-  if(!r.ok)throw new Error('HTTP '+r.status);
+  if(!r.ok){let detail='';try{detail=JSON.stringify(await r.json())}catch(_){detail=await r.text()}throw new Error('HTTP '+r.status+' '+detail)}
   const d=await r.json();
   el('balance').textContent=(d.balance??'0')+' BDT';
   const orders=d.orders||[];el('activeCount').textContent=orders.length;
   el('ordersList').innerHTML=orders.length?orders.map(orderHtml).join(''):'<p class="muted">Aktiv sifariş yoxdur.</p>';
   if(d.user){el('pName').textContent=[d.user.first_name,d.user.last_name].filter(Boolean).join(' ')||'—';el('pUser').textContent=d.user.username?'@'+d.user.username:'—';el('pId').textContent=d.user.id||'—'}
- }catch(e){el('status').textContent='○';msg('Backend bağlantısı alınmadı');}
+ }catch(e){el('status').textContent='○';console.error('Dashboard API:',e);msg('Backend xətası: '+(e?.message||'naməlum xəta'));}
 }
 el('refresh').onclick=load;load();setInterval(load,10000);
