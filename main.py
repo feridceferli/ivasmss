@@ -4422,7 +4422,6 @@ async def miniapp_dashboard(request):
         age = max(0, int((now - ts).total_seconds()))
         if age >= 3600:
             continue
-        # Deliberately expose lifecycle metadata only; never SMS/OTP content.
         orders.append({
             "label": "Aktiv sifariş",
             "number_masked": "+" + mask_number(normalize_number(number)),
@@ -4431,7 +4430,7 @@ async def miniapp_dashboard(request):
             "remaining_seconds": max(0, 3600 - age),
         })
 
-    payload = {
+    return _miniapp_cors(web.json_response({
         "user": {
             "id": uid,
             "first_name": tg_user.get("first_name", ""),
@@ -4445,60 +4444,17 @@ async def miniapp_dashboard(request):
             "total_numbers": stats.get("total_numbers", 0),
         },
         "orders": orders,
-    }
-    return _miniapp_cors(web.json_response(payload))
+    }))
 
 
-async def start_miniapp_api():
-    api = web.Application()
-    api.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
-    api.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
-    api.router.add_get("/health", lambda request: web.json_response({"ok": True}))
-    runner = web.AppRunner(api)
-    await runner.setup()
-    port = int(os.environ.get("API_PORT", "8081"))
-    await web.TCPSite(runner, "0.0.0.0", port).start()
-    print(f"Mini App API listening on {port}")
-
-
-# ==================== MAIN & POST INIT ====================
 async def post_init(application):
-    if os.environ.get("ENABLE_MINIAPP_API", "0") == "1":
-        asyncio.create_task(start_miniapp_api())
     for _ in range(20):
         asyncio.create_task(worker())
     asyncio.create_task(monitor_loop(application))
     asyncio.create_task(fake_otp_loop(application))
 
 
-# ================================================================
-# ============== 🔥 এখানে শুধু main() ফাংশনটি Webhook অনুযায়ী পরিবর্তন করা হয়েছে ==============
-# ================================================================
-def main():
-    missing_secrets = [
-        name
-        for name, value in {
-            "BOT_TOKEN": BOT_TOKEN,
-            "AZE_SMS_API_KEY": API_KEY,
-        }.items()
-        if not value
-    ]
-    if missing_secrets:
-        raise RuntimeError(
-            "Required environment secrets are not set: " + ", ".join(missing_secrets)
-        )
-
-    install_azerbaijani_localization()
-
-    app = (
-        ApplicationBuilder()
-        .token(BOT_TOKEN)
-        .concurrent_updates(True)
-        .post_init(post_init)
-        .build()
-    )
-
-    # ========== হ্যান্ডলারগুলো (আগের মতোই) ==========
+def register_handlers(app):
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("get1number", get1number_command))
     app.add_handler(CommandHandler("searchotp", searchotp_command))
@@ -4507,33 +4463,71 @@ def main():
     app.add_handler(CommandHandler("refer", refer_command_slash))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(button_callback))
-    app.add_handler(
-        MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler)
-    )
+    app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
-    # ========== ওয়েবহুক কনফিগারেশন ==========
-    port = int(os.environ.get("PORT", 8080))
-    webhook_url = os.environ.get("WEBHOOK_URL")
 
-    # Render-এ RENDER_EXTERNAL_URL স্বয়ংক্রিয় সেট থাকে
+async def run_combined_server():
+    missing_secrets = [
+        name for name, value in {
+            "BOT_TOKEN": BOT_TOKEN,
+            "AZE_SMS_API_KEY": API_KEY,
+        }.items() if not value
+    ]
+    if missing_secrets:
+        raise RuntimeError("Required environment secrets are not set: " + ", ".join(missing_secrets))
+
+    install_azerbaijani_localization()
+    app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(True).build()
+    register_handlers(app)
+
+    external_url = (os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
+    webhook_url = os.environ.get("WEBHOOK_URL") or (f"{external_url}/webhook" if external_url else "")
     if not webhook_url:
-        external_url = os.environ.get("RENDER_EXTERNAL_URL")
-        if external_url:
-            webhook_url = f"{external_url}/webhook"
-        else:
-            # লোকাল বা অন্য কোনো পরিবেশে পোলিং ব্যাকআপ
-            print("⚠️ WEBHOOK_URL সেট নেই, পোলিং মোডে চলছে...")
-            app.run_polling(allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
-            return
+        raise RuntimeError("WEBHOOK_URL or RENDER_EXTERNAL_URL is required for the web service.")
 
-    print(f"🚀 বট ওয়েবহুক মোডে চালু হচ্ছে: {webhook_url}")
-    app.run_webhook(
-        listen="0.0.0.0",
-        port=port,
-        url_path="webhook",
-        webhook_url=webhook_url,
-    )
+    async def telegram_webhook(request):
+        try:
+            payload = await request.json()
+            update = Update.de_json(payload, app.bot)
+            await app.process_update(update)
+            return web.Response(text="OK")
+        except Exception as exc:
+            print(f"Webhook processing error: {exc}")
+            return web.Response(status=400, text="Bad Request")
+
+    async def health(request):
+        return web.json_response({"ok": True, "service": "aze-sms-panel"})
+
+    server = web.Application()
+    server.router.add_post("/webhook", telegram_webhook)
+    server.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
+    server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
+    server.router.add_get("/health", health)
+
+    port = int(os.environ.get("PORT", "8080"))
+    runner = web.AppRunner(server)
+
+    await app.initialize()
+    await app.start()
+    await post_init(app)
+    await app.bot.set_webhook(url=webhook_url, allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    await runner.setup()
+    await web.TCPSite(runner, "0.0.0.0", port).start()
+    print(f"🚀 Bot webhook + Mini App API eyni portda işləyir: {port}")
+    print(f"🔗 Webhook: {webhook_url}")
+
+    try:
+        await asyncio.Event().wait()
+    finally:
+        await runner.cleanup()
+        await app.bot.delete_webhook()
+        await app.stop()
+        await app.shutdown()
+
+
+def main():
+    asyncio.run(run_combined_server())
 
 
 if __name__ == "__main__":
