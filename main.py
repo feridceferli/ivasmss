@@ -52,7 +52,7 @@ FAKE_OTP_CONFIG_FILE = "fake_otp_config.json"
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397]
 
-OTP_GROUP_ID = -1003812747446
+OTP_GROUP_ID =-1003812747446
 
 # ==================== XOŞ GƏLİŞ MESAJI ====================
 WELCOME_MESSAGE = """⚡️💎 VOLT X SMS 💎⚡️
