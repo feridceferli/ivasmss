@@ -15,6 +15,7 @@ from telegram import (
     KeyboardButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
+    WebAppInfo,
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -30,6 +31,7 @@ from bot_localization import install_azerbaijani_localization, normalize_button_
 # ==================== CONFIG SECTION ====================
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
+WEBAPP_URL = os.environ.get("WEBAPP_URL", "").strip()
 
 # ==================== VOLTX SMS API CONFIGURATION ====================
 API_KEY = os.environ.get("VOLTX_API_KEY")
@@ -865,7 +867,12 @@ def detect_service(full_sms):
 
 # ==================== KEYBOARDS ====================
 def main_keyboard(user_id):
-    keyboard = [
+    keyboard = []
+    if WEBAPP_URL:
+        keyboard.append(
+            [KeyboardButton(text="🚀 MINI APP", web_app=WebAppInfo(url=WEBAPP_URL))]
+        )
+    keyboard += [
         [KeyboardButton(text="📞 GET NUMBER")],
         [KeyboardButton(text="🔍 SEARCH OTP")],
         [KeyboardButton(text="⚡ GET 2FA"), KeyboardButton(text="💰 BALANCE")],
@@ -4331,6 +4338,67 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
 
+
+# ==================== TELEGRAM MINI APP ====================
+async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_user or not update.message or not update.message.web_app_data:
+        return
+
+    uid = update.effective_user.id
+    if is_user_banned(uid):
+        await update.message.reply_text("🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(uid))
+        return
+
+    try:
+        payload = json.loads(update.message.web_app_data.data)
+    except Exception:
+        await update.message.reply_text("❌ Mini App məlumatı oxunmadı.")
+        return
+
+    action = str(payload.get("action", "")).strip().lower()
+
+    if action == "get_number":
+        await show_app_selection(update, context)
+    elif action == "search_otp":
+        context.user_data["mode"] = "search_otp"
+        await update.message.reply_text("🔍 OTP axtarmaq üçün nömrəni göndərin:")
+    elif action == "get_2fa":
+        await get_2fa_code(update, context)
+    elif action == "balance":
+        balance = get_user(uid).get("balance", 0)
+        await update.message.reply_text(
+            f"💰 <b>BALANS</b>\n\n<blockquote>💵 {format_balance(balance)} BDT</blockquote>",
+            parse_mode="HTML",
+        )
+    elif action == "profile":
+        stats = get_user_stats(uid)
+        user_data = get_user(uid)
+        user = update.effective_user
+        name = html.escape(user.full_name or "İstifadəçi")
+        username = html.escape(user.username or "yoxdur")
+        msg = (
+            f"👤 <b>PROFİL</b>\n\n"
+            f"<blockquote>🏷️ Ad: <b>{name}</b></blockquote>\n"
+            f"<blockquote>🆔 Username: @{username}</blockquote>\n"
+            f"<blockquote>🔑 Telegram ID: <code>{uid}</code></blockquote>\n"
+            f"<blockquote>💰 Balans: <b>{format_balance(user_data.get('balance', 0))} BDT</b></blockquote>\n\n"
+            f"📊 Bu gün: {stats['today_numbers']} nömrə / {stats['today_otps']} OTP\n"
+            f"🌐 Ümumi: {stats['total_numbers']} nömrə / {stats['total_otps']} OTP"
+        )
+        await update.message.reply_text(msg, parse_mode="HTML")
+    elif action == "leaderboard":
+        await leaderboard_command(update, context)
+    elif action == "support":
+        await update.message.reply_text(
+            "💬 Dəstək",
+            reply_markup=InlineKeyboardMarkup(
+                [[InlineKeyboardButton("💬 DƏSTƏK", url=SUPPORT_LINK)]]
+            ),
+        )
+    else:
+        await update.message.reply_text("⚠️ Naməlum Mini App əməliyyatı.")
+
+
 # ==================== MAIN & POST INIT ====================
 async def post_init(application):
     for _ in range(20):
@@ -4375,6 +4443,9 @@ def main():
     app.add_handler(CommandHandler("refer", refer_command_slash))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(button_callback))
+    app.add_handler(
+        MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler)
+    )
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
     # ========== ওয়েবহুক কনফিগারেশন ==========
