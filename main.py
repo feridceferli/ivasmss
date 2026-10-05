@@ -4558,36 +4558,10 @@ def _web_hash(password, salt=None):
     digest = hashlib.scrypt(password.encode(), salt=bytes.fromhex(salt), n=16384, r=8, p=1).hex()
     return salt, digest
 
-def _web_user(request):
-    token=request.cookies.get("aze_session","")
-    session=web_sessions.get(token)
-    if not session or session["expires"] < time.time(): return None
-    return session["username"]
-
+def _web_user(request):\n    return "public"\n
 def _web_order_view(o):
     age=max(0,int(time.time()-o["created_at"]))
     return {"id":o["id"],"label":o["label"],"number_masked":o["number_masked"],"range":o["range"],"status":o["status"],"remaining_seconds":max(0,3600-age)}
-
-async def web_register(request):
-    body=await request.json(); username=str(body.get("username","")).strip().lower(); password=str(body.get("password",""))
-    if not re.fullmatch(r"[a-z0-9_.-]{3,32}",username): return web.json_response({"error":"İstifadəçi adı 3-32 simvol olmalıdır."},status=400)
-    if len(password)<8: return web.json_response({"error":"Şifrə ən az 8 simvol olmalıdır."},status=400)
-    users=_web_load_users()
-    if username in users: return web.json_response({"error":"Bu istifadəçi artıq mövcuddur."},status=409)
-    salt,digest=_web_hash(password); users[username]={"salt":salt,"hash":digest,"balance":0.0,"created_at":datetime.now().isoformat()}; save_data(users,WEB_USERS_FILE)
-    token=os.urandom(32).hex(); web_sessions[token]={"username":username,"expires":time.time()+604800}
-    resp=web.json_response({"ok":True}); resp.set_cookie("aze_session",token,max_age=604800,httponly=True,secure=True,samesite="Lax"); return resp
-
-async def web_login(request):
-    body=await request.json(); username=str(body.get("username","")).strip().lower(); password=str(body.get("password","")); users=_web_load_users(); u=users.get(username)
-    if not u: return web.json_response({"error":"Giriş məlumatları yanlışdır."},status=401)
-    _,digest=_web_hash(password,u["salt"])
-    if not hmac.compare_digest(digest,u["hash"]): return web.json_response({"error":"Giriş məlumatları yanlışdır."},status=401)
-    token=os.urandom(32).hex(); web_sessions[token]={"username":username,"expires":time.time()+604800}
-    resp=web.json_response({"ok":True}); resp.set_cookie("aze_session",token,max_age=604800,httponly=True,secure=True,samesite="Lax"); return resp
-
-async def web_logout(request):
-    token=request.cookies.get("aze_session",""); web_sessions.pop(token,None); resp=web.json_response({"ok":True}); resp.del_cookie("aze_session"); return resp
 
 async def web_dashboard(request):
     username=_web_user(request)
@@ -4672,9 +4646,6 @@ async def run_combined_server():
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
-    server.router.add_post("/web-api/register", web_register)
-    server.router.add_post("/web-api/login", web_login)
-    server.router.add_post("/web-api/logout", web_logout)
     server.router.add_get("/web-api/dashboard", web_dashboard)
     server.router.add_post("/web-api/orders", web_orders_api)
     server.router.add_get("/web-api/test-sms", web_test_sms)
