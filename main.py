@@ -4469,6 +4469,52 @@ async def miniapp_dashboard(request):
     }))
 
 
+# Mini App safe order/test-SMS state (no real SMS/OTP content)
+miniapp_orders = {}
+miniapp_history = {}
+
+def _miniapp_auth(request):
+    return validate_telegram_init_data(request.headers.get("X-Telegram-Init-Data", ""))
+
+def _safe_order(uid, order):
+    age = max(0, int(time.time() - order["created_at"]))
+    return {"id": order["id"], "label": order["label"], "number_masked": order["number_masked"], "range": order["range"], "status": order["status"], "remaining_seconds": max(0, 3600-age), "created_at": order["created_at"]}
+
+async def miniapp_orders_api(request):
+    if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user: return _miniapp_cors(web.json_response({"error":"unauthorized","reason":err}, status=401))
+    uid=int(tg_user["id"])
+    if request.method == "GET":
+        active=[_safe_order(uid,o) for o in miniapp_orders.get(uid,[]) if o["status"]=="Aktiv"]
+        history=miniapp_history.get(uid,[])[-20:][::-1]
+        return _miniapp_cors(web.json_response({"orders":active,"history":history}))
+    body=await request.json()
+    action=body.get("action")
+    if action=="create_test":
+        oid=f"T{int(time.time()*1000)}"
+        # Clearly synthetic number; never allocated from a real SMS provider.
+        order={"id":oid,"label":"Test sifarişi","number_masked":"+994 50 *** ** 67","range":"Sandbox","status":"Aktiv","created_at":time.time()}
+        miniapp_orders.setdefault(uid,[]).append(order)
+        return _miniapp_cors(web.json_response({"ok":True,"order":_safe_order(uid,order)}))
+    if action=="cancel":
+        oid=str(body.get("id",""))
+        for o in miniapp_orders.get(uid,[]):
+            if o["id"]==oid and o["status"]=="Aktiv":
+                o["status"]="Ləğv edildi"; miniapp_history.setdefault(uid,[]).append(_safe_order(uid,o)); return _miniapp_cors(web.json_response({"ok":True}))
+        return _miniapp_cors(web.json_response({"error":"not_found"},status=404))
+    return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
+
+async def miniapp_test_sms(request):
+    if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user: return _miniapp_cors(web.json_response({"error":"unauthorized","reason":err},status=401))
+    uid=int(tg_user["id"]); oid=request.query.get("order_id","")
+    owned=any(o["id"]==oid for o in miniapp_orders.get(uid,[]))
+    if not owned: return _miniapp_cors(web.json_response({"error":"not_found"},status=404))
+    return _miniapp_cors(web.json_response({"messages":[{"id":"demo-1","sender":"Sandbox","text":"Bu test SMS-dir. Kod: 583921","code":"583921","is_test":True,"label":"Test məlumatı"}]}))
+
+
 async def post_init(application):
     for _ in range(20):
         asyncio.create_task(worker())
@@ -4525,6 +4571,8 @@ async def run_combined_server():
     server.router.add_post("/webhook", telegram_webhook)
     server.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
+    server.router.add_route("*", "/api/orders", miniapp_orders_api)
+    server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_get("/health", health)
 
     port = int(os.environ.get("PORT", "8080"))
