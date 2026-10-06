@@ -92,7 +92,7 @@ DEFAULT_PAYMENT_METHODS = {
 
 # ==================== SUPPORT & DEVELOPER LINKS ====================
 SUPPORT_LINK = "https://t.me/betrunaz"
-DEVELOPER_LINK = "https://t.me/betrunaz"
+DEVELOPER_LINK = "https://t.me/betrunaz"\nNOTIFY_GROUP_ID = os.environ.get("NOTIFY_GROUP_ID", "").strip()\nNOTIFY_BOT_TOKEN = os.environ.get("NOTIFY_BOT_TOKEN", "").strip() or BOT_TOKEN
 
 request_queue = asyncio.Queue()
 MAX_WORKERS = 5000
@@ -912,6 +912,34 @@ def admin_main_keyboard():
         [KeyboardButton("🔙 BACK TO MAIN")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+def admin_tools_keyboard():
+    keyboard = [
+        [KeyboardButton("📢 QRUPA BİLDİRİŞ")],
+        [KeyboardButton("🧪 QRUP TESTİ")],
+        [KeyboardButton("ℹ️ BİLDİRİŞ STATUSU")],
+        [KeyboardButton("🔙 BACK TO ADMIN")],
+    ]
+    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
+
+
+async def send_group_notification(text: str):
+    if not NOTIFY_GROUP_ID or not NOTIFY_BOT_TOKEN:
+        return False, "Render Environment-də NOTIFY_GROUP_ID və NOTIFY_BOT_TOKEN konfiqurasiya edilməyib."
+    try:
+        chat_id = int(NOTIFY_GROUP_ID)
+    except ValueError:
+        chat_id = NOTIFY_GROUP_ID
+    url = f"https://api.telegram.org/bot{NOTIFY_BOT_TOKEN}/sendMessage"
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            response = await client.post(url, json={"chat_id": chat_id, "text": text})
+        if response.is_success and response.json().get("ok"):
+            return True, "Bildiriş göndərildi."
+        return False, f"Telegram xətası: HTTP {response.status_code}"
+    except Exception as exc:
+        return False, f"Göndərmə xətası: {type(exc).__name__}"
 
 
 def user_management_keyboard():
