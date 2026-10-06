@@ -941,10 +941,9 @@ def main_keyboard(user_id):
         )
     keyboard += [
         [KeyboardButton(text="📞 GET NUMBER"), KeyboardButton(text="📋 ACTIVE NUMBERS")],
-        [KeyboardButton(text="🔍 SEARCH OTP")],
-        [KeyboardButton(text="⚡ GET 2FA"), KeyboardButton(text="💰 BALANCE")],
-        [KeyboardButton(text="REFER AND EARN"), KeyboardButton(text="👤 PROFILE")],
-        [KeyboardButton(text="🏆 LEADERBOARD")],
+        [KeyboardButton(text="🔍 SEARCH OTP"), KeyboardButton(text="⚡ GET 2FA")],
+        [KeyboardButton(text="💰 BALANCE"), KeyboardButton(text="👤 PROFILE")],
+        [KeyboardButton(text="REFER AND EARN"), KeyboardButton(text="🏆 LEADERBOARD")],
         [KeyboardButton(text="💬 SUPPORT")],
     ]
     if is_admin(user_id):
@@ -959,10 +958,8 @@ def cancel_keyboard():
 
 def admin_main_keyboard():
     keyboard = [
-        [KeyboardButton("👥 USER MANAGEMENT")],
-        [KeyboardButton("⚙️ SYSTEM CONFIGURATION")],
-        [KeyboardButton("🔗 REQUIRED CHANNELS")],
-        [KeyboardButton("⚡ FAKE OTP")],
+        [KeyboardButton("👥 USER MANAGEMENT"), KeyboardButton("⚙️ SYSTEM CONFIGURATION")],
+        [KeyboardButton("🔗 REQUIRED CHANNELS"), KeyboardButton("⚡ FAKE OTP")],
         [KeyboardButton("🔙 BACK TO MAIN")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -970,10 +967,8 @@ def admin_main_keyboard():
 
 def admin_tools_keyboard():
     keyboard = [
-        [KeyboardButton("📢 QRUPA BİLDİRİŞ")],
-        [KeyboardButton("🧪 QRUP TESTİ")],
-        [KeyboardButton("ℹ️ BİLDİRİŞ STATUSU")],
-        [KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("📢 QRUPA BİLDİRİŞ"), KeyboardButton("🧪 QRUP TESTİ")],
+        [KeyboardButton("ℹ️ BİLDİRİŞ STATUSU"), KeyboardButton("🔙 BACK TO ADMIN")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -998,12 +993,9 @@ async def send_group_notification(text: str):
 
 def user_management_keyboard():
     keyboard = [
-        [KeyboardButton("📢 SEND MESSAGE TO ALL USERS")],
-        [KeyboardButton("🆔 ALL USER ID")],
-        [KeyboardButton("📜 BAN USER LIST")],
-        [KeyboardButton("💰 ALL USER BALANCE")],
-        [KeyboardButton("👥 USER LIST (ALL)")],
-        [KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("📢 SEND MESSAGE TO ALL USERS"), KeyboardButton("🆔 ALL USER ID")],
+        [KeyboardButton("📜 BAN USER LIST"), KeyboardButton("💰 ALL USER BALANCE")],
+        [KeyboardButton("👥 USER LIST (ALL)"), KeyboardButton("🔙 BACK TO ADMIN")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -1028,10 +1020,8 @@ def system_config_keyboard():
 
 def required_channels_keyboard():
     keyboard = [
-        [KeyboardButton("➕ ADD CHANNEL")],
-        [KeyboardButton("❌ REMOVE CHANNEL")],
-        [KeyboardButton("📋 LIST CHANNELS")],
-        [KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("➕ ADD CHANNEL"), KeyboardButton("❌ REMOVE CHANNEL")],
+        [KeyboardButton("📋 LIST CHANNELS"), KeyboardButton("🔙 BACK TO ADMIN")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -1492,19 +1482,16 @@ def _build_services_keyboard(services):
         display = f"{emoji} {svc.capitalize()}"
         color = _SVC_STYLES[i % len(_SVC_STYLES)]
         buttons.append(
-            [InlineKeyboardButton(display, callback_data=f"svcidx_{i}", style=color)]
+            InlineKeyboardButton(display, callback_data=f"svcidx_{i}", style=color)
         )
-    buttons.append(
+    rows = [buttons[j : j + 2] for j in range(0, len(buttons), 2)]
+    rows.append(
         [
-            InlineKeyboardButton(
-                "⚙️ CUSTOM RANGE", callback_data="custom_range", style="danger"
-            )
+            InlineKeyboardButton("⚙️ CUSTOM RANGE", callback_data="custom_range", style="danger"),
+            InlineKeyboardButton("🔙 BACK TO MAIN", callback_data="back_to_main"),
         ]
     )
-    buttons.append(
-        [InlineKeyboardButton("🔙 BACK TO MAIN", callback_data="back_to_main")]
-    )
-    return InlineKeyboardMarkup(buttons)
+    return InlineKeyboardMarkup(rows)
 
 
 def _build_countries_keyboard(ranges, service):
