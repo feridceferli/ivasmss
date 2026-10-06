@@ -4074,9 +4074,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("svc_"):
         service = data[4:]
         services = await fetch_services_cached()
-        # ===== UPDATED: এখন ৪টি সার্ভিস ফিল্টার =====
-        allowed = ["facebook", "instagram", "whatsapp", "telegram"]
-        services = {k: v for k, v in services.items() if k in allowed}
         if service not in services:
             await query.answer("এই সার্ভিস বর্তমানে উপলব্ধ নেই।", show_alert=True)
             return
@@ -4132,15 +4129,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # BACK TO SERVICES
     if data == "back_services":
         services = await fetch_services_cached()
-        allowed = ["facebook", "instagram", "whatsapp", "telegram"]
-        services = {k: v for k, v in services.items() if k in allowed}
         if not services:
             await query.message.edit_text("❌ কোনো সার্ভিস উপলব্ধ নেই।")
             return
         keyboard = _build_services_keyboard(services)
         await query.message.edit_text(
-            "📡✨ 𝗦𝗘𝗟𝗘𝗖𝗧 𝗬𝗢𝗨𝗥 𝗦𝗘𝗥𝗩𝗜𝗖𝗘 ✨📡\n\n"
-            "<blockquote>📱 Aşağıdan birini <b>Service</b>Seçin:</blockquote>",
+            "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
+            "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
             parse_mode="HTML",
             reply_markup=keyboard,
         )
@@ -4268,15 +4263,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "back_to_services":
         services = await fetch_services_cached()
-        allowed = ["facebook", "instagram", "whatsapp", "telegram"]
-        services = {k: v for k, v in services.items() if k in allowed}
         if not services:
             await query.edit_message_text("❌ কোনো সার্ভিস উপলব্ধ নেই।")
             return
         keyboard = _build_services_keyboard(services)
         await query.edit_message_text(
-            "📡✨ 𝗦𝗘𝗟𝗘𝗖𝗧 𝗬𝗢𝗨𝗥 𝗦𝗘𝗥𝗩𝗜𝗖𝗘 ✨📡\n\n"
-            "<blockquote>✨ Aşağıdakı siyahıdan seçiminiz. <b>Service</b> Seçin:</blockquote>",
+            "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
+            "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
             parse_mode="HTML",
             reply_markup=keyboard,
         )
