@@ -92,7 +92,9 @@ DEFAULT_PAYMENT_METHODS = {
 
 # ==================== SUPPORT & DEVELOPER LINKS ====================
 SUPPORT_LINK = "https://t.me/betrunaz"
-DEVELOPER_LINK = "https://t.me/betrunaz"\nNOTIFY_GROUP_ID = os.environ.get("NOTIFY_GROUP_ID", "").strip()\nNOTIFY_BOT_TOKEN = os.environ.get("NOTIFY_BOT_TOKEN", "").strip() or BOT_TOKEN
+DEVELOPER_LINK = "https://t.me/betrunaz"
+NOTIFY_GROUP_ID = os.environ.get("NOTIFY_GROUP_ID", "").strip()
+NOTIFY_BOT_TOKEN = os.environ.get("NOTIFY_BOT_TOKEN", "").strip() or BOT_TOKEN
 
 request_queue = asyncio.Queue()
 MAX_WORKERS = 5000
