@@ -1472,6 +1472,7 @@ def _build_services_keyboard(services):
         "netflix": "🎬",
         "spotify": "🎧",
         "uber": "🚗",
+        "bolt": "⚡",
         "apple": "🍎",
         "icloud": "☁️",
         "microsoft": "🪟",
@@ -1577,9 +1578,9 @@ async def show_app_selection(update, context):
             reply_markup=main_keyboard(uid),
         )
         return
-    # ===== UPDATED: এখন ৪টি সার্ভিস দেখাবে: facebook, instagram, whatsapp, telegram =====
-    allowed = ["facebook", "instagram", "whatsapp", "telegram"]
-    filtered_services = {k: v for k, v in services.items() if k in allowed}
+    # Show every service currently returned by the upstream API.
+    # New services (for example Bolt) appear automatically without a code update.
+    filtered_services = dict(sorted(services.items()))
     if not filtered_services:
         await update.message.reply_text(
             "⚠️ <b>কোনো সার্ভিস উপলব্ধ নেই</b>\n⏳ কিছুক্ষণ পর আবার চেষ্টা করুন।",
@@ -1590,8 +1591,8 @@ async def show_app_selection(update, context):
     context.user_data["la_services"] = filtered_services
     keyboard = _build_services_keyboard(filtered_services)
     await update.message.reply_text(
-        "📡✨ 𝗦𝗘𝗟𝗘𝗖𝗧 𝗬𝗢𝗨𝗥 𝗦𝗘𝗥𝗩𝗜𝗖𝗘 ✨📡\n\n"
-        "<blockquote>✨ নিচ থেকে আপনার পছন্দের <b>Service</b> নির্বাচন করুন:</blockquote>",
+        "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
+        "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
         parse_mode="HTML",
         reply_markup=keyboard,
     )
