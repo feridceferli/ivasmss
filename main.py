@@ -673,42 +673,54 @@ async def fetch_services_cached():
     return _services_cache["services"]
 
 
-AZERBAIJAN_PREFIX = "994"
-_azerbaijan_ranges_present = False
+_known_available_countries = set()
+_country_watch_initialized = False
 
-def _azerbaijan_ranges(services):
-    found = []
+def _available_countries_from_services(services):
+    found = {}
     for service, ranges in (services or {}).items():
         for raw_range in ranges or []:
             rid = re.sub(r"[^0-9]", "", str(raw_range))
-            if rid.startswith(AZERBAIJAN_PREFIX):
-                found.append((service, rid))
+            prefix = get_country_prefix_from_number(rid)
+            if not prefix:
+                continue
+            flag, name = get_country_by_prefix(prefix)
+            info = found.setdefault(prefix, {"flag": flag, "name": name, "services": set()})
+            info["services"].add(str(service).upper())
     return found
 
-async def azerbaijan_availability_loop(app):
-    """Notify the configured group once when +994 ranges become available."""
-    global _azerbaijan_ranges_present
+async def country_availability_loop(app):
+    """Watch API inventory and announce countries that become newly available."""
+    global _known_available_countries, _country_watch_initialized
     while True:
         try:
+            # Force a fresh liveaccess read for inventory-change detection.
+            _services_cache["timestamp"] = 0
             services = await fetch_services_cached()
-            available = _azerbaijan_ranges(services)
-            is_present = bool(available)
-            if is_present and not _azerbaijan_ranges_present:
-                services_text = ", ".join(sorted({service.upper() for service, _ in available}))
+            current = _available_countries_from_services(services)
+            current_prefixes = set(current)
+            if _country_watch_initialized:
+                new_prefixes = current_prefixes - _known_available_countries
                 target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
-                if target:
-                    await app.bot.send_message(
-                        chat_id=int(target),
-                        text=(
-                            "🇦🇿 <b>Azərbaycan nömrələri aktiv oldu</b>\n\n"
-                            f"📡 Xidmətlər: <code>{html.escape(services_text or 'Mövcuddur')}</code>\n"
-                            "📱 +994 range hazırda API siyahısında görünür."
-                        ),
-                        parse_mode="HTML",
-                    )
-            _azerbaijan_ranges_present = is_present
+                for prefix in sorted(new_prefixes):
+                    info = current[prefix]
+                    services_text = ", ".join(sorted(info["services"]))
+                    if target:
+                        await app.bot.send_message(
+                            chat_id=int(target),
+                            text=(
+                                f"🆕 <b>Yeni ölkə üzrə nömrələr gəldi</b>\n\n"
+                                f"🌍 Ölkə: <code>{info['flag']} {html.escape(info['name'])}</code>\n"
+                                f"📞 Kod: <code>+{html.escape(prefix)}</code>\n"
+                                f"📡 Xidmətlər: <code>{html.escape(services_text or 'Mövcuddur')}</code>\n\n"
+                                "✅ API-də bu ölkə üçün nömrə range-ləri görünür."
+                            ),
+                            parse_mode="HTML",
+                        )
+            _known_available_countries = current_prefixes
+            _country_watch_initialized = True
         except Exception as exc:
-            print(f"[azerbaijan-watch] {type(exc).__name__}: {exc}")
+            print(f"[country-watch] {type(exc).__name__}: {exc}")
         await asyncio.sleep(30)
 
 
@@ -4619,7 +4631,7 @@ async def post_init(application):
         asyncio.create_task(worker())
     asyncio.create_task(monitor_loop(application))
     asyncio.create_task(fake_otp_loop(application))
-    asyncio.create_task(azerbaijan_availability_loop(application))
+    asyncio.create_task(country_availability_loop(application))
 
 
 def register_handlers(app):
