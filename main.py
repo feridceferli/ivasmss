@@ -33,6 +33,7 @@ from telegram.ext import (
 from telegram.error import TelegramError
 from aiohttp import web
 from bot_localization import install_azerbaijani_localization, normalize_button_input
+from bot_languages import t, language_keyboard, menu_labels, normalize_language
 
 # ==================== CONFIG SECTION ====================
 
@@ -943,31 +944,36 @@ def detect_service(full_sms):
 
 
 # ==================== KEYBOARDS ====================
+def get_user_language(user_id):
+    data = load_data(USER_DATA_FILE)
+    return normalize_language(data.get(str(user_id), {}).get("language", "az"))
+
 def main_keyboard(user_id):
+    labels = menu_labels(get_user_language(user_id))
     rows = []
     if WEBAPP_URL:
-        rows.append([InlineKeyboardButton("🚀 MINI APP", web_app=WebAppInfo(url=WEBAPP_URL), style="primary")])
+        rows.append([InlineKeyboardButton(f"{labels['mini_app']}", web_app=WebAppInfo(url=WEBAPP_URL), style="primary")])
     rows += [
         [
-            InlineKeyboardButton("📞 GET NUMBER", callback_data="menu_get_number", style="success"),
-            InlineKeyboardButton("📋 ACTIVE NUMBERS", callback_data="menu_active_numbers"),
+            InlineKeyboardButton(f"{labels['get_number']}", callback_data="menu_get_number", style="success"),
+            InlineKeyboardButton(f"{labels['active_numbers']}", callback_data="menu_active_numbers"),
         ],
         [
-            InlineKeyboardButton("🔍 SEARCH OTP", callback_data="menu_search_otp"),
-            InlineKeyboardButton("⚡ GET 2FA", callback_data="menu_get_2fa"),
+            InlineKeyboardButton(f"{labels['search_otp']}", callback_data="menu_search_otp"),
+            InlineKeyboardButton(f"{labels['get_2fa']}", callback_data="menu_get_2fa"),
         ],
         [
-            InlineKeyboardButton("💰 BALANCE", callback_data="menu_balance", style="primary"),
-            InlineKeyboardButton("👤 PROFILE", callback_data="menu_profile"),
+            InlineKeyboardButton(f"{labels['balance']}", callback_data="menu_balance", style="primary"),
+            InlineKeyboardButton(f"{labels['profile']}", callback_data="menu_profile"),
         ],
         [
-            InlineKeyboardButton("REFER AND EARN", callback_data="menu_refer"),
-            InlineKeyboardButton("🏆 LEADERBOARD", callback_data="menu_leaderboard"),
+            InlineKeyboardButton(f"{labels['refer']}", callback_data="menu_refer"),
+            InlineKeyboardButton(f"{labels['leaderboard']}", callback_data="menu_leaderboard"),
         ],
-        [InlineKeyboardButton("💬 SUPPORT", callback_data="menu_support")],
+        [InlineKeyboardButton(f"{labels['support']}", callback_data="menu_support")],
     ]
     if is_admin(user_id):
-        rows.append([InlineKeyboardButton("⚙️ ADMIN PANEL ⚙️", callback_data="menu_admin", style="danger")])
+        rows.append([InlineKeyboardButton(f"{labels['admin']}", callback_data="menu_admin", style="danger")])
     return InlineKeyboardMarkup(rows)
 
 def cancel_keyboard():
@@ -4056,9 +4062,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 print(f"Referral error: {e}")
     context.user_data.clear()
+    if not get_user_language(uid) or "language" not in load_data(USER_DATA_FILE).get(uid_str, {}):
+        await update.effective_message.reply_text(
+            "🌐 Dili seçin / Choose language",
+            reply_markup=language_keyboard(),
+        )
+        return
+    lang = get_user_language(uid)
     await update.effective_message.reply_text(WELCOME_MESSAGE, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     await update.effective_message.reply_text(
-        "🔹 PLEASE USE THE BUTTONS BELOW:", reply_markup=main_keyboard(uid)
+        "🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else "🔹 PLEASE USE THE BUTTONS BELOW:",
+        reply_markup=main_keyboard(uid),
     )
 
 
@@ -4067,6 +4081,20 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = query.from_user.id
     data = query.data
     await query.answer()
+
+    if data in ("lang_az", "lang_en"):
+        lang = data.split("_", 1)[1]
+        db = load_data(USER_DATA_FILE)
+        record = db.get(str(uid), {})
+        record["language"] = lang
+        db[str(uid)] = record
+        save_data(db, USER_DATA_FILE)
+        await query.edit_message_text(t(lang, "language_saved"))
+        await query.message.reply_text(
+            "🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else "🔹 PLEASE USE THE BUTTONS BELOW:",
+            reply_markup=main_keyboard(uid),
+        )
+        return
 
     if data == "verify_me":
         await verify_user(update, context)
