@@ -109,7 +109,7 @@ Lazım olduqda:
 WEBHOOK_URL=https://sizin-servisiniz.example/webhook
 ```
 
-Layihədə köhnə konfiqurasiyalarla uyğunluq üçün `VOLTX_API_KEY` fallback kimi dəstəklənə bilər.
+`NOTIFY_GROUP_ID` bildiriş qrupunun ID-sidir. `NOTIFY_BOT_TOKEN` boş saxlanarsa əsas `BOT_TOKEN` istifadə olunur. Bu dəyərləri Render **Environment** bölməsindən dəyişə bilərsiniz.\n\nLayihədə köhnə konfiqurasiyalarla uyğunluq üçün `VOLTX_API_KEY` fallback kimi dəstəklənə bilər.
 
 ## 🛠️ Lokal quraşdırma
 
