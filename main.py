@@ -684,54 +684,62 @@ async def fetch_services_cached():
     return _services_cache["services"]
 
 
-_known_available_countries = set()
-_country_watch_initialized = False
+_known_service_countries = set()
+_service_country_watch_initialized = False
 
-def _available_countries_from_services(services):
+def _service_country_availability(services):
     found = {}
     for service, ranges in (services or {}).items():
+        service_name = str(service).strip()
+        if not service_name:
+            continue
         for raw_range in ranges or []:
             rid = re.sub(r"[^0-9]", "", str(raw_range))
             prefix = get_country_prefix_from_number(rid)
             if not prefix:
                 continue
-            flag, name = get_country_by_prefix(prefix)
-            info = found.setdefault(prefix, {"flag": flag, "name": name, "services": set()})
-            info["services"].add(str(service).upper())
+            flag, country = get_country_by_prefix(prefix)
+            key = (service_name.lower(), prefix)
+            found[key] = {
+                "service": service_name,
+                "prefix": prefix,
+                "flag": flag,
+                "country": country,
+            }
     return found
 
 async def country_availability_loop(app):
-    """Watch API inventory and announce countries that become newly available."""
-    global _known_available_countries, _country_watch_initialized
+    """Announce newly appearing service/country availability from the live API."""
+    global _known_service_countries, _service_country_watch_initialized
     while True:
         try:
-            # Force a fresh liveaccess read for inventory-change detection.
             _services_cache["timestamp"] = 0
             services = await fetch_services_cached()
-            current = _available_countries_from_services(services)
-            current_prefixes = set(current)
-            if _country_watch_initialized:
-                new_prefixes = current_prefixes - _known_available_countries
+            current = _service_country_availability(services)
+            current_keys = set(current)
+
+            if _service_country_watch_initialized:
+                added = current_keys - _known_service_countries
                 target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
-                for prefix in sorted(new_prefixes):
-                    info = current[prefix]
-                    services_text = ", ".join(sorted(info["services"]))
-                    if target:
+                if target:
+                    for key in sorted(added):
+                        info = current[key]
                         await app.bot.send_message(
                             chat_id=int(target),
                             text=(
-                                f"🆕 <b>Yeni ölkə üzrə nömrələr gəldi</b>\n\n"
-                                f"🌍 Ölkə: <code>{info['flag']} {html.escape(info['name'])}</code>\n"
-                                f"📞 Kod: <code>+{html.escape(prefix)}</code>\n"
-                                f"📡 Xidmətlər: <code>{html.escape(services_text or 'Mövcuddur')}</code>\n\n"
-                                "✅ API-də bu ölkə üçün nömrə range-ləri görünür."
+                                "🆕 <b>Yeni xidmət mövcudluğu</b>\n\n"
+                                f"📡 Xidmət: <code>{html.escape(info['service'].upper())}</code>\n"
+                                f"🌍 Ölkə: <code>{info['flag']} {html.escape(info['country'])}</code>\n"
+                                f"📞 Ölkə kodu: <code>+{html.escape(info['prefix'])}</code>\n\n"
+                                "✅ API-də bu xidmət üçün yeni nömrə mövcudluğu aşkarlandı."
                             ),
                             parse_mode="HTML",
                         )
-            _known_available_countries = current_prefixes
-            _country_watch_initialized = True
+
+            _known_service_countries = current_keys
+            _service_country_watch_initialized = True
         except Exception as exc:
-            print(f"[country-watch] {type(exc).__name__}: {exc}")
+            print(f"[service-country-watch] {type(exc).__name__}: {exc}")
         await asyncio.sleep(30)
 
 
