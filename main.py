@@ -1492,7 +1492,7 @@ def _build_services_keyboard(services):
         display = f"{emoji} {svc.capitalize()}"
         color = _SVC_STYLES[i % len(_SVC_STYLES)]
         buttons.append(
-            [InlineKeyboardButton(display, callback_data=f"svc_{svc}", style=color)]
+            [InlineKeyboardButton(display, callback_data=f"svcidx_{i}", style=color)]
         )
     buttons.append(
         [
@@ -1551,7 +1551,7 @@ def _build_countries_keyboard(ranges, service):
             label += " 🔥"
         color = clrs[ci % len(clrs)]
         ci += 1
-        callback_data = f"hot_range_{info['rid']}_{service}"
+        callback_data = f"hotrid_{info['rid']}"
         btns.append(
             InlineKeyboardButton(label, callback_data=callback_data, style=color)
         )
@@ -4071,9 +4071,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # SERVICE SELECTION
-    if data.startswith("svc_"):
-        service = data[4:]
+    if data.startswith("svcidx_"):
         services = await fetch_services_cached()
+        try:
+            service_index = int(data[7:])
+            service = list(services.keys())[service_index]
+        except (ValueError, IndexError):
+            await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
+            return
         if service not in services:
             await query.answer("এই সার্ভিস বর্তমানে উপলব্ধ নেই।", show_alert=True)
             return
@@ -4094,13 +4099,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # HOT RANGE SELECTION
-    if data.startswith("hot_range_"):
-        parts = data.split("_")
-        if len(parts) < 3:
-            await query.answer("Invalid range data.", show_alert=True)
+    if data.startswith("hotrid_"):
+        rid = data[7:]
+        if not rid:
+            await query.answer("Range məlumatı düzgün deyil.", show_alert=True)
             return
-        rid = parts[2]
-        service = parts[3] if len(parts) > 3 else "CUSTOM"
+        service = context.user_data.get("la_service", "CUSTOM")
         range_display = rid + "XXX"
         await fast_allocate_number(query, context, rid, service, range_display)
         return
