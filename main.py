@@ -661,9 +661,18 @@ async def fetch_services_cached():
             services_data = data.get("data", {}).get("services", [])
             services = {}
             for svc in services_data:
-                sid = svc.get("sid", "").lower()
+                if not isinstance(svc, dict):
+                    continue
+                # Ignore explicit promotional/ad entries from the upstream API.
+                # Real service IDs (including numeric IDs) remain visible.
+                entry_type = str(svc.get("type", "")).strip().lower()
+                is_ad = svc.get("is_ad") is True or svc.get("ad") is True
+                is_promo = svc.get("is_promo") is True or svc.get("promotional") is True
+                if entry_type in {"ad", "ads", "advertisement", "promo", "promotion", "sponsored"} or is_ad or is_promo:
+                    continue
+                sid = str(svc.get("sid", "")).strip().lower()
                 ranges = svc.get("ranges", [])
-                if sid and ranges:
+                if sid and isinstance(ranges, list) and ranges:
                     services[sid] = ranges
             _services_cache["services"] = services
             _services_cache["timestamp"] = now
