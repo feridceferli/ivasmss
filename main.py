@@ -16,6 +16,7 @@ from datetime import datetime, timedelta
 from telegram import (
     Update,
     ReplyKeyboardMarkup,
+    ReplyKeyboardRemove,
     KeyboardButton,
     InlineKeyboardButton,
     InlineKeyboardMarkup,
@@ -4046,7 +4047,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             except Exception as e:
                 print(f"Referral error: {e}")
     context.user_data.clear()
-    await update.effective_message.reply_text(WELCOME_MESSAGE, parse_mode="HTML")
+    await update.effective_message.reply_text(WELCOME_MESSAGE, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     await update.effective_message.reply_text(
         "🔹 PLEASE USE THE BUTTONS BELOW:", reply_markup=main_keyboard(uid)
     )
