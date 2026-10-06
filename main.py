@@ -685,6 +685,7 @@ async def fetch_services_cached():
 
 
 _known_service_countries = set()
+_known_service_types = set()
 _service_country_watch_initialized = False
 
 def _service_country_availability(services):
@@ -710,15 +711,29 @@ def _service_country_availability(services):
 
 async def country_availability_loop(app):
     """Announce newly appearing service/country availability from the live API."""
-    global _known_service_countries, _service_country_watch_initialized
+    global _known_service_countries, _known_service_types, _service_country_watch_initialized
     while True:
         try:
             _services_cache["timestamp"] = 0
             services = await fetch_services_cached()
             current = _service_country_availability(services)
             current_keys = set(current)
+            current_services = {str(name).strip().lower() for name in (services or {}) if str(name).strip()}
 
             if _service_country_watch_initialized:
+                new_services = current_services - _known_service_types
+                target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
+                if target:
+                    for service in sorted(new_services):
+                        await app.bot.send_message(
+                            chat_id=int(target),
+                            text=(
+                                "🆕 <b>Yeni xidmət əlavə olundu</b>\n\n"
+                                f"📡 Xidmət: <code>{html.escape(service.upper())}</code>\n\n"
+                                "✅ API-də yeni xidmət növü aşkarlandı."
+                            ),
+                            parse_mode="HTML",
+                        )
                 added = current_keys - _known_service_countries
                 target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
                 if target:
@@ -737,6 +752,7 @@ async def country_availability_loop(app):
                         )
 
             _known_service_countries = current_keys
+            _known_service_types = current_services
             _service_country_watch_initialized = True
         except Exception as exc:
             print(f"[service-country-watch] {type(exc).__name__}: {exc}")
