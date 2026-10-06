@@ -153,6 +153,7 @@ def is_country_hot(prefix: str) -> bool:
 
 # ==================== COUNTRY PREFIX MAP ====================
 COUNTRY_PREFIX_MAP = {
+    "994": ("🇦🇿", "Azərbaycan"),
     "2376": ("🇨🇲", "Cameroon"),
     "2250": ("🇨🇮", "Ivory Coast"),
     "2613": ("🇲🇬", "Madagascar"),
@@ -670,6 +671,45 @@ async def fetch_services_cached():
     except Exception as e:
         print(f"[services] fetch error: {e}")
     return _services_cache["services"]
+
+
+AZERBAIJAN_PREFIX = "994"
+_azerbaijan_ranges_present = False
+
+def _azerbaijan_ranges(services):
+    found = []
+    for service, ranges in (services or {}).items():
+        for raw_range in ranges or []:
+            rid = re.sub(r"[^0-9]", "", str(raw_range))
+            if rid.startswith(AZERBAIJAN_PREFIX):
+                found.append((service, rid))
+    return found
+
+async def azerbaijan_availability_loop(app):
+    """Notify the configured group once when +994 ranges become available."""
+    global _azerbaijan_ranges_present
+    while True:
+        try:
+            services = await fetch_services_cached()
+            available = _azerbaijan_ranges(services)
+            is_present = bool(available)
+            if is_present and not _azerbaijan_ranges_present:
+                services_text = ", ".join(sorted({service.upper() for service, _ in available}))
+                target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
+                if target:
+                    await app.bot.send_message(
+                        chat_id=int(target),
+                        text=(
+                            "🇦🇿 <b>Azərbaycan nömrələri aktiv oldu</b>\n\n"
+                            f"📡 Xidmətlər: <code>{html.escape(services_text or 'Mövcuddur')}</code>\n"
+                            "📱 +994 range hazırda API siyahısında görünür."
+                        ),
+                        parse_mode="HTML",
+                    )
+            _azerbaijan_ranges_present = is_present
+        except Exception as exc:
+            print(f"[azerbaijan-watch] {type(exc).__name__}: {exc}")
+        await asyncio.sleep(30)
 
 
 async def get_number_from_api(rid: str):
@@ -4579,6 +4619,7 @@ async def post_init(application):
         asyncio.create_task(worker())
     asyncio.create_task(monitor_loop(application))
     asyncio.create_task(fake_otp_loop(application))
+    asyncio.create_task(azerbaijan_availability_loop(application))
 
 
 def register_handlers(app):
