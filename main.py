@@ -4002,28 +4002,26 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     channels = load_required_channels()
     if channels:
-        user_data = get_user(uid)
-        if not user_data.get("verified", False):
-            msg = "🔐 **ভেরিফিকেশন প্রয়োজন**\n\n"
-            msg += "নিচের প্রতিটি চ্যানেল/গ্রুপে জয়েন হয়ে তারপর **Verify** বাটন ক্লিক করুন:\n\n"
+        missing = []
+        for ch in channels:
+            ok, _ = await check_user_joined(context.bot, uid, ch)
+            if not ok:
+                missing.append(ch)
+        if missing:
+            msg = "🔐 **Məcburi üzvlük tələb olunur / Membership required**\n\n"
+            msg += "Botdan istifadə etmək üçün aşağıdakı kanal/qrupa qoşulun və sonra **✅ Yoxla / Verify** düyməsinə basın."
             keyboard_buttons = []
             for ch in channels:
                 link = ch.get("link", "")
                 label = ch.get("label", link)
                 style = ch.get("style", "primary")
-                keyboard_buttons.append(
-                    [InlineKeyboardButton(label, url=link, style=style)]
-                )
-            keyboard_buttons.append(
-                [
-                    InlineKeyboardButton(
-                        "✅ Verify", callback_data="verify_me", style="primary"
-                    )
-                ]
-            )
-            keyboard = InlineKeyboardMarkup(keyboard_buttons)
+                keyboard_buttons.append([InlineKeyboardButton(label, url=link, style=style)])
+            keyboard_buttons.append([
+                InlineKeyboardButton("✅ Yoxla / Verify", callback_data="verify_me", style="success")
+            ])
             await update.effective_message.reply_text(
-                msg, parse_mode="Markdown", reply_markup=keyboard
+                msg, parse_mode="Markdown",
+                reply_markup=InlineKeyboardMarkup(keyboard_buttons),
             )
             return
 
@@ -4103,6 +4101,28 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not is_admin(uid) and is_user_banned(uid):
         await query.edit_message_text("🚫 YOU ARE BANNED 🚫")
         return
+
+    # Enforce required channel/group membership for user-facing actions.
+    if data.startswith("menu_"):
+        channels = load_required_channels()
+        if channels:
+            missing = []
+            for ch in channels:
+                ok, _ = await check_user_joined(context.bot, uid, ch)
+                if not ok:
+                    missing.append(ch)
+            if missing:
+                buttons = [
+                    [InlineKeyboardButton(ch.get("label", ch.get("link", "Join")), url=ch.get("link", ""), style=ch.get("style", "primary"))]
+                    for ch in channels
+                ]
+                buttons.append([InlineKeyboardButton("✅ Yoxla / Verify", callback_data="verify_me", style="success")])
+                await query.message.reply_text(
+                    "🔐 Botdan istifadə etmək üçün tələb olunan kanal/qrupa üzv olmalısınız.\n"
+                    "Membership is required to use the bot.",
+                    reply_markup=InlineKeyboardMarkup(buttons),
+                )
+                return
 
     # USER INLINE MENU
     if data == "menu_get_number":
