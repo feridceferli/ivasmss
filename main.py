@@ -59,7 +59,7 @@ REQUIRED_CHANNELS_FILE = "required_channels.json"
 FAKE_OTP_CONFIG_FILE = "fake_otp_config.json"
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
-ADMINS = [5152261397]
+ADMINS = [5152261397, 1667507073]
 
 OTP_GROUP_ID =-1003812747446
 
