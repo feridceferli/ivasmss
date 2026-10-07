@@ -4093,7 +4093,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     lang = get_user_language(uid)
     await update.effective_message.reply_text(WELCOME_MESSAGE, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
     await update.effective_message.reply_text(
-        "🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else "🔹 PLEASE USE THE BUTTONS BELOW:",
+        ("🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else
+             "🔹 Aşağıdaki düğmeleri kullanın:" if lang == "tr" else
+             "🔹 PLEASE USE THE BUTTONS BELOW:"),
         reply_markup=main_keyboard(uid),
     )
 
@@ -4104,7 +4106,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     await query.answer()
 
-    if data in ("lang_az", "lang_en"):
+    if data in ("lang_az", "lang_en", "lang_tr"):
         lang = data.split("_", 1)[1]
         db = load_data(USER_DATA_FILE)
         record = db.get(str(uid), {})

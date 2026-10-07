@@ -1,8 +1,8 @@
-"""Per-user Azerbaijani / English UI language helpers."""
+"""Per-user Azerbaijani / English / Turkish UI language helpers."""
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 DEFAULT_LANGUAGE = "az"
-SUPPORTED_LANGUAGES = {"az", "en"}
+SUPPORTED_LANGUAGES = {"az", "en", "tr"}
 
 TEXT = {
     "az": {
@@ -19,6 +19,21 @@ TEXT = {
         "support": "💬 DƏSTƏK",
         "admin": "⚙️ ADMİN PANEL",
         "mini_app": "🚀 MİNİ TƏTBİQ",
+    },
+    "tr": {
+        "choose_language": "🌐 Dil seçin",
+        "language_saved": "✅ Dil Türkçe olarak seçildi.",
+        "get_number": "📞 NUMARA AL",
+        "active_numbers": "📋 AKTİF NUMARALAR",
+        "search_otp": "🔍 OTP ARA",
+        "get_2fa": "⚡ 2FA AL",
+        "balance": "💰 BAKİYE",
+        "profile": "👤 PROFİL",
+        "refer": "👥 DAVET ET VE KAZAN",
+        "leaderboard": "🏆 LİDERLER",
+        "support": "💬 DESTEK",
+        "admin": "⚙️ ADMİN PANELİ",
+        "mini_app": "🚀 MİNİ UYGULAMA",
     },
     "en": {
         "choose_language": "🌐 Choose language",
@@ -49,6 +64,7 @@ def language_keyboard():
     return InlineKeyboardMarkup([[
         InlineKeyboardButton("🇦🇿 Azərbaycan", callback_data="lang_az"),
         InlineKeyboardButton("🇬🇧 English", callback_data="lang_en"),
+        InlineKeyboardButton("🇹🇷 Türkçe", callback_data="lang_tr"),
     ]])
 
 def menu_labels(language):
