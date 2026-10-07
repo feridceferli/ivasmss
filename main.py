@@ -995,7 +995,12 @@ def main_keyboard(user_id):
             InlineKeyboardButton(f"{labels['leaderboard']}", callback_data="menu_leaderboard"),
         ],
         [InlineKeyboardButton(f"{labels['support']}", callback_data="menu_support")],
-        [InlineKeyboardButton("🌐 Dil / Language / Dil", callback_data="menu_language", style="primary")],
+        [InlineKeyboardButton(
+            "🌐 DİLİ DƏYİŞ" if get_user_language(user_id) == "az" else
+            "🌐 DİLİ DEĞİŞTİR" if get_user_language(user_id) == "tr" else
+            "🌐 CHANGE LANGUAGE",
+            callback_data="menu_language", style="primary"
+        )],
     ]
     if is_admin(user_id):
         rows.append([InlineKeyboardButton(f"{labels['admin']}", callback_data="menu_admin", style="danger")])
@@ -4115,10 +4120,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         db[str(uid)] = record
         save_data(db, USER_DATA_FILE)
         await query.edit_message_text(t(lang, "language_saved"))
-        await query.message.reply_text(
-            "🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else "🔹 PLEASE USE THE BUTTONS BELOW:",
-            reply_markup=main_keyboard(uid),
+        menu_hint = (
+            "🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else
+            "🔹 Aşağıdaki düğmeleri kullanın:" if lang == "tr" else
+            "🔹 PLEASE USE THE BUTTONS BELOW:"
         )
+        await query.message.reply_text(menu_hint, reply_markup=main_keyboard(uid))
         return
 
     if data == "verify_me":
@@ -4153,10 +4160,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # USER INLINE MENU
     if data == "menu_language":
-        await query.message.reply_text(
-            "🌐 Dili seçin / Choose language / Dil seçin",
-            reply_markup=language_keyboard(),
+        lang = get_user_language(uid)
+        prompt = (
+            "🌐 Dili seçin" if lang == "az" else
+            "🌐 Dil seçin" if lang == "tr" else
+            "🌐 Choose language"
         )
+        await query.message.reply_text(prompt, reply_markup=language_keyboard())
         return
     if data == "menu_get_number":
         await show_app_selection(update, context)
@@ -4800,7 +4810,8 @@ async def run_combined_server():
     if missing_secrets:
         raise RuntimeError("Required environment secrets are not set: " + ", ".join(missing_secrets))
 
-    install_azerbaijani_localization()
+    # Per-user language selection is handled by bot_languages.py.
+    # Do not globally force Azerbaijani, otherwise EN/TR selections are overwritten.
     app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(True).build()
     register_handlers(app)
 
