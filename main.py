@@ -1058,6 +1058,7 @@ def user_management_keyboard():
 def system_config_keyboard():
     keyboard = [
         [KeyboardButton("📈 BU GÜNKÜ ÜMUMİ VƏZİYYƏT"), KeyboardButton("👤 İSTİFADƏÇİNİN VƏZİYYƏTİNİ YOXLAYIN")],
+        [KeyboardButton("🩺 SMS MONİTOR STATUSU")],
         [KeyboardButton("⛔ İSTİFADƏÇİNİ BLOKLA"), KeyboardButton("🔓 BLOKDAN ÇIXAR")],
         [KeyboardButton("📜 BLOKLANMIŞ İSTİFADƏÇİLƏR")],
         [KeyboardButton("➖ BALANSI AZALT"), KeyboardButton("➕ BALANS ƏLAVƏ ET")],
@@ -1641,13 +1642,36 @@ async def show_app_selection(update, context):
 
 
 # ==================== AUTO OTP MONITOR (REAL) ====================
+# Safe monitor diagnostics: records transport/health metadata only.
+# SMS bodies, OTP values, phone numbers and user identifiers are never stored here.
+monitor_diagnostics = {
+    "state": "starting",
+    "last_check": None,
+    "last_success": None,
+    "http_status": None,
+    "upstream_code": None,
+    "items_seen": 0,
+    "last_error": None,
+}
+
+
+def _monitor_diag_time():
+    return datetime.now().isoformat(timespec="seconds")
+
+
 async def monitor_loop(app):
     sent_otps = set()
     while True:
         try:
+            monitor_diagnostics["state"] = "checking"
+            monitor_diagnostics["last_check"] = _monitor_diag_time()
             r = await client_async.get(f"{BASE_URL}/success-otp")
+            monitor_diagnostics["http_status"] = r.status_code
+            r.raise_for_status()
             result = r.json()
-            if result.get("meta", {}).get("code") == 200:
+            upstream_code = result.get("meta", {}).get("code")
+            monitor_diagnostics["upstream_code"] = upstream_code
+            if upstream_code == 200:
                 data_obj = result.get("data")
                 if isinstance(data_obj, dict) and "otps" in data_obj:
                     otps = data_obj.get("otps", [])
@@ -1655,6 +1679,10 @@ async def monitor_loop(app):
                     otps = data_obj
                 else:
                     otps = []
+                monitor_diagnostics["state"] = "ok"
+                monitor_diagnostics["last_success"] = _monitor_diag_time()
+                monitor_diagnostics["items_seen"] = len(otps)
+                monitor_diagnostics["last_error"] = None
                 paid_data = load_data(PAID_SMS_FILE)
                 paid_keys_set = set(paid_data.keys())
                 for otp in otps:
@@ -1771,8 +1799,13 @@ async def monitor_loop(app):
                         entry["timestamp"] = current_time
                     elif (current_time - entry["timestamp"]).total_seconds() > 3600:
                         del active_numbers[num_key]
+            else:
+                monitor_diagnostics["state"] = "upstream_error"
+                monitor_diagnostics["last_error"] = f"API code: {upstream_code}"
         except Exception as e:
-            print(f"Monitor Error: {e}")
+            monitor_diagnostics["state"] = "error"
+            monitor_diagnostics["last_error"] = type(e).__name__
+            print(f"Monitor Error: {type(e).__name__}")
         await asyncio.sleep(CHECK_INTERVAL)
 
 
@@ -3568,6 +3601,22 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # System config submenu
+    if text == "🩺 SMS MONİTOR STATUSU" and is_admin(uid):
+        d = monitor_diagnostics
+        msg = (
+            "🩺 <b>SMS MONİTOR DİAQNOSTİKASI</b>\n\n"
+            f"Vəziyyət: <b>{html.escape(str(d.get('state') or '-'))}</b>\n"
+            f"Son yoxlama: <code>{html.escape(str(d.get('last_check') or '-'))}</code>\n"
+            f"Son uğurlu əlaqə: <code>{html.escape(str(d.get('last_success') or '-'))}</code>\n"
+            f"HTTP status: <code>{html.escape(str(d.get('http_status') or '-'))}</code>\n"
+            f"API statusu: <code>{html.escape(str(d.get('upstream_code') or '-'))}</code>\n"
+            f"Son cavabda element sayı: <code>{int(d.get('items_seen') or 0)}</code>\n"
+            f"Son xəta: <code>{html.escape(str(d.get('last_error') or '-'))}</code>\n\n"
+            "ℹ️ Bu diaqnostika SMS mətni, OTP, telefon nömrəsi və istifadəçi ID-si saxlamır."
+        )
+        await update.effective_message.reply_text(msg, parse_mode="HTML", reply_markup=system_config_keyboard())
+        return
+
     if (
         text == "📈 TODAY ALL STATUS"
         and context.user_data.get("system_config_mode") == "main"
