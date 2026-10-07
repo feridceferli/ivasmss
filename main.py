@@ -995,6 +995,7 @@ def main_keyboard(user_id):
             InlineKeyboardButton(f"{labels['leaderboard']}", callback_data="menu_leaderboard"),
         ],
         [InlineKeyboardButton(f"{labels['support']}", callback_data="menu_support")],
+        [InlineKeyboardButton("🌐 Dil / Language / Dil", callback_data="menu_language", style="primary")],
     ]
     if is_admin(user_id):
         rows.append([InlineKeyboardButton(f"{labels['admin']}", callback_data="menu_admin", style="danger")])
@@ -4151,6 +4152,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 return
 
     # USER INLINE MENU
+    if data == "menu_language":
+        await query.message.reply_text(
+            "🌐 Dili seçin / Choose language / Dil seçin",
+            reply_markup=language_keyboard(),
+        )
+        return
     if data == "menu_get_number":
         await show_app_selection(update, context)
         return
