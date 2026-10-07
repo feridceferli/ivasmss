@@ -1645,58 +1645,7 @@ async def show_app_selection(update, context):
         reply_markup=keyboard,
     )
 
-@dp.message(Command("getnumber"))
-async def get_number_handler(message: types.Message):
-    """
-    İstifadə qaydası:
-    /getnumber -> Susmaya görə WhatsApp + Azərbaycan
-    /getnumber tg 17 -> Telegram + Azərbaycan
-    /getnumber wa 0  -> WhatsApp + Rusiya
-    """
-    args = message.text.split()[1:]  # Komandadan sonrakı sözləri oxuyur
 
-    # Əgər istifadəçi parametr yazmayıbsa:
-    service = args[0] if len(args) > 0 else "wa"   # default: WhatsApp
-    country = args[1] if len(args) > 1 else "17"   # default: 17 (Azərbaycan)
-
-    params = {
-        "api_key": API_KEY,
-        "action": "getNumber",
-        "service": service,
-        "country": country
-    }
-
-    async with aiohttp.ClientSession() as session:
-        async with session.get(IVASMS_URL, params=params) as response:
-            res_text = await response.text()
-
-            if "ACCESS_NUMBER" in res_text:
-                parts = res_text.split(":")
-                activation_id = parts[1]
-                phone_number = parts[2]
-
-                await message.answer(
-                    f"📱 **Nömrəniz:** `{phone_number}`\n"
-                    f"🌐 **Xidmət:** `{service.upper()}` | 🇦🇿 **Ölkə ID:** `{country}`\n"
-                    f"🆔 **ID:** `{activation_id}`\n\n"
-                    f"⏳ SMS gözlənilir...",
-                    parse_mode="Markdown"
-                )
-
-                # SMS-i arxa fonda yoxlamaq üçün tapşırıq
-                asyncio.create_task(
-                    check_sms_status(
-                        activation_id=activation_id,
-                        chat_id=message.chat.id,
-                        phone_number=phone_number
-                    )
-                )
-            else:
-                await message.answer(
-                    f"❌ Nömrə alınarkən xəta baş verdi:\n`{res_text}`\n\n"
-                    f"💡 *Məsləhət:* Seçilmiş ölkədə və ya xidmətdə nömrə tüknəmiş ola bilər.",
-                    parse_mode="Markdown"
-                )
 
 # ==================== AUTO OTP MONITOR (REAL) ====================
 # Safe monitor diagnostics: records transport/health metadata only.
