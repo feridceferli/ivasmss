@@ -4918,3 +4918,45 @@ def main():
 
 if __name__ == "__main__":
     main()
+import asyncio
+
+async def check_sms_status(activation_id: str, chat_id: int):
+    """Arxa fonda 5 saniyədən bir SMS gəlişini yoxlayır."""
+    max_attempts = 36  # Maksimum 3 dəqiqə yoxlayır
+    attempt = 0
+
+    async with aiohttp.ClientSession() as session:
+        while attempt < max_attempts:
+            await asyncio.sleep(5)
+            attempt += 1
+
+            params = {
+                "api_key": API_KEY,  # Sizin mövcud API Key dəyişəniniz
+                "action": "getStatus",
+                "id": activation_id
+            }
+
+            try:
+                async with session.get(IVASMS_URL, params=params) as response:
+                    res_text = await response.text()
+
+                    # SMS gəldikdə
+                    if "STATUS_OK" in res_text:
+                        code = res_text.split(":")[1] if ":" in res_text else res_text
+                        await bot.send_message(
+                            chat_id=chat_id,
+                            text=f"✅ **SMS Kodunuz:** `{code}`",
+                            parse_mode="Markdown"
+                        )
+                        return
+                    elif "STATUS_CANCEL" in res_text:
+                        await bot.send_message(chat_id=chat_id, text="❌ Nömrə ləğv olundu.")
+                        return
+
+            except Exception as e:
+                print(f"SMS yoxlanışında xəta: {e}")
+
+        await bot.send_message(
+            chat_id=chat_id,
+            text="⚠️ Vaxt bitdi. SMS daxil olmadı."
+        )
