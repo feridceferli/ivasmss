@@ -712,6 +712,18 @@ def _service_country_availability(services):
             found[key]["number_count"] += 1
     return found
 
+async def send_availability_notice(app, group_id, text):
+    """Send non-sensitive availability notices to the group and bot users."""
+    recipients = set(get_all_users())
+    if group_id:
+        recipients.add(str(group_id))
+    for recipient in recipients:
+        try:
+            await app.bot.send_message(chat_id=int(recipient), text=text, parse_mode="HTML")
+        except Exception as exc:
+            print(f"[availability-notice] delivery failed: {type(exc).__name__}")
+
+
 async def country_availability_loop(app):
     """Announce newly appearing service/country availability from the live API."""
     global _known_service_countries, _known_service_types, _service_country_watch_initialized
@@ -725,22 +737,18 @@ async def country_availability_loop(app):
 
             if _service_country_watch_initialized:
                 new_services = current_services - _known_service_types
-                target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
-                if target:
-                    for service in sorted(new_services):
-                        await app.bot.send_message(
-                            chat_id=int(target),
+                target = NOTIFY_GROUP_ID
+                for service in sorted(new_services):
+                        await send_availability_notice(app, target,
                             text=(
                                 "🆕 <b>Yeni xidmət əlavə olundu</b>\n\n"
                                 f"📡 Xidmət: <code>{html.escape(service.upper())}</code>\n\n"
                                 "✅ API-də yeni xidmət növü aşkarlandı."
                             ),
-                            parse_mode="HTML",
                         )
                 added = current_keys - _known_service_countries
                 target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
-                if target:
-                    for key in sorted(added):
+                for key in sorted(added):
                         info = current[key]
                         await app.bot.send_message(
                             chat_id=int(target),
@@ -752,7 +760,6 @@ async def country_availability_loop(app):
                                 f"🔢 Nömrə sayı: <b>{info.get('number_count', 0)}</b>\n\n"
                                 "✅ API-də bu xidmət üçün yeni nömrə mövcudluğu aşkarlandı."
                             ),
-                            parse_mode="HTML",
                         )
 
             _known_service_countries = current_keys
