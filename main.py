@@ -1015,6 +1015,7 @@ def admin_main_keyboard():
     keyboard = [
         [KeyboardButton("👥 İSTİFADƏÇİ İDARƏETMƏSİ"), KeyboardButton("⚙️ SİSTEM KONFİQURASİYASI")],
         [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR"), KeyboardButton("⚡ FAKE OTP")],
+        [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -3798,6 +3799,49 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         and is_admin(uid)
     ):
         await admin_view_user_otp_rate_start(update, context)
+        return
+
+    # Safe group notification tools (admin only)
+    if text == "🛠 BİLDİRİŞ ALƏTLƏRİ" and context.user_data.get("admin_mode") == "main" and is_admin(uid):
+        context.user_data["admin_tools_mode"] = "main"
+        context.user_data.pop("group_notification_mode", None)
+        await update.effective_message.reply_text("🛠 Bildiriş alətləri:", reply_markup=admin_tools_keyboard())
+        return
+
+    if text == "📢 QRUPA BİLDİRİŞ" and context.user_data.get("admin_tools_mode") == "main" and is_admin(uid):
+        context.user_data["group_notification_mode"] = True
+        await update.effective_message.reply_text(
+            "📢 Qrupa göndəriləcək adi elan/status mətnini yazın.\n\nOTP, SMS və təsdiqləmə kodlarını göndərməyin.",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    if context.user_data.get("group_notification_mode") and is_admin(uid):
+        context.user_data["group_notification_mode"] = False
+        ok, detail = await send_group_notification(update.effective_message.text or "")
+        icon = "✅" if ok else "❌"
+        await update.effective_message.reply_text(f"{icon} {detail}", reply_markup=admin_tools_keyboard())
+        return
+
+    if text == "🧪 QRUP TESTİ" and context.user_data.get("admin_tools_mode") == "main" and is_admin(uid):
+        ok, detail = await send_group_notification("🧪 Test bildirişi: qrup bildiriş sistemi işləyir.")
+        icon = "✅" if ok else "❌"
+        await update.effective_message.reply_text(f"{icon} {detail}", reply_markup=admin_tools_keyboard())
+        return
+
+    if text == "ℹ️ BİLDİRİŞ STATUSU" and context.user_data.get("admin_tools_mode") == "main" and is_admin(uid):
+        group_state = "✅ qurulub" if NOTIFY_GROUP_ID else "❌ qurulmayıb"
+        token_state = "✅ qurulub" if NOTIFY_BOT_TOKEN else "❌ qurulmayıb"
+        await update.effective_message.reply_text(
+            f"ℹ️ QRUP BİLDİRİŞ STATUSU\n\nNOTIFY_GROUP_ID: {group_state}\nBot tokeni: {token_state}",
+            reply_markup=admin_tools_keyboard(),
+        )
+        return
+
+    if text == "🔙 İNZİBATÇI PANELİNƏ QAYIT" and context.user_data.get("admin_tools_mode") == "main" and is_admin(uid):
+        context.user_data.pop("admin_tools_mode", None)
+        context.user_data.pop("group_notification_mode", None)
+        await update.effective_message.reply_text("🔐 İnzibatçı paneli", reply_markup=admin_main_keyboard())
         return
 
     # Broadcast
