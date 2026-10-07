@@ -1013,9 +1013,9 @@ def cancel_keyboard():
 
 def admin_main_keyboard():
     keyboard = [
-        [KeyboardButton("👥 USER MANAGEMENT"), KeyboardButton("⚙️ SYSTEM CONFIGURATION")],
-        [KeyboardButton("🔗 REQUIRED CHANNELS"), KeyboardButton("⚡ FAKE OTP")],
-        [KeyboardButton("🔙 BACK TO MAIN")],
+        [KeyboardButton("👥 İSTİFADƏÇİ İDARƏETMƏSİ"), KeyboardButton("⚙️ SİSTEM KONFİQURASİYASI")],
+        [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR"), KeyboardButton("⚡ FAKE OTP")],
+        [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -1023,7 +1023,7 @@ def admin_main_keyboard():
 def admin_tools_keyboard():
     keyboard = [
         [KeyboardButton("📢 QRUPA BİLDİRİŞ"), KeyboardButton("🧪 QRUP TESTİ")],
-        [KeyboardButton("ℹ️ BİLDİRİŞ STATUSU"), KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("ℹ️ BİLDİRİŞ STATUSU"), KeyboardButton("🔙 İNZİBATÇI PANELİNƏ QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -1048,35 +1048,35 @@ async def send_group_notification(text: str):
 
 def user_management_keyboard():
     keyboard = [
-        [KeyboardButton("📢 SEND MESSAGE TO ALL USERS"), KeyboardButton("🆔 ALL USER ID")],
-        [KeyboardButton("📜 BAN USER LIST"), KeyboardButton("💰 ALL USER BALANCE")],
-        [KeyboardButton("👥 USER LIST (ALL)"), KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("📢 BÜTÜN İSTİFADƏÇİLƏRƏ MESAJ GÖNDƏR"), KeyboardButton("🆔 BÜTÜN İSTİFADƏÇİ ID-LƏRİ")],
+        [KeyboardButton("📜 BLOKLANMIŞ İSTİFADƏÇİLƏR"), KeyboardButton("💰 BÜTÜN İSTİFADƏÇİLƏRİN BALANSI")],
+        [KeyboardButton("👥 İSTİFADƏÇİ SİYAHISI (HAMISI)"), KeyboardButton("🔙 İNZİBATÇI PANELİNƏ QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
 def system_config_keyboard():
     keyboard = [
-        [KeyboardButton("📈 TODAY ALL STATUS"), KeyboardButton("👤 USER STATUS CHECK")],
-        [KeyboardButton("⛔ BAN USER"), KeyboardButton("🔓 UNBAN USER")],
-        [KeyboardButton("📜 BAN USER LIST")],
-        [KeyboardButton("➖ REMOVE BALANCE"), KeyboardButton("➕ ADD BALANCE")],
-        [KeyboardButton("⚙️ CHANGE MIN WITHDRAW")],
-        [KeyboardButton("💳 TOGGLE PAYMENT METHODS")],
-        [KeyboardButton("💲 CHANGE OTP PRICE")],
+        [KeyboardButton("📈 BU GÜNKÜ ÜMUMİ VƏZİYYƏT"), KeyboardButton("👤 İSTİFADƏÇİNİN VƏZİYYƏTİNİ YOXLAYIN")],
+        [KeyboardButton("⛔ İSTİFADƏÇİNİ BLOKLA"), KeyboardButton("🔓 BLOKDAN ÇIXAR")],
+        [KeyboardButton("📜 BLOKLANMIŞ İSTİFADƏÇİLƏR")],
+        [KeyboardButton("➖ BALANSI AZALT"), KeyboardButton("➕ BALANS ƏLAVƏ ET")],
+        [KeyboardButton("⚙️ MİNİMUM ÇIXARIŞI DƏYİŞ")],
+        [KeyboardButton("💳 ÖDƏNİŞ ÜSULLARINI DƏYİŞ")],
+        [KeyboardButton("💲 OTP QİYMƏTİNİ DƏYİŞ")],
         [
-            KeyboardButton("🔧 SET USER OTP RATE"),
-            KeyboardButton("📋 VIEW USER OTP RATE"),
+            KeyboardButton("🔧 İSTİFADƏÇİ OTP QİYMƏTİNİ TƏYİN ET"),
+            KeyboardButton("📋 İSTİFADƏÇİ OTP QİYMƏTİNƏ BAX"),
         ],
-        [KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("🔙 İNZİBATÇI PANELİNƏ QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
 
 def required_channels_keyboard():
     keyboard = [
-        [KeyboardButton("➕ ADD CHANNEL"), KeyboardButton("❌ REMOVE CHANNEL")],
-        [KeyboardButton("📋 LIST CHANNELS"), KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("➕ KANAL ƏLAVƏ ET"), KeyboardButton("❌ KANALI SİL")],
+        [KeyboardButton("📋 KANALLARIN SİYAHISI"), KeyboardButton("🔙 İNZİBATÇI PANELİNƏ QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -1088,7 +1088,7 @@ def fake_otp_keyboard():
         [KeyboardButton(f"📊 STATUS: {status}")],
         [KeyboardButton("▶️ START"), KeyboardButton("⏹ STOP")],
         [KeyboardButton("⚙️ SETTINGS"), KeyboardButton("📈 TEST STATİSTİKASI")],
-        [KeyboardButton("🔙 BACK TO ADMIN")],
+        [KeyboardButton("🔙 İNZİBATÇI PANELİNƏ QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
