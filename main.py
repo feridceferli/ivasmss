@@ -701,12 +701,15 @@ def _service_country_availability(services):
                 continue
             flag, country = get_country_by_prefix(prefix)
             key = (service_name.lower(), prefix)
-            found[key] = {
-                "service": service_name,
-                "prefix": prefix,
-                "flag": flag,
-                "country": country,
-            }
+            if key not in found:
+                found[key] = {
+                    "service": service_name,
+                    "prefix": prefix,
+                    "flag": flag,
+                    "country": country,
+                    "number_count": 0,
+                }
+            found[key]["number_count"] += 1
     return found
 
 async def country_availability_loop(app):
@@ -745,7 +748,8 @@ async def country_availability_loop(app):
                                 "🆕 <b>Yeni xidmət mövcudluğu</b>\n\n"
                                 f"📡 Xidmət: <code>{html.escape(info['service'].upper())}</code>\n"
                                 f"🌍 Ölkə: <code>{info['flag']} {html.escape(info['country'])}</code>\n"
-                                f"📞 Ölkə kodu: <code>+{html.escape(info['prefix'])}</code>\n\n"
+                                f"📞 Ölkə kodu: <code>+{html.escape(info['prefix'])}</code>\n"
+                                f"🔢 Nömrə sayı: <b>{info.get('number_count', 0)}</b>\n\n"
                                 "✅ API-də bu xidmət üçün yeni nömrə mövcudluğu aşkarlandı."
                             ),
                             parse_mode="HTML",
