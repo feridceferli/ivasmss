@@ -979,6 +979,7 @@ def main_keyboard(user_id):
     rows = []
     if WEBAPP_URL:
         rows.append([InlineKeyboardButton(f"{labels['mini_app']}", web_app=WebAppInfo(url=WEBAPP_URL), style="primary")])
+    rows.append([InlineKeyboardButton("🧩 LAMIX SMS PANEL", callback_data="menu_lamix_panel")])
     rows += [
         [
             InlineKeyboardButton(f"{labels['get_number']}", callback_data="menu_get_number", style="success"),
@@ -4253,6 +4254,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=InlineKeyboardMarkup(buttons),
                 )
                 return
+
+    if data == "menu_lamix_panel":
+        lamix_url = os.environ.get("LAMIX_PANEL_URL", "").strip()
+        if not lamix_url.startswith("https://"):
+            await query.message.reply_text(
+                "🧩 <b>LAMIX SMS PANEL</b>\n\n"
+                "Bu sistem əsas botdan ayrıdır və hələ ayrıca yayımlanmayıb. "
+                "Aktivləşdirmək üçün Render-də LAMIX_PANEL_URL təyin edilməlidir.",
+                parse_mode="HTML",
+            )
+            return
+        await query.message.reply_text(
+            "🧩 <b>LAMIX SMS PANEL</b>\n\n"
+            "Bu panel ayrıca xidmət kimi açılır; əsas botun məlumatları ilə birləşdirilmir.",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🌐 LAMIX PANELİ AÇ", url=lamix_url)]
+            ]),
+        )
+        return
 
     # USER INLINE MENU
     if data == "menu_language":
