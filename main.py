@@ -3513,7 +3513,8 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     ):
         context.user_data["user_management_mode"] = "main"
         await update.effective_message.reply_text(
-            "👥 User Management:", reply_markup=user_management_keyboard()
+            "👥 İSTİFADƏÇİ İDARƏETMƏSİ\n\nBuradan indiyə qədər /start etmiş istifadəçiləri görə və məlumat xarakterli bildiriş göndərə bilərsiniz.",
+            reply_markup=user_management_keyboard(),
         )
         return
 
@@ -3852,9 +3853,9 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "📢 SEND MESSAGE TO ALL USERS" and is_admin(uid):
         context.user_data["broadcast_mode"] = True
         await update.effective_message.reply_text(
-            "📢 <b>ADMIN BROADCAST SYSTEM (PRO)</b>\n\n"
-            "💬 আপনি এখন যা পাঠাবেন (Text, Photo, Video, Document, Voice, Audio, Animation, Sticker) – সকল ইউজারের কাছে প্রফেশনাল হেডারসহ চলে যাবে।\n\n"
-            "✨ রেঞ্জ (যেমন: 237XXX) থাকলে তা অটোমেটিক ক্লিক-টু-কপি হয়ে যাবে।",
+            "📢 <b>BÜTÜN İSTİFADƏÇİLƏRƏ BİLDİRİŞ</b>\n\n"
+            "Botda indiyə qədər /start etmiş istifadəçilərə məlumat xarakterli bildiriş göndərmək üçün mesajınızı yazın.\n\n"
+            "Mətn, şəkil, video və sənəd göndərə bilərsiniz.",
             parse_mode="HTML",
             reply_markup=cancel_keyboard(),
         )
@@ -3865,11 +3866,11 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         user_db = load_data(USER_DATA_FILE)
         all_uids = list(user_db.keys())
         if not all_uids:
-            await update.effective_message.reply_text("❌ পাঠানোর জন্য কোনো ইউজার পাওয়া যায়নি!")
+            await update.effective_message.reply_text("❌ Bildiriş göndərmək üçün istifadəçi tapılmadı.", reply_markup=user_management_keyboard())
             return
         success_ids, fail_ids = [], []
         status_msg = await update.effective_message.reply_text(
-            f"🚀 <b>ব্রডকাস্ট শুরু হয়েছে...</b>\n🎯 টার্গেট: {len(all_uids)} জন ইউজার।",
+            f"📢 <b>Bildiriş göndərilir...</b>\n👥 İstifadəçi sayı: {len(all_uids)}",
             parse_mode="HTML",
         )
 
