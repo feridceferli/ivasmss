@@ -979,7 +979,7 @@ def main_keyboard(user_id):
     rows = []
     if WEBAPP_URL:
         rows.append([InlineKeyboardButton(f"{labels['mini_app']}", web_app=WebAppInfo(url=WEBAPP_URL), style="primary")])
-    rows.append([InlineKeyboardButton("🧩 LAMIX SMS PANEL", callback_data="menu_lamix_panel")])
+    rows.append([InlineKeyboardButton("🧩 IVAS SMS WEB PANEL", callback_data="menu_ivas_web_panel")])
     rows += [
         [
             InlineKeyboardButton(f"{labels['get_number']}", callback_data="menu_get_number", style="success"),
@@ -4255,22 +4255,17 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 )
                 return
 
-    if data == "menu_lamix_panel":
-        lamix_url = os.environ.get("LAMIX_PANEL_URL", "").strip()
-        if not lamix_url.startswith("https://"):
-            await query.message.reply_text(
-                "🧩 <b>LAMIX SMS PANEL</b>\n\n"
-                "Bu sistem əsas botdan ayrıdır və hələ ayrıca yayımlanmayıb. "
-                "Aktivləşdirmək üçün Render-də LAMIX_PANEL_URL təyin edilməlidir.",
-                parse_mode="HTML",
-            )
+    if data == "menu_ivas_web_panel" or data == "menu_lamix_panel":
+        ivassms_url = os.environ.get("IVASSMS_WEB_URL", "https://ivasssmsm-web.onrender.com").strip()
+        if not ivassms_url.startswith("https://"):
+            await query.message.reply_text("🧩 IVAS SMS veb-panel ünvanı düzgün deyil.")
             return
         await query.message.reply_text(
-            "🧩 <b>LAMIX SMS PANEL</b>\n\n"
-            "Bu panel ayrıca xidmət kimi açılır; əsas botun məlumatları ilə birləşdirilmir.",
+            "🧩 <b>IVAS SMS WEB PANEL</b>\n\n"
+            "Bu veb-panel ayrıca işləyir və əsas botun məlumatları ilə birləşdirilmir.",
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🌐 LAMIX PANELİ AÇ", url=lamix_url)]
+                [InlineKeyboardButton("🌐 IVAS PANELİ AÇ", url=ivassms_url)]
             ]),
         )
         return
