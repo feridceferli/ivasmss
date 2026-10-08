@@ -4332,13 +4332,16 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # SERVICE SELECTION
     if data.startswith("svcidx_"):
-        services = await fetch_services_cached()
+        # Resolve the index against the exact ordered list shown to this user,
+        # not a freshly fetched API response whose order may have changed.
+        displayed_services = context.user_data.get("la_services") or {}
         try:
             service_index = int(data[7:])
-            service = list(services.keys())[service_index]
+            service = list(displayed_services.keys())[service_index]
         except (ValueError, IndexError):
             await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
             return
+        services = await fetch_services_cached()
         if service not in services:
             await query.answer("এই সার্ভিস বর্তমানে উপলব্ধ নেই।", show_alert=True)
             return
@@ -4396,7 +4399,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not services:
             await query.message.edit_text("❌ কোনো সার্ভিস উপলব্ধ নেই।")
             return
-        keyboard = _build_services_keyboard(services)
+        displayed_services = dict(sorted(services.items()))
+        context.user_data["la_services"] = displayed_services
+        keyboard = _build_services_keyboard(displayed_services)
         await query.message.edit_text(
             "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
             "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
