@@ -725,7 +725,7 @@ async def send_availability_notice(app, group_id, text):
 
 
 async def country_availability_loop(app):
-    """Announce newly appearing service/country availability from the live API."""
+    """Announce new service and country availability to group and bot users."""
     global _known_service_countries, _known_service_types, _service_country_watch_initialized
     while True:
         try:
@@ -734,34 +734,25 @@ async def country_availability_loop(app):
             current = _service_country_availability(services)
             current_keys = set(current)
             current_services = {str(name).strip().lower() for name in (services or {}) if str(name).strip()}
-
             if _service_country_watch_initialized:
-                new_services = current_services - _known_service_types
-                target = NOTIFY_GROUP_ID
-                for service in sorted(new_services):
-                        await send_availability_notice(app, target,
-                            text=(
-                                "🆕 <b>Yeni xidmət əlavə olundu</b>\n\n"
-                                f"📡 Xidmət: <code>{html.escape(service.upper())}</code>\n\n"
-                                "✅ API-də yeni xidmət növü aşkarlandı."
-                            ),
-                        )
-                added = current_keys - _known_service_countries
-                target = NOTIFY_GROUP_ID or str(OTP_GROUP_ID)
-                for key in sorted(added):
-                        info = current[key]
-                        await app.bot.send_message(
-                            chat_id=int(target),
-                            text=(
-                                "🆕 <b>Yeni xidmət mövcudluğu</b>\n\n"
-                                f"📡 Xidmət: <code>{html.escape(info['service'].upper())}</code>\n"
-                                f"🌍 Ölkə: <code>{info['flag']} {html.escape(info['country'])}</code>\n"
-                                f"📞 Ölkə kodu: <code>+{html.escape(info['prefix'])}</code>\n"
-                                f"🔢 Nömrə sayı: <b>{info.get('number_count', 0)}</b>\n\n"
-                                "✅ API-də bu xidmət üçün yeni nömrə mövcudluğu aşkarlandı."
-                            ),
-                        )
-
+                for service in sorted(current_services - _known_service_types):
+                    notice = (
+                        "🆕 <b>Yeni xidmət əlavə olundu</b>\n\n"
+                        f"📡 Xidmət: <code>{html.escape(service.upper())}</code>\n\n"
+                        "✅ API-də yeni xidmət növü aşkarlandı."
+                    )
+                    await send_availability_notice(app, NOTIFY_GROUP_ID, notice)
+                for key in sorted(current_keys - _known_service_countries):
+                    info = current[key]
+                    notice = (
+                        "🆕 <b>Yeni xidmət mövcudluğu</b>\n\n"
+                        f"📡 Xidmət: <code>{html.escape(info['service'].upper())}</code>\n"
+                        f"🌍 Ölkə: {info['flag']} {html.escape(info['country'])}\n"
+                        f"📞 Ölkə kodu: <code>+{html.escape(info['prefix'])}</code>\n"
+                        f"🔢 Diapazon sayı: <b>{info.get('number_count', 0)}</b>\n\n"
+                        "✅ API-də bu xidmət üçün yeni diapazon mövcudluğu aşkarlandı."
+                    )
+                    await send_availability_notice(app, NOTIFY_GROUP_ID, notice)
             _known_service_countries = current_keys
             _known_service_types = current_services
             _service_country_watch_initialized = True
