@@ -2297,6 +2297,7 @@ async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ==================== WITHDRAW FUNCTIONS ====================
 async def withdraw_method_selected(update: Update, context: ContextTypes.DEFAULT_TYPE):
     text = normalize_button_input(update.message.text.strip())
+
     uid = update.effective_user.id
     if text == "❌ CANCEL":
         context.user_data["withdraw_mode"] = None
@@ -3289,11 +3290,87 @@ async def show_main_menu(update, context, uid):
 
 
 # ==================== MESSAGE HANDLER ====================
+async def deliver_admin_notice(context, targets, notice, status_msg):
+    """Deliver outside the webhook request; release the active-job guard on failure."""
+    try:
+        from safe_broadcast import send_notice
+        result = await send_notice(context.bot, targets, notice)
+        await status_msg.edit_text(
+            "✅ <b>Bildiriş göndərişi tamamlandı</b>\n\n"
+            f"👥 Qeydiyyatda: <b>{result['targeted']}</b>\n"
+            f"✅ Çatdırılan: <b>{result['sent']}</b>\n"
+            f"❌ Çatdırılmayan: <b>{result['failed']}</b>\n"
+            f"🚫 Botu bloklayanlar: <b>{result['blocked']}</b>\n"
+            f"⏳ Limitə görə uğursuz: <b>{result['retry_exhausted']}</b>\n\n"
+            "Qeyd: Bot yalnız onu başladan və bloklamayan istifadəçilərə "
+            "mesaj göndərə bilər.",
+            parse_mode="HTML",
+        )
+    finally:
+        context.application.bot_data.pop("broadcast_running", None)
+
+
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not update.message:
         return
     uid = update.effective_user.id
     text = normalize_button_input(update.message.text.strip())
+
+    # Admin-only ordinary information notices to users who started this bot.
+    if text in ("📢 SEND MESSAGE TO ALL USERS", "📢 BÜTÜN İSTİFADƏÇİLƏRƏ MESAJ GÖNDƏR") and is_admin(uid):
+        if context.application.bot_data.get("broadcast_running"):
+            await update.effective_message.reply_text("⏳ Əvvəlki bildiriş hələ göndərilir.")
+            return
+        context.user_data["broadcast_mode"] = True
+        await update.effective_message.reply_text(
+            "📢 <b>BÜTÜN İSTİFADƏÇİLƏRƏ BİLDİRİŞ</b>\n\n"
+            "Botu əvvəllər başladan istifadəçilərə göndərmək istədiyin "
+            "məlumat mesajını yaz.\n\n"
+            "Yalnız adi məlumat mətni göndərilir. OTP/SMS kodu və parol göndərmə.\n"
+            "Ləğv etmək üçün ❌ CANCEL seç.",
+            parse_mode="HTML",
+            reply_markup=cancel_keyboard(),
+        )
+        return
+
+    if context.user_data.get("broadcast_mode") and is_admin(uid):
+        if text == "❌ CANCEL":
+            context.user_data.pop("broadcast_mode", None)
+            await update.effective_message.reply_text("❌ Ləğv edildi", reply_markup=admin_main_keyboard())
+            return
+        if context.application.bot_data.get("broadcast_running"):
+            await update.effective_message.reply_text("⏳ Əvvəlki bildiriş hələ göndərilir.")
+            return
+        context.user_data["broadcast_mode"] = False
+        from safe_broadcast import validate_notice, recipient_ids
+        try:
+            notice = validate_notice(update.message.text or "")
+        except ValueError as exc:
+            await update.effective_message.reply_text(
+                f"❌ {html.escape(str(exc))}", reply_markup=admin_main_keyboard()
+            )
+            return
+        targets = recipient_ids(load_data(USER_DATA_FILE))
+        if not targets:
+            await update.effective_message.reply_text(
+                "❌ Hazırda bildiriş göndərmək üçün qeydiyyatda istifadəçi yoxdur.",
+                reply_markup=admin_main_keyboard(),
+            )
+            return
+        context.application.bot_data["broadcast_running"] = True
+        try:
+            status_msg = await update.effective_message.reply_text(
+                f"📢 <b>Bildiriş göndərilir...</b>\n👥 İstifadəçi sayı: {len(targets)}",
+                parse_mode="HTML",
+                reply_markup=admin_main_keyboard(),
+            )
+            context.application.create_task(
+                deliver_admin_notice(context, targets, notice, status_msg), update=update
+            )
+        except Exception:
+            context.application.bot_data.pop("broadcast_running", None)
+            raise
+        return
 
     # Fake OTP settings processing
     if context.user_data.get("fake_otp_setting") and is_admin(uid):
@@ -3892,55 +3969,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("🔐 İnzibatçı paneli", reply_markup=admin_main_keyboard())
         return
 
-    # Admin-only ordinary information notices to users who started this bot.
-    if text in ("📢 SEND MESSAGE TO ALL USERS", "📢 BÜTÜN İSTİFADƏÇİLƏRƏ MESAJ GÖNDƏR") and is_admin(uid):
-        context.user_data["broadcast_mode"] = True
-        await update.effective_message.reply_text(
-            "📢 <b>BÜTÜN İSTİFADƏÇİLƏRƏ BİLDİRİŞ</b>\n\n"
-            "Botu əvvəllər başladan istifadəçilərə göndərmək istədiyin "
-            "məlumat mesajını yaz.\n\n"
-            "Yalnız adi məlumat mətni göndərilir. OTP/SMS kodu və parol göndərmə.\n"
-            "Ləğv etmək üçün ❌ CANCEL seç.",
-            parse_mode="HTML",
-            reply_markup=cancel_keyboard(),
-        )
-        return
-
-    if context.user_data.get("broadcast_mode") and is_admin(uid):
-        context.user_data["broadcast_mode"] = False
-        from safe_broadcast import validate_notice, recipient_ids, send_notice
-        try:
-            notice = validate_notice(update.message.text or "")
-        except ValueError as exc:
-            await update.effective_message.reply_text(
-                f"❌ {html.escape(str(exc))}", reply_markup=admin_main_keyboard()
-            )
-            return
-        targets = recipient_ids(load_data(USER_DATA_FILE))
-        if not targets:
-            await update.effective_message.reply_text(
-                "❌ Hazırda bildiriş göndərmək üçün qeydiyyatda istifadəçi yoxdur.",
-                reply_markup=admin_main_keyboard(),
-            )
-            return
-        status_msg = await update.effective_message.reply_text(
-            f"📢 <b>Bildiriş göndərilir...</b>\n👥 İstifadəçi sayı: {len(targets)}",
-            parse_mode="HTML",
-        )
-        result = await send_notice(context.bot, targets, notice)
-        await status_msg.edit_text(
-            "✅ <b>Bildiriş göndərişi tamamlandı</b>\n\n"
-            f"👥 Qeydiyyatda: <b>{result['targeted']}</b>\n"
-            f"✅ Çatdırılan: <b>{result['sent']}</b>\n"
-            f"❌ Çatdırılmayan: <b>{result['failed']}</b>\n"
-            f"🚫 Botu bloklayanlar: <b>{result['blocked']}</b>\n"
-            f"⏳ Limitə görə uğursuz: <b>{result['retry_exhausted']}</b>\n\n"
-            "Qeyd: Bot yalnız onu başladan və bloklamayan istifadəçilərə "
-            "mesaj göndərə bilər.",
-            parse_mode="HTML",
-            reply_markup=admin_main_keyboard(),
-        )
-        return
     await update.effective_message.reply_text(
         "🔹 PLEASE USE THE BUTTONS BELOW:", reply_markup=main_keyboard(uid)
     )
@@ -4897,7 +4925,7 @@ async def run_combined_server():
     await app.initialize()
     await app.start()
     await post_init(app)
-    await app.bot.set_webhook(url=webhook_url, allowed_updates=Update.ALL_TYPES, drop_pending_updates=True)
+    await app.bot.set_webhook(url=webhook_url, allowed_updates=Update.ALL_TYPES, drop_pending_updates=False)
     await runner.setup()
     await web.TCPSite(runner, "0.0.0.0", port).start()
     print(f"🚀 Bot webhook + Mini App API eyni portda işləyir: {port}")
@@ -4960,3 +4988,4 @@ async def check_sms_status(activation_id: str, chat_id: int):
             chat_id=chat_id,
             text="⚠️ Vaxt bitdi. SMS daxil olmadı."
         )
+

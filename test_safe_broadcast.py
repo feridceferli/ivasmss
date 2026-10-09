@@ -2,7 +2,7 @@ import asyncio
 import unittest
 from unittest.mock import AsyncMock
 
-from telegram.error import Forbidden, RetryAfter
+from telegram.error import Forbidden, NetworkError, RetryAfter
 from safe_broadcast import recipient_ids, validate_notice, send_notice
 
 
@@ -46,6 +46,26 @@ class BroadcastTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(summary["retry_exhausted"], 1)
         self.assertEqual(bot.send_message.await_count, 4)
 
+    async def test_temporary_network_failure_does_not_skip_user(self):
+        bot = type("Fake", (), {})()
+        bot.send_message = AsyncMock(side_effect=[NetworkError("offline"), None, None])
+        from unittest.mock import patch
+        with patch("safe_broadcast.asyncio.sleep", new=AsyncMock()):
+            summary = await send_notice(bot, [11, 22], "Yeni məlumat")
+        self.assertEqual(summary["sent"], 2)
+        self.assertEqual(summary["failed"], 0)
+        self.assertEqual([call.kwargs["chat_id"] for call in bot.send_message.await_args_list], [11, 11, 22])
+
+    async def test_full_server_retry_delay_is_respected(self):
+        bot = type("Fake", (), {})()
+        bot.send_message = AsyncMock(side_effect=[RetryAfter(120), None])
+        from unittest.mock import patch
+        with patch("safe_broadcast.asyncio.sleep", new=AsyncMock()) as sleep:
+            summary = await send_notice(bot, [44], "Yeni məlumat")
+        self.assertEqual(summary["sent"], 1)
+        sleep.assert_any_await(120.5)
+
 
 if __name__ == "__main__":
     unittest.main()
+

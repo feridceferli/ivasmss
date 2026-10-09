@@ -6,8 +6,9 @@ Follows Telegram rate limits and returns summary counters only.
 import asyncio
 import html
 import re
+from datetime import timedelta
 
-from telegram.error import Forbidden, RetryAfter, TelegramError
+from telegram.error import Forbidden, NetworkError, RetryAfter, TelegramError
 
 MAX_NOTICE_LENGTH = 3400
 MIN_DELAY_SECONDS = 0.085  # <12 messages/s in a single worker
@@ -60,13 +61,22 @@ async def send_notice(bot, ids, body):
                 if attempt == MAX_RETRIES:
                     summary["retry_exhausted"] += 1
                     break
-                await asyncio.sleep(min(max(float(exc.retry_after), 1.0), 60.0) + 0.5)
+                delay = exc.retry_after
+                if isinstance(delay, timedelta):
+                    delay = delay.total_seconds()
+                await asyncio.sleep(max(float(delay), 1.0) + 0.5)
             except Forbidden:
                 summary["blocked"] += 1
                 break
+            except NetworkError:
+                if attempt == MAX_RETRIES:
+                    summary["retry_exhausted"] += 1
+                    break
+                await asyncio.sleep(2 ** attempt)
             except TelegramError:
                 break
         if not sent:
             summary["failed"] += 1
         await asyncio.sleep(MIN_DELAY_SECONDS)
     return summary
+
