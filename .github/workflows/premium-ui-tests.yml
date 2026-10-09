@@ -1,0 +1,33 @@
+name: Premium Emoji UI tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - "premium_ui.py"
+      - "main.py"
+      - "bot_languages.py"
+      - "test_premium_ui.py"
+      - "requirements.txt"
+      - ".github/workflows/premium-ui-tests.yml"
+  pull_request:
+    paths:
+      - "premium_ui.py"
+      - "main.py"
+      - "bot_languages.py"
+      - "test_premium_ui.py"
+      - "requirements.txt"
+      - ".github/workflows/premium-ui-tests.yml"
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Telegram package
+        run: pip install "python-telegram-bot[webhooks]==22.8"
+      - name: Check bot syntax
+        run: python -m py_compile main.py premium_ui.py bot_languages.py
+      - name: Test custom emoji UI and fallback
+        run: python -m unittest -v test_premium_ui

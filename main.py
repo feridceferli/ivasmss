@@ -34,6 +34,8 @@ from telegram.error import TelegramError
 from aiohttp import web
 from bot_localization import install_azerbaijani_localization, normalize_button_input
 from bot_languages import t, language_keyboard, menu_labels, normalize_language
+from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons_enabled,
+                        disable_premium_icons, is_premium_emoji_error)
 
 # ==================== CONFIG SECTION ====================
 
@@ -975,39 +977,81 @@ def get_user_language(user_id):
     return normalize_language(data.get(str(user_id), {}).get("language", "az"))
 
 def main_keyboard(user_id):
-    labels = menu_labels(get_user_language(user_id))
+    lang = get_user_language(user_id)
+    labels = menu_labels(lang)
     rows = []
     if WEBAPP_URL:
-        rows.append([InlineKeyboardButton(f"{labels['mini_app']}", web_app=WebAppInfo(url=WEBAPP_URL), style="primary")])
-    rows.append([InlineKeyboardButton("🧩 IVAS SMS WEB PANEL", callback_data="menu_ivas_web_panel")])
+        rows.append([
+            premium_inline_button(labels["mini_app"], "mini_app",
+                                  web_app=WebAppInfo(url=WEBAPP_URL), style="primary")
+        ])
+    rows.append([
+        premium_inline_button("🧩 IVAS SMS WEB PANEL", "ivas_panel",
+                              callback_data="menu_ivas_web_panel")
+    ])
     rows += [
         [
-            InlineKeyboardButton(f"{labels['get_number']}", callback_data="menu_get_number", style="success"),
-            InlineKeyboardButton(f"{labels['active_numbers']}", callback_data="menu_active_numbers"),
+            premium_inline_button(labels["get_number"], "get_number",
+                                  callback_data="menu_get_number", style="success"),
+            premium_inline_button(labels["active_numbers"], "active_numbers",
+                                  callback_data="menu_active_numbers"),
         ],
         [
-            InlineKeyboardButton(f"{labels['search_otp']}", callback_data="menu_search_otp"),
-            InlineKeyboardButton(f"{labels['get_2fa']}", callback_data="menu_get_2fa"),
+            premium_inline_button(labels["search_otp"], "search_otp",
+                                  callback_data="menu_search_otp"),
+            premium_inline_button(labels["get_2fa"], "get_2fa",
+                                  callback_data="menu_get_2fa"),
         ],
         [
-            InlineKeyboardButton(f"{labels['balance']}", callback_data="menu_balance", style="primary"),
-            InlineKeyboardButton(f"{labels['profile']}", callback_data="menu_profile"),
+            premium_inline_button(labels["balance"], "balance",
+                                  callback_data="menu_balance", style="primary"),
+            premium_inline_button(labels["profile"], "profile",
+                                  callback_data="menu_profile"),
         ],
         [
-            InlineKeyboardButton(f"{labels['refer']}", callback_data="menu_refer"),
-            InlineKeyboardButton(f"{labels['leaderboard']}", callback_data="menu_leaderboard"),
+            premium_inline_button(labels["refer"], "refer",
+                                  callback_data="menu_refer"),
+            premium_inline_button(labels["leaderboard"], "leaderboard",
+                                  callback_data="menu_leaderboard"),
         ],
-        [InlineKeyboardButton(f"{labels['support']}", callback_data="menu_support")],
-        [InlineKeyboardButton(
-            "🌐 DİLİ DƏYİŞ" if get_user_language(user_id) == "az" else
-            "🌐 DİLİ DEĞİŞTİR" if get_user_language(user_id) == "tr" else
-            "🌐 CHANGE LANGUAGE",
-            callback_data="menu_language", style="primary"
-        )],
+        [premium_inline_button(labels["support"], "support",
+                               callback_data="menu_support")],
+        [
+            premium_inline_button(
+                "🌐 DİLİ DƏYİŞ" if lang == "az" else
+                "🌐 DİLİ DEĞİŞTİR" if lang == "tr" else
+                "🌐 CHANGE LANGUAGE",
+                "language", callback_data="menu_language", style="primary",
+            )
+        ],
     ]
     if is_admin(user_id):
-        rows.append([InlineKeyboardButton(f"{labels['admin']}", callback_data="menu_admin", style="danger")])
+        rows.append([
+            premium_inline_button(labels["admin"], "admin",
+                                  callback_data="menu_admin", style="danger")
+        ])
     return InlineKeyboardMarkup(rows)
+
+
+async def premium_keyboard_error_handler(update, context):
+    """Retry the standard menu if Telegram rejects Premium custom emoji."""
+    error = context.error
+    if premium_icons_enabled() and is_premium_emoji_error(error):
+        disable_premium_icons()
+        print("[premium-ui] Telegram rejected custom emojis; Unicode fallback enabled.")
+        user = getattr(update, "effective_user", None)
+        message = getattr(update, "effective_message", None)
+        if user is not None and message is not None:
+            try:
+                await message.reply_text(
+                    "🔹 Menyu adi emojilərlə açıldı / Menu opened with regular emoji.",
+                    reply_markup=main_keyboard(user.id),
+                )
+            except TelegramError:
+                print("[premium-ui] Could not resend fallback menu.")
+        return
+    print(f"[telegram-handler-error] {type(error).__name__}")
+
 
 def cancel_keyboard():
     keyboard = [[KeyboardButton("❌ CANCEL")]]
@@ -4194,7 +4238,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
     lang = get_user_language(uid)
-    await update.effective_message.reply_text(WELCOME_MESSAGE, parse_mode="HTML", reply_markup=ReplyKeyboardRemove())
+    await update.effective_message.reply_text(
+        WELCOME_MESSAGE.replace("💎", premium_html_emoji("💎", "balance"), 1),
+        parse_mode="HTML", reply_markup=ReplyKeyboardRemove(),
+    )
     await update.effective_message.reply_text(
         ("🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else
              "🔹 Aşağıdaki düğmeleri kullanın:" if lang == "tr" else
@@ -4931,6 +4978,7 @@ async def run_combined_server():
     # Do not globally force Azerbaijani, otherwise EN/TR selections are overwritten.
     app = ApplicationBuilder().token(BOT_TOKEN).concurrent_updates(True).build()
     register_handlers(app)
+    app.add_error_handler(premium_keyboard_error_handler)
 
     external_url = (os.environ.get("RENDER_EXTERNAL_URL") or "").rstrip("/")
     webhook_url = os.environ.get("WEBHOOK_URL") or (f"{external_url}/webhook" if external_url else "")
