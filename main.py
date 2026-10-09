@@ -3892,13 +3892,15 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await update.effective_message.reply_text("🔐 İnzibatçı paneli", reply_markup=admin_main_keyboard())
         return
 
-    # Broadcast
-    if text == "📢 SEND MESSAGE TO ALL USERS" and is_admin(uid):
+    # Admin-only ordinary information notices to users who started this bot.
+    if text in ("📢 SEND MESSAGE TO ALL USERS", "📢 BÜTÜN İSTİFADƏÇİLƏRƏ MESAJ GÖNDƏR") and is_admin(uid):
         context.user_data["broadcast_mode"] = True
         await update.effective_message.reply_text(
-            "📢 <b>ADMIN BROADCAST SYSTEM (PRO)</b>\n\n"
-            "💬 আপনি এখন যা পাঠাবেন (Text, Photo, Video, Document, Voice, Audio, Animation, Sticker) – সকল ইউজারের কাছে প্রফেশনাল হেডারসহ চলে যাবে।\n\n"
-            "✨ রেঞ্জ (যেমন: 237XXX) থাকলে তা অটোমেটিক ক্লিক-টু-কপি হয়ে যাবে।",
+            "📢 <b>BÜTÜN İSTİFADƏÇİLƏRƏ BİLDİRİŞ</b>\n\n"
+            "Botu əvvəllər başladan istifadəçilərə göndərmək istədiyin "
+            "məlumat mesajını yaz.\n\n"
+            "Yalnız adi məlumat mətni göndərilir. OTP/SMS kodu və parol göndərmə.\n"
+            "Ləğv etmək üçün ❌ CANCEL seç.",
             parse_mode="HTML",
             reply_markup=cancel_keyboard(),
         )
@@ -3906,156 +3908,38 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if context.user_data.get("broadcast_mode") and is_admin(uid):
         context.user_data["broadcast_mode"] = False
-        user_db = load_data(USER_DATA_FILE)
-        all_uids = list(user_db.keys())
-        if not all_uids:
-            await update.effective_message.reply_text("❌ পাঠানোর জন্য কোনো ইউজার পাওয়া যায়নি!")
+        from safe_broadcast import validate_notice, recipient_ids, send_notice
+        try:
+            notice = validate_notice(update.message.text or "")
+        except ValueError as exc:
+            await update.effective_message.reply_text(
+                f"❌ {html.escape(str(exc))}", reply_markup=admin_main_keyboard()
+            )
             return
-        success_ids, fail_ids = [], []
+        targets = recipient_ids(load_data(USER_DATA_FILE))
+        if not targets:
+            await update.effective_message.reply_text(
+                "❌ Hazırda bildiriş göndərmək üçün qeydiyyatda istifadəçi yoxdur.",
+                reply_markup=admin_main_keyboard(),
+            )
+            return
         status_msg = await update.effective_message.reply_text(
-            f"🚀 <b>ব্রডকাস্ট শুরু হয়েছে...</b>\n🎯 টার্গেট: {len(all_uids)} জন ইউজার।",
+            f"📢 <b>Bildiriş göndərilir...</b>\n👥 İstifadəçi sayı: {len(targets)}",
             parse_mode="HTML",
         )
-
-        def format_broadcast_caption(caption_text):
-            if not caption_text:
-                return "<blockquote>📢 <b>ADMIN NOTICE :</b></blockquote>"
-            formatted = re.sub(
-                r"(\d{3,}[xX]{3,})", r"<code>\1</code>", str(caption_text)
-            )
-            return f"<blockquote>📢 <b>ADMIN NOTICE :</b></blockquote>\n\n{formatted}"
-
-        for user_id_str in all_uids:
-            try:
-                target_id = int(user_id_str)
-                if update.message.text:
-                    await context.bot.send_message(
-                        chat_id=target_id,
-                        text=format_broadcast_caption(update.message.text),
-                        parse_mode="HTML",
-                    )
-                elif update.message.photo:
-                    caption = (
-                        format_broadcast_caption(update.message.caption)
-                        if update.message.caption
-                        else None
-                    )
-                    await context.bot.send_photo(
-                        chat_id=target_id,
-                        photo=update.message.photo[-1].file_id,
-                        caption=caption,
-                        parse_mode="HTML" if caption else None,
-                    )
-                elif update.message.video:
-                    caption = (
-                        format_broadcast_caption(update.message.caption)
-                        if update.message.caption
-                        else None
-                    )
-                    await context.bot.send_video(
-                        chat_id=target_id,
-                        video=update.message.video.file_id,
-                        caption=caption,
-                        parse_mode="HTML" if caption else None,
-                    )
-                elif update.message.document:
-                    caption = (
-                        format_broadcast_caption(update.message.caption)
-                        if update.message.caption
-                        else None
-                    )
-                    await context.bot.send_document(
-                        chat_id=target_id,
-                        document=update.message.document.file_id,
-                        caption=caption,
-                        parse_mode="HTML" if caption else None,
-                    )
-                elif update.message.audio:
-                    caption = (
-                        format_broadcast_caption(update.message.caption)
-                        if update.message.caption
-                        else None
-                    )
-                    await context.bot.send_audio(
-                        chat_id=target_id,
-                        audio=update.message.audio.file_id,
-                        caption=caption,
-                        parse_mode="HTML" if caption else None,
-                    )
-                elif update.message.voice:
-                    caption = (
-                        format_broadcast_caption(update.message.caption)
-                        if update.message.caption
-                        else None
-                    )
-                    await context.bot.send_voice(
-                        chat_id=target_id,
-                        voice=update.message.voice.file_id,
-                        caption=caption,
-                        parse_mode="HTML" if caption else None,
-                    )
-                elif update.message.animation:
-                    caption = (
-                        format_broadcast_caption(update.message.caption)
-                        if update.message.caption
-                        else None
-                    )
-                    await context.bot.send_animation(
-                        chat_id=target_id,
-                        animation=update.message.animation.file_id,
-                        caption=caption,
-                        parse_mode="HTML" if caption else None,
-                    )
-                elif update.message.sticker:
-                    await context.bot.send_sticker(
-                        chat_id=target_id, sticker=update.message.sticker.file_id
-                    )
-                else:
-                    try:
-                        await context.bot.copy_message(
-                            chat_id=target_id,
-                            from_chat_id=update.message.chat_id,
-                            message_id=update.message.message_id,
-                        )
-                    except:
-                        await context.bot.send_message(
-                            chat_id=target_id,
-                            text="📢 <b>ADMIN NOTICE :</b>\n\nআপনার জন্য একটি নতুন বার্তা আছে, কিন্তু এটি প্রদর্শন করা সম্ভব হয়নি।",
-                            parse_mode="HTML",
-                        )
-                success_ids.append(user_id_str)
-            except Exception as e:
-                print(f"Broadcast fail to {user_id_str}: {e}")
-                fail_ids.append(user_id_str)
-            await asyncio.sleep(0.05)
-        report_text = (
-            f"✅ <b>ADMIN NOTICE COMPLETE !</b>\n\n"
-            f"📊 <b>BROADCAST REPORT:</b>\n\n"
-            f"<blockquote>✅ SUCCESSFULLY SENT: {len(success_ids)} USERS !</blockquote>\n"
-            f"<blockquote>❌ FAILED TO SEND: {len(fail_ids)} USERS !</blockquote>"
-        )
-        await status_msg.delete()
-        await context.bot.send_message(
-            chat_id=uid,
-            text=report_text,
+        result = await send_notice(context.bot, targets, notice)
+        await status_msg.edit_text(
+            "✅ <b>Bildiriş göndərişi tamamlandı</b>\n\n"
+            f"👥 Qeydiyyatda: <b>{result['targeted']}</b>\n"
+            f"✅ Çatdırılan: <b>{result['sent']}</b>\n"
+            f"❌ Çatdırılmayan: <b>{result['failed']}</b>\n"
+            f"🚫 Botu bloklayanlar: <b>{result['blocked']}</b>\n"
+            f"⏳ Limitə görə uğursuz: <b>{result['retry_exhausted']}</b>\n\n"
+            "Qeyd: Bot yalnız onu başladan və bloklamayan istifadəçilərə "
+            "mesaj göndərə bilər.",
             parse_mode="HTML",
-            reply_markup=main_keyboard(uid),
+            reply_markup=admin_main_keyboard(),
         )
-        random_suffix = "".join(
-            random.choices(string.ascii_uppercase + string.digits, k=5)
-        )
-        if success_ids:
-            s_file = io.BytesIO(("\n".join(success_ids)).encode())
-            s_file.name = f"SUCCESS_{random_suffix}.txt"
-            await context.bot.send_document(
-                chat_id=uid, document=s_file, caption="✅ Success User List"
-            )
-        if fail_ids:
-            f_file = io.BytesIO(("\n".join(fail_ids)).encode())
-            f_file.name = f"FAILED_{random_suffix}.txt"
-            await context.bot.send_document(
-                chat_id=uid, document=f_file, caption="❌ Failed User List"
-            )
         return
     await update.effective_message.reply_text(
         "🔹 PLEASE USE THE BUTTONS BELOW:", reply_markup=main_keyboard(uid)
