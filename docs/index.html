@@ -1,35 +1,102 @@
 <!doctype html>
 <html lang="az">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#151130"><title>Aze SMS Panel</title>
-<link rel="stylesheet" href="style.css?v=20261006-3">
-<script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1020">
+  <meta name="description" content="Aze SMS şəxsi paneli">
+  <title>Aze SMS · Şəxsi panel</title>
+  <link rel="preconnect" href="https://telegram.org">
+  <link rel="stylesheet" href="style.css?v=20261010-1">
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
-<body><main class="shell">
-<header class="topbar"><div><b>Aze <span>SMS</span></b><small>Premium Panel</small></div><div class="top-actions"><i>🔔</i><i>⚙️</i><i>👤</i></div></header>
-<section class="account-card"><div id="avatar">A</div><div class="identity"><strong id="hello">Salam 👋</strong><small>Telegram hesabı</small></div><div class="balance-pill">🪙 <b id="balance">—</b></div><span id="status">●</span></section>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <a class="brand" href="#home" aria-label="Aze SMS ana səhifə"><span class="brand-mark">A</span><span><b>Aze SMS</b><small>Şəxsi panel</small></span></a>
+      <button class="icon-button" id="refresh" type="button" aria-label="Məlumatları yenilə" title="Yenilə">↻</button>
+    </header>
 
-<nav>
-<button data-tab="home" class="active">Xidmətlər</button><button data-tab="orders">Sifarişlər</button><button data-tab="history">Tarixçə</button><button data-tab="profile">Profil</button><button data-tab="admin" id="adminTab" hidden>Admin</button>
-</nav>
+    <section class="account-card" aria-label="Hesab məlumatı">
+      <div class="avatar" id="avatar">A</div>
+      <div class="identity"><strong id="hello">Salam 👋</strong><small>Telegram hesabı</small></div>
+      <div class="balance-pill"><span aria-hidden="true">◈</span><span><small>Balans</small><b id="balance">—</b></span></div>
+      <span class="connection" id="status" title="Bağlantı yoxlanılır">●</span>
+    </section>
 
-<section id="home" class="panel active">
-<h2>XİDMƏTLƏR</h2>
-<div class="service-grid">
-<button class="service-card" data-tab="orders"><span class="icon green">📱</span><b>Aktiv sifarişlər</b><small>Nömrə və statuslar</small></button>
-<button class="service-card" data-tab="history"><span class="icon violet">🕘</span><b>Tarixçə</b><small>Əvvəlki əməliyyatlar</small></button>
-<button class="service-card" id="refresh"><span class="icon blue">↻</span><b>Yenilə</b><small>Məlumatları yenilə</small></button>
-<button class="service-card" data-tab="profile"><span class="icon cyan">👤</span><b>Profil</b><small>Hesab məlumatları</small></button>
-<a class="service-card" href="https://t.me/betrunaz" id="support"><span class="icon orange">💬</span><b>Dəstək</b><small>Bizimlə əlaqə</small></a>
-<button class="service-card" data-tab="sms"><span class="icon pink">✉️</span><b>Test SMS</b><small>Sandbox mesajları</small></button>
-</div>
-<div class="mini-stats"><div><small>Aktiv sifariş</small><strong id="activeCount">—</strong></div><div><small>Panel</small><strong>Online</strong></div></div>
-</section>
+    <nav class="tabs" aria-label="Bölmələr">
+      <button type="button" data-tab="home" class="active">Ana səhifə</button>
+      <button type="button" data-tab="orders">Sifarişlər</button>
+      <button type="button" data-tab="history">Tarixçə</button>
+      <button type="button" data-tab="profile">Profil</button>
+      <button type="button" data-tab="admin" id="adminTab" hidden>Admin</button>
+    </nav>
 
-<section id="orders" class="panel"><div class="section-head"><h2>Aktiv sifarişlər</h2><button id="newTest">＋ Test</button></div><div id="ordersList" class="list"><p class="muted">Məlumat yüklənir…</p></div></section>
-<section id="history" class="panel"><h2>Tarixçə</h2><div id="historyList" class="list"><p class="muted">Tarixçə boşdur.</p></div></section>
-<section id="sms" class="panel"><h2>Test SMS</h2><div class="notice">Bu bölmədə yalnız sandbox/test mesajları göstərilir.</div><div id="smsList" class="list"><p class="muted">Aktiv test sifarişindən “Test SMS” seçin.</p></div></section>
-<section id="profile" class="panel"><h2>Profil</h2><div class="profile"><div><small>Ad</small><b id="pName">—</b></div><div><small>Username</small><b id="pUser">—</b></div><div><small>Telegram ID</small><b id="pId">—</b></div></div></section>
-<section id="admin" class="panel"><h2>Admin panel</h2><div class="mini-stats"><div><small>İstifadəçilər</small><strong id="userCount">—</strong></div><div><small>Status</small><strong>Aktiv</strong></div></div><div id="adminUsers" class="list"><p class="muted">Məlumat yüklənir…</p></div></section>
-</main><div id="toast"></div><script src="app.js?v=20261006-2"></script></body></html>
+    <section id="home" class="panel active" aria-labelledby="homeTitle">
+      <div class="welcome"><p class="eyebrow">İDARƏETMƏ PANELİ</p><h1 id="homeTitle">Xoş gəldin<span id="welcomeName"></span></h1><p class="muted">Hesabına və mövcud bölmələrə buradan bax.</p></div>
+      <div class="section-heading"><h2>Xidmətlər</h2><span class="muted">Sürətli keçid</span></div>
+      <div class="service-grid">
+        <button class="service-card" type="button" data-tab="orders"><span class="service-icon violet">▣</span><b>Sifarişlər</b><small>Aktiv və test sifarişləri</small></button>
+        <button class="service-card" type="button" data-tab="history"><span class="service-icon blue">◷</span><b>Tarixçə</b><small>Son əməliyyatların</small></button>
+        <button class="service-card" type="button" data-tab="profile"><span class="service-icon teal">◉</span><b>Profil</b><small>Hesab məlumatların</small></button>
+        <button class="service-card" type="button" id="newTest"><span class="service-icon green">＋</span><b>Test sifarişi</b><small>Sandbox rejimində yoxla</small></button>
+        <a class="service-card" href="https://t.me/betrunaz" id="support" target="_blank" rel="noopener"><span class="service-icon orange">↗</span><b>Dəstək</b><small>Bizimlə əlaqə</small></a>
+        <button class="service-card" type="button" id="homeRefresh"><span class="service-icon cyan">⟳</span><b>Yenilə</b><small>Son məlumatları al</small></button>
+      </div>
+      <div class="section-heading"><h2>Qısa məlumat</h2></div>
+      <div class="stats-grid">
+        <article class="stat-card"><small>Aktiv sifariş</small><strong id="activeCount">—</strong></article>
+        <article class="stat-card"><small>Bu gün</small><strong id="todayCount">—</strong></article>
+        <article class="stat-card"><small>Cəmi</small><strong id="totalCount">—</strong></article>
+      </div>
+    </section>
+
+    <section id="orders" class="panel" aria-labelledby="ordersTitle">
+      <div class="page-heading"><div><p class="eyebrow">HESABIN</p><h1 id="ordersTitle">Sifarişlər</h1></div><button id="ordersRefresh" class="subtle-button" type="button">↻ Yenilə</button></div>
+      <p class="muted">Hesabına aid aktiv sifarişlər və sınaq sifarişləri.</p>
+      <div class="section-heading"><h2>Aktiv</h2><span class="counter" id="activeBadge">0</span></div>
+      <div id="liveOrders" class="list"><p class="empty">Məlumat yüklənir…</p></div>
+      <div class="section-heading section-spaced"><h2>Sandbox sınağı</h2><button class="subtle-button" id="newTestInline" type="button">＋ Test yarat</button></div>
+      <div class="notice"><b>Sınaq rejimi</b><span>Buradakı nömrə və mesajlar nümunədir. Real nömrə və SMS göstərilmir.</span></div>
+      <div id="sandboxOrders" class="list"><p class="empty">Məlumat yüklənir…</p></div>
+    </section>
+
+    <section id="history" class="panel" aria-labelledby="historyTitle">
+      <div class="page-heading"><div><p class="eyebrow">SON ƏMƏLİYYATLAR</p><h1 id="historyTitle">Tarixçə</h1></div><button id="historyRefresh" class="subtle-button" type="button">↻ Yenilə</button></div>
+      <div id="historyList" class="list"><p class="empty">Məlumat yüklənir…</p></div>
+    </section>
+
+    <section id="sms" class="panel" aria-labelledby="smsTitle">
+      <div class="page-heading"><div><p class="eyebrow">SANDBOX</p><h1 id="smsTitle">Test SMS</h1></div></div>
+      <div class="notice"><b>Nümunə mesaj</b><span>Bu bölmə yalnız sınaq məlumatı göstərir. Həqiqi SMS kodları burada göstərilmir.</span></div>
+      <div id="smsList" class="list"><p class="empty">Test sifarişində “Nümunəyə bax” düyməsini seç.</p></div>
+      <button class="text-button" type="button" data-tab="orders">← Sifarişlərə qayıt</button>
+    </section>
+
+    <section id="profile" class="panel" aria-labelledby="profileTitle">
+      <div class="page-heading"><div><p class="eyebrow">ŞƏXSİ MƏLUMATLAR</p><h1 id="profileTitle">Profil</h1></div></div>
+      <div class="profile-card"><div class="avatar avatar-large" id="profileAvatar">A</div><div><b id="pName">—</b><small id="pUser">Telegram istifadəçisi</small></div></div>
+      <div class="profile-grid">
+        <article><small>Telegram ID</small><b id="pId">—</b></article>
+        <article><small>Balans</small><b id="pBalance">—</b></article>
+        <article><small>Son 24 saat</small><b id="last24">—</b></article>
+        <article><small>Son 7 gün</small><b id="last7">—</b></article>
+        <article><small>Dəvət edilənlər</small><b id="referralCount">—</b></article>
+        <article><small>Dəvət mükafatı</small><b id="referralReward">—</b></article>
+      </div>
+      <a class="support-link" href="https://t.me/betrunaz" id="profileSupport" target="_blank" rel="noopener">Dəstəyə yaz <span>↗</span></a>
+    </section>
+
+    <section id="admin" class="panel" aria-labelledby="adminTitle">
+      <div class="page-heading"><div><p class="eyebrow">YALNIZ İDARƏÇİ</p><h1 id="adminTitle">Admin panel</h1></div><button id="adminRefresh" class="subtle-button" type="button">↻ Yenilə</button></div>
+      <div class="stats-grid admin-summary"><article class="stat-card"><small>İstifadəçilər</small><strong id="userCount">—</strong></article><article class="stat-card"><small>Çıxarış minimumu</small><strong id="minWithdraw">—</strong></article><article class="stat-card"><small>Çıxarış maksimumu</small><strong id="maxWithdraw">—</strong></article></div>
+      <div class="section-heading"><h2>Son istifadəçilər</h2></div>
+      <div id="adminUsers" class="list"><p class="empty">Məlumat yüklənir…</p></div>
+    </section>
+
+    <footer><span>Aze SMS</span><span>Şəxsi panel</span></footer>
+  </main>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js?v=20261010-1"></script>
+</body>
+</html>
