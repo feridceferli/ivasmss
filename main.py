@@ -1,4 +1,5 @@
 import asyncio
+from data_storage import data_path, atomic_save
 import io
 import re
 import json
@@ -47,18 +48,18 @@ API_KEY = os.environ.get("AZE_SMS_API_KEY") or os.environ.get("VOLTX_API_KEY")
 BASE_URL = "https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api"
 HEADERS = {"mauthapi": API_KEY, "Content-Type": "application/json"}
 
-USER_DATA_FILE = "users.json"
-PAID_SMS_FILE = "paid_sms.json"
-STATS_FILE = "user_stats.json"
-REFERRAL_DATA_FILE = "referral_data.json"
-BANNED_USERS_FILE = "banned_users.json"
-WITHDRAW_DATA_FILE = "withdraw_requests.json"
-ACTIVITY_LOGS_FILE = "activity_logs.json"
-DATA_RANGE_FILE = "datarange.json"
-SYSTEM_CONFIG_FILE = "system_config.json"
-USER_OTP_RATE_FILE = "user_otp_rates.json"
-REQUIRED_CHANNELS_FILE = "required_channels.json"
-FAKE_OTP_CONFIG_FILE = "fake_otp_config.json"
+USER_DATA_FILE = data_path("users.json")
+PAID_SMS_FILE = data_path("paid_sms.json")
+STATS_FILE = data_path("user_stats.json")
+REFERRAL_DATA_FILE = data_path("referral_data.json")
+BANNED_USERS_FILE = data_path("banned_users.json")
+WITHDRAW_DATA_FILE = data_path("withdraw_requests.json")
+ACTIVITY_LOGS_FILE = data_path("activity_logs.json")
+DATA_RANGE_FILE = data_path("datarange.json")
+SYSTEM_CONFIG_FILE = data_path("system_config.json")
+USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
+REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
+FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397, 1667507073, 8431489105]
@@ -1218,8 +1219,7 @@ def load_data(filename=USER_DATA_FILE):
 
 
 def save_data(data, filename=USER_DATA_FILE):
-    with open(filename, "w") as f:
-        json.dump(data, f, indent=4)
+    atomic_save(data, filename)
 
 
 def get_user(uid):
@@ -3289,6 +3289,24 @@ async def show_main_menu(update, context, uid):
     )
 
 
+async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Open the existing announcement flow for an administrator in private chat."""
+    if not update.effective_user or not is_admin(update.effective_user.id):
+        await update.effective_message.reply_text("⛔ Bu komanda yalnız admin üçündür.")
+        return
+    if update.effective_chat.type != "private":
+        await update.effective_message.reply_text("Bu komandanı botun şəxsi çatında yazın.")
+        return
+    if context.application.bot_data.get("broadcast_running"):
+        await update.effective_message.reply_text("⏳ Əvvəlki bildiriş hələ göndərilir.")
+        return
+    context.user_data["broadcast_mode"] = True
+    await update.effective_message.reply_text(
+        "📢 Bütün qeydiyyatlı istifadəçilərə göndəriləcək məlumat mətnini yazın.",
+        reply_markup=cancel_keyboard(),
+    )
+
+
 # ==================== MESSAGE HANDLER ====================
 async def deliver_admin_notice(context, targets, notice, status_msg):
     """Deliver outside the webhook request; release the active-job guard on failure."""
@@ -4865,6 +4883,7 @@ async def post_init(application):
 
 def register_handlers(app):
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("broadcast", broadcast_command))
     app.add_handler(CommandHandler("get1number", get1number_command))
     app.add_handler(CommandHandler("searchotp", searchotp_command))
     app.add_handler(CommandHandler("balance", balance_command))
@@ -4988,4 +5007,5 @@ async def check_sms_status(activation_id: str, chat_id: int):
             chat_id=chat_id,
             text="⚠️ Vaxt bitdi. SMS daxil olmadı."
         )
+
 

@@ -42,7 +42,7 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 
 ## Toplu mesaj necə göndərilir?
 
-1. Admin hesabı ilə botu açın.
+1. Admin hesabı ilə botu açın. Birbaşa başlamaq üçün şəxsi çatda `/broadcast` yazın.
 2. **Admin paneli → 📢 BÜTÜN İSTİFADƏÇİLƏRƏ MESAJ GÖNDƏR** düyməsini seçin.
 3. Göndəriləcək məlumat mətnini yazın. Ləğv etmək üçün ləğv düyməsini seçin.
 4. Göndərişin sonunda çatdırılan, çatdırılmayan, botu bloklayan və təkrar cəhd limiti bitən istifadəçilərin sayı göstərilir.
@@ -85,6 +85,7 @@ Dəyişənləri Render **Environment** bölməsində və ya lokal terminalın m�
 | `WEBAPP_URL` | Xeyr | Mini App HTTPS ünvanı; standart ünvan `https://feridceferli.github.io/ivasmss/` |
 | `WEBHOOK_URL` | Render-də xeyr | Tam webhook ünvanı, məsələn `https://example.com/webhook` |
 | `RENDER_EXTERNAL_URL` | Render avtomatik verir | `WEBHOOK_URL` yoxdursa bu ünvana `/webhook` əlavə edilir |
+| `DB_FOLDER` | Xeyr | JSON məlumatları üçün qalıcı disk qovluğu, məsələn `/var/data` |
 | `PORT` | Xeyr | HTTP portu; standart `8080`, Render öz portunu verir |
 | `NOTIFY_GROUP_ID` | Xeyr | Qrup bildirişləri üçün qrup ID-si |
 | `NOTIFY_BOT_TOKEN` | Xeyr | Qrup bildiriş botu; boşdursa əsas `BOT_TOKEN` istifadə olunur |
@@ -173,7 +174,7 @@ Davamlı istifadə üçün:
 
 - Boşdayanma səbəbindən yuxuya getməyən ödənişli compute planı istifadə edin.
 - JSON fayllarını qalıcı diskin mount yoluna yazmaq üçün kodu uyğunlaşdırın və ya məlumat bazasına keçin.
-- Təkcə planı yüksəltmək və ya disk qoşmaq faylları avtomatik qorumur: kod həqiqətən qalıcı saxlama yerinə yazmalıdır. Hazırkı kodda `DB_FOLDER` dəstəyi yoxdur.
+- Təkcə planı yüksəltmək və ya disk qoşmaq faylları avtomatik qorumur: kod həqiqətən qalıcı saxlama yerinə yazmalıdır. `DB_FOLDER` mühit dəyişənini diskin mount yoluna (məsələn `/var/data`) təyin edin. JSON faylları bu qovluqda saxlanılır. İlk keçiddə hələ mövcud olan yerli JSON faylları yeni qovluğa köçürülür; əvvəl itmiş istifadəçilər avtomatik bərpa edilmir.
 
 Rəsmi məlumat: [Render Free](https://render.com/docs/free) · [Persistent Disks](https://render.com/docs/disks).
 
@@ -244,3 +245,4 @@ Layihə **GNU General Public License v3.0 or later** altında yayımlanır. Ətr
 [Layihə ilə bağlı əlaqə — @xudafis](https://t.me/xudafis)
 
 </div>
+
