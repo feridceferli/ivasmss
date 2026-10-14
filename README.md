@@ -27,18 +27,19 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 
 | Bölmə | İmkan |
 |---|---|
-| 🤖 Telegram botu | Menyu və komandalar vasitəsilə idarəetmə |
+| 🤖 Telegram botu | Menyu və komandalar vasitəsilə idarəetmə; API-də aktiv olan xidmətlərin siyahısı |
 | 🌐 Dil seçimi | Azərbaycan, ingilis və türk dili üçün menyu dəstəyi |
 | 📱 Mini App | Mobil uyğun şəxsi panel |
 | 👤 Profil | İstifadəçi məlumatları və statistika |
 | 💰 Balans | AZN balansının göstərilməsi və admin tərəfindən dəyişdirilməsi |
 | 📊 Sifarişlər | Aktiv sifarişlər və tarixçə |
-| 🏆 Liderlər cədvəli | İstifadəçi statistikası |
+| 🏆 Liderlər cədvəli | Günlük OTP sayı əsasında ilk 10 istifadəçi |
 | 🛡️ Admin paneli | İstifadəçilər, balanslar və giriş məhdudiyyətləri |
 | 📢 Toplu bildiriş | Qeydiyyatda olan istifadəçilərə məlumat mesajı |
 | 👥 Kanallar | Məcburi kanal və qrup üzvlüyünün yoxlanması |
 | 🔐 Mini App sessiyası | Telegram `initData` məlumatının serverdə yoxlanması |
 | ❤️ Health endpoint | `GET /health` ilə backend vəziyyətinin yoxlanması |
+| 📶 Xidmət və range məlumatı | Xidmət üzrə ölkə/range-ləri ayrıca nəzərdən keçirmə; range məlumat bölməsi yalnız baxış üçündür və nömrə ayırmır |
 
 ## Mini App-in yenilənmiş imkanları
 
@@ -52,6 +53,12 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 
 > [!NOTE]
 > Mini App-dəki “Test sifarişi” və “Test SMS” Sandbox nümunələridir; onlar real nömrə ayırmır və real OTP/SMS məzmunu təqdim etmir. Sandbox sifarişləri yaddaşda saxlanılır və server restartı/deploy zamanı sıfırlana bilər. Sifariş və admin dəyişiklikləri üçün API CORS `GET, POST, OPTIONS` metodlarına icazə verir.
+
+## Xidmətlər və mövcudluq bildirişləri
+
+- Xidmət seçimi API-dən gələn cari xidmət siyahısını göstərir; API-də sonradan görünən xidmətlər (məsələn, Bolt) kod dəyişikliyi olmadan siyahıya düşür.
+- Xidmətə daxil olduqda ölkələr və uyğun diapazonlar göstərilir. **“RANGE-LƏRƏ BAX (MƏLUMAT)”** bölməsi diapazonları ölkə üzrə nəzərdən keçirmək üçündür; oradan nömrə sifarişi verilmir.
+- Bot API-də yeni xidmət və ya yeni xidmət/ölkə mövcudluğu aşkar etdikdə istifadəçilərə, `NOTIFY_GROUP_ID` qurulubsa həmin qrupa da bildiriş göndərir. Yoxlama təxminən hər 30 saniyədə aparılır. Bot restartından sonrakı ilk yoxlama mövcud vəziyyəti yadda saxlayır və həmin anda olan xidmətləri yeni kimi elan etmir.
 
 ## Toplu mesaj necə göndərilir?
 
