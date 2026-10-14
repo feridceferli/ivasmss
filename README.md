@@ -40,6 +40,19 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 | 🔐 Mini App sessiyası | Telegram `initData` məlumatının serverdə yoxlanması |
 | ❤️ Health endpoint | `GET /health` ilə backend vəziyyətinin yoxlanması |
 
+## Mini App-in yenilənmiş imkanları
+
+Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegram sessiyası ilə istifadəçi məlumatları serverdə yoxlanır.
+
+- **Ana səhifə:** balans, aktiv sifariş sayı, bugünkü və ümumi statistika, sürətli bölmə keçidləri.
+- **Sifarişlər:** hesabın aktiv sifarişlərinə baxış; ayrıca Sandbox bölməsində sınaq sifarişi yaratmaq, ləğv etmək və nümunə SMS-ə baxmaq.
+- **Profil:** Telegram hesabı, balans, son 24 saat və 7 gün üzrə statistika, dəvət sayı və mükafat məlumatı.
+- **Admin:** yalnız icazəli adminlər üçün istifadəçi siyahısı, banı idarə etmək və balansı dəyişmək.
+- **Yeniləmə və dəstək:** panel məlumatları əl ilə yenilənir, açıq olduqda təxminən hər 30 saniyədə avtomatik yenilənir; dəstək linki paneldən açılır.
+
+> [!NOTE]
+> Mini App-dəki “Test sifarişi” və “Test SMS” Sandbox nümunələridir; onlar real nömrə ayırmır və real OTP/SMS məzmunu təqdim etmir. Sandbox sifarişləri yaddaşda saxlanılır və server restartı/deploy zamanı sıfırlana bilər. Sifariş və admin dəyişiklikləri üçün API CORS `GET, POST, OPTIONS` metodlarına icazə verir.
+
 ## Toplu mesaj necə göndərilir?
 
 1. Admin hesabı ilə botu açın. Birbaşa başlamaq üçün şəxsi çatda `/broadcast` yazın.
