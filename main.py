@@ -2494,26 +2494,7 @@ async def process_withdraw_confirm(update: Update, context: ContextTypes.DEFAULT
         ]
     )
 
-    # Replit Secrets-dən qrup ID-sini oxuyuruq
-    NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
-    if NOTIFY_GROUP_ID:
-      try:
-        await context.bot.send_message(
-            chat_id=NOTIFY_GROUP_ID,
-            text=admin_msg,
-            reply_markup=admin_kb,
-            parse_mode="HTML",
-        )
-    # Replit Secrets-dən qrup ID-sini oxuyuruq
-    NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
-    if NOTIFY_GROUP_ID:
-      try:
-        await context.bot.send_message(
-            chat_id=NOTIFY_GROUP_ID,
-            text=admin_msg,
-            reply_markup=admin_kb,
-            parse_mode="HTML",
-        )
+ 
 
 
     context.user_data["temp_withdraw"] = None
