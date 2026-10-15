@@ -5004,3 +5004,70 @@ async def miniapp_incoming_sms_api(request):
 
 if __name__ == "__main__":
     main()
+async def miniapp_get_number_api(request):
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    
+    try:
+        body = await request.json()
+        service = str(body.get("service", "CUSTOM")).strip().lower()
+    except Exception:
+        service = "custom"
+
+    # Servis için geçerli bir range buluyoruz
+    services = await fetch_services_cached()
+    ranges = services.get(service)
+    if not ranges:
+        all_ranges = list(services.values())
+        ranges = all_ranges[0] if all_ranges else ["99450"]
+        
+    raw_range = ranges[0]
+    rid = re.sub(r"[^0-9]", "", str(raw_range))
+    if not rid:
+        rid = "99450"
+
+    # API'den numara çekiyoruz
+    num, country = await get_number_from_api(rid)
+    if not num:
+        return _miniapp_cors(web.json_response({"success": False, "message": "Şu anda bu serviste uygun numara bulunamadı."}, status=400))
+
+    clean_num = normalize_number(num)
+    add_number_taken(uid, 1)
+    range_display = rid + "XXX"
+    
+    # Aktif numaralara ekliyoruz
+    active_numbers[clean_num] = {
+        "uid": uid,
+        "range": range_display,
+        "timestamp": datetime.now(),
+    }
+    save_number_range_info(uid, clean_num, range_display)
+    
+    # Mini App sipariş listesine ekliyoruz
+    order = {
+        "id": f"ord_{int(time.time())}",
+        "label": service.upper(),
+        "number_masked": "+" + mask_number(clean_num),
+        "full_number": num,
+        "range": range_display,
+        "status": "Aktiv",
+        "created_at": time.time(),
+        "remaining_seconds": 3600
+    }
+    miniapp_orders.setdefault(uid, []).append(order)
+
+    return _miniapp_cors(web.json_response({
+        "success": True,
+        "number": num,
+        "masked_number": "+" + mask_number(clean_num),
+        "service": service.upper(),
+        "range": range_display
+    }))
