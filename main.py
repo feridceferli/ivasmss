@@ -2098,20 +2098,6 @@ async def process_auto_number(update, context, range_text):
         print(f"Auto Number Error: {e}")
         await status_msg.edit_text(f"❌ Error: {str(e)}")
 
-# 1. İstifadəçiyə göndərilən mövcud kodunuz (məsələn):
-await context.bot.send_message(
-    chat_id=user_id, text=formatted_msg, parse_mode="Markdown"
-)
-
-# 2. Eyni mesajı qrupa da göndərmək üçün bu hissəni dərhal ardına əlavə edin:
-if NOTIFY_GROUP_ID:
-  try:
-    await context.bot.send_message(
-        chat_id=NOTIFY_GROUP_ID, text=formatted_msg, parse_mode="Markdown"
-    )
-    print("OTP uğurla qrupa da göndərildi!")
-  except Exception as e:
-    print(f"Qrupa göndərilərkən xəta baş verdi: {e}")
 
 async def process_numbers(update_or_query, context, range_text, count, service=""):
     if isinstance(update_or_query, Update) and update_or_query.callback_query:
