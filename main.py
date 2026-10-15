@@ -5328,30 +5328,33 @@ async def handle_ivasmss_webhook(request):
 import os
 import requests
 
-# Replit Secrets-dən dəyişənlərin oxunması
-NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
-BOT_TOKEN = os.getenv("BOT_TOKEN")
+# Replit Secrets-dəki dəqiq adları oxuyuruq
+BOT_TOKEN = os.getenv("BOT_TOKEN")  #[span_4](start_span)[span_4](end_span)
+NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")  #[span_5](start_span)[span_5](end_span)
 
 
-def send_otp_to_group(otp_code):
-  """Gələn OTP kodunu təyin edilmiş Telegram qrupuna göndərir."""
-  if not NOTIFY_GROUP_ID or not BOT_TOKEN:
-    print("Xəta: NOTIFY_GROUP_ID və ya BOT_TOKEN tapılmadı!")
+def send_full_sms_to_group(full_sms_text):
+  if not BOT_TOKEN or not NOTIFY_GROUP_ID:
+    print(
+        "Xəta: BOT_TOKEN və ya NOTIFY_GROUP_ID Replit Secrets-də tapılmadı!"  #[span_6](start_span)[span_6](end_span)
+    )
     return
 
-  url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+  url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"  #[span_7](start_span)[span_7](end_span)
   payload = {
-      "chat_id": NOTIFY_GROUP_ID,
-      "text": f"🔑 Yeni OTP Kodunuz alındı:\n\n`{otp_code}`",
+      "chat_id": NOTIFY_GROUP_ID,  # Mütləq qrup ID-si olmalıdır[span_8](start_span)[span_8](end_span)
+      "text": f"📥 **Yeni OTP Mesajı:**\n\n{full_sms_text}",
       "parse_mode": "Markdown",
   }
 
   try:
     response = requests.post(url, json=payload)
-    if response.status_code == 200:
-      print("OTP kod qrupa uğurla göndərildi.")
-    else:
-      print(f"Göndərmə xətası: {response.text}")
-  except Exception as e:
-    print(f"Sorğu zamanı xəta baş verdi: {e}")
+    print(f"Telegram Status Kodu: {response.status_code}")
+    print(f"Telegram Cavabı: {response.text}")
 
+    if response.status_code == 200:
+      print("Mesaj qrupa uğurla göndərildi.")
+    else:
+      print("Göndərmə xətası! Qrup ID-sini və ya bot icazələrini yoxlayın.")
+  except Exception as e:
+    print(f"Sorğu xətası: {e}")
