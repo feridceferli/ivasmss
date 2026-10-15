@@ -5266,19 +5266,26 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
           parse_mode="Markdown",
       )
 
-
 # --- IvaSMS Webhook Endpoint-i ---
 async def handle_ivasmss_webhook(request):
   try:
     data = await request.json()
     logger.info(f"DEBUG: Webhook sorğusu gəldi: {data}")
 
-    user_id = data.get("user_id")
-    phone = data.get("phone")
-    sms_text = data.get("sms_text")
+    # IvaSMS müxtəlif adlar göndərə bilər deyə alternativləri yoxlayırıq:
+    user_id = (
+        data.get("user_id") or data.get("chat_id") or data.get("telegram_id")
+    )
+    phone = data.get("phone") or data.get("number") or data.get("gsm")
+    sms_text = data.get("sms_text") or data.get("message") or data.get("text")
 
     if not user_id or not sms_text:
-      return web.Response(text="Eksik məlumat", status=400)
+      logger.error(
+          f"Eksik məlumat! Alınan data: {data}. user_id və ya sms_text tapılmadı."
+      )
+      return web.Response(
+          text=f"Eksik məlumat. Alınan: {data}", status=400
+      )
 
     user_id = int(user_id)
     formatted_msg = (
@@ -5318,32 +5325,4 @@ async def handle_ivasmss_webhook(request):
     return web.Response(text=str(e), status=500)
 
 
-async def main():
-  if not TOKEN:
-    raise ValueError("BOT_TOKEN mühit dəyişəni tapılmadı!")
-
-  application = ApplicationBuilder().token(TOKEN).build()
-
-  application.add_handler(CommandHandler("start", start))
-  application.add_handler(CallbackQueryHandler(button_handler))
-
-  await application.initialize()
-  await application.start()
-
-  app = web.Application()
-  app["bot_application"] = application
-  app.router.add_post("/webhook", handle_ivasmss_webhook)
-
-  runner = web.AppRunner(app)
-  await runner.setup()
-  site = web.TCPSite(runner, "0.0.0.0", PORT)
-  await site.start()
-
-  logger.info(f"Server {PORT} portunda işə düşdü və webhook aktivdir...")
-
-  await asyncio.Event().wait()
-
-
-if __name__ == "__main__":
-  asyncio.run(main())
 
