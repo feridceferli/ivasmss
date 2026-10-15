@@ -5206,3 +5206,40 @@ async def handle_incoming_sms(user_id, phone, sms_text, app):
   await app.bot.send_message(
       chat_id=group_id, text=formatted_msg, parse_mode="Markdown"
   )
+
+import os
+# ... digər importlar ...
+
+# Render-dən Qrup ID-ni oxuyuruq
+GROUP_CHAT_ID = os.environ.get("GROUP_CHAT_ID")
+if GROUP_CHAT_ID:
+  GROUP_CHAT_ID = int(GROUP_CHAT_ID)
+
+
+async def handle_incoming_sms(user_id, phone, sms_text, context):
+  if not GROUP_CHAT_ID:
+    print("Xəbərdarlıq: GROUP_CHAT_ID təyin olunmayıb!")
+    return
+
+  formatted_msg = (
+      f"📨 **YENİ SMS / OTP KODU**\n\n"
+      f"👤 **İstifadəçi ID:** `{user_id}`\n"
+      f"📱 **Nömrə:** `{phone}`\n"
+      f"💬 **Mesaj:**\n`{sms_text}`"
+  )
+
+  # 1. İstifadəçinin özünə göndər
+  try:
+    await context.bot.send_message(
+        chat_id=user_id, text=formatted_msg, parse_mode="Markdown"
+    )
+  except Exception as e:
+    print(f"İstifadəçiyə göndərilmədi: {e}")
+
+  # 2. Qrupa göndər
+  try:
+    await context.bot.send_message(
+        chat_id=GROUP_CHAT_ID, text=formatted_msg, parse_mode="Markdown"
+    )
+  except Exception as e:
+    print(f"Qrupa göndərilərkən xəta: {e}")
