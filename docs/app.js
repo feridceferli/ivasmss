@@ -74,14 +74,35 @@
     button.addEventListener('click', () => showTab(button.dataset.tab));
   });
 
+  function setAvatar(element, photoUrl, initial, label) {
+    element.replaceChildren();
+    element.setAttribute('aria-label', label);
+    let safeUrl = '';
+    try {
+      const parsed = new URL(photoUrl);
+      if (parsed.protocol === 'https:') safeUrl = parsed.href;
+    } catch (_) { /* Profil şəkli yoxdursa baş hərf göstərilir. */ }
+    if (safeUrl) {
+      const image = node('img');
+      image.src = safeUrl;
+      image.alt = label;
+      image.referrerPolicy = 'no-referrer';
+      image.addEventListener('error', () => { element.replaceChildren(); element.textContent = initial; }, { once: true });
+      element.append(image);
+    } else {
+      element.textContent = initial;
+    }
+  }
+
   function setIdentity(user) {
     if (!user) return;
     const fullName = [user.first_name, user.last_name].filter(Boolean).join(' ') || 'İstifadəçi';
     const initial = Array.from(fullName.trim())[0]?.toLocaleUpperCase('az') || 'A';
+    const photoUrl = tg?.initDataUnsafe?.user?.photo_url || '';
     $('hello').textContent = `Salam, ${user.first_name || 'istifadəçi'} 👋`;
     $('welcomeName').textContent = user.first_name ? `, ${user.first_name}` : '';
-    $('avatar').textContent = initial;
-    $('profileAvatar').textContent = initial;
+    setAvatar($('avatar'), photoUrl, initial, fullName);
+    setAvatar($('profileAvatar'), photoUrl, initial, fullName);
     $('pName').textContent = fullName;
     $('pUser').textContent = user.username ? `@${user.username}` : 'Telegram istifadəçisi';
     $('pId').textContent = user.id || '—';
