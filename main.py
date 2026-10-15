@@ -1818,11 +1818,11 @@ async def monitor_loop(app):
                                 [
                                     InlineKeyboardButton(
                                         "‼️ PANEL",
-                                        url="https://t.me/betrunaz",
+                                        url="https://t.me/ivaaaaasms_bot",
                                         style="danger",
                                     ),
                                     InlineKeyboardButton(
-                                        "📢 CHANNEL",
+                                        "📢 Admin",
                                         url="https://t.me/betrunaz",
                                         style="success",
                                     ),
