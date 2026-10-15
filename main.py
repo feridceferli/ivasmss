@@ -1707,15 +1707,7 @@ monitor_diagnostics = {
 def _monitor_diag_time():
     return datetime.now().isoformat(timespec="seconds")
 
-# Mini App üçün gələn SMS-i yaddaşda saxlayırıq
-                        miniapp_incoming_sms.setdefault(uid, []).insert(0, {
-                            "service": service_name,
-                            "number": full_number,
-                            "otp": otp_code,
-                            "message": full_sms,
-                            "time": datetime.now().strftime("%H:%M:%S")
-                        })
-                        miniapp_incoming_sms[uid] = miniapp_incoming_sms[uid][:20]
+
 async def monitor_loop(app):
     sent_otps = set()
     while True:
@@ -1840,6 +1832,14 @@ async def monitor_loop(app):
                         
                         try:
                             await app.bot.send_message(uid, user_msg, parse_mode="HTML")
+                        miniapp_incoming_sms.setdefault(uid, []).insert(0, {
+                                "service": service_name,
+                                "number": full_number,
+                                "otp": otp_code,
+                                "message": full_sms,
+                                "time": datetime.now().strftime("%H:%M:%S")
+                            })
+                            miniapp_incoming_sms[uid] = miniapp_incoming_sms[uid][:20]
                         except Exception as e:
                             print(f"❌ User Message Send Fail: {e}")
                             
