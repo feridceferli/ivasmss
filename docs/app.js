@@ -139,7 +139,7 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchIncomingSms();
     }, 4000);
 });
-<script>
+
 // Servis seçildiğinde doğrudan Mini App üzerinden numara alır
 async function selectService(serviceName) {
     tg.HapticFeedback.impactOccurred('medium');
@@ -175,4 +175,4 @@ async function selectService(serviceName) {
         fetchOrders();
     }
 }
-</script>
+
