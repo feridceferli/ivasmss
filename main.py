@@ -1827,18 +1827,7 @@ async def monitor_loop(app):
                                 ]
                             ]
                         )
-                            # Hazırlanan qrup mesajını və panel butonunu NOTIFY_GROUP_ID-yə göndəririk
-    NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
-    if NOTIFY_GROUP_ID:
-      try:
-        await context.bot.send_message(
-            chat_id=NOTIFY_GROUP_ID,
-            text=oup_msg,
-            reply_markup=oup_buttons,
-            parse_mode="HTML",
-        )
-      except Exception as e:
-        print(f"Qrupa OTP göndərmə xətası: {e}")
+  
 
                         try:
                             await app.bot.send_message(uid, user_msg, parse_mode="HTML")
