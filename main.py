@@ -44,7 +44,7 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://feridceferli.github.io/ivasmss/").strip()
 
 # ==================== AZE SMS PANEL API CONFIGURATION ====================
-API_KEY = os.environ.get("AZE_SMS_API_KEY") or os.environ.get("VOLTX_API_KEY")
+API_KEY = os.environ.get("VOLTX_API_KEY") or os.environ.get("ivas_sms_session") or os.environ.get("AZE_SMS_API_KEY")
 BASE_URL = "https://api.2oo9.cloud/MXS47FLFX0U/tnevs/@public/api"
 HEADERS = {"mauthapi": API_KEY, "Content-Type": "application/json"}
 
