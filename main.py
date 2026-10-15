@@ -2504,10 +2504,7 @@ async def process_withdraw_confirm(update: Update, context: ContextTypes.DEFAULT
             reply_markup=admin_kb,
             parse_mode="HTML",
         )
-        NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
-print(
-    f"DEBUG: Oxunan Qrup ID = {NOTIFY_GROUP_ID}"
-)  # Konsolda nə çıxdığına baxın
+
 
       except Exception as e:
         print(f"Qrupa göndərmə xətası: {e}")
