@@ -4947,7 +4947,6 @@ async def run_combined_server():
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
-    # --- YENİ ƏLAVƏ EDİLƏNLƏR ---
     server.router.add_route("*", "/api/services", miniapp_services_api)
     server.router.add_route("*", "/api/incoming-sms", miniapp_incoming_sms_api)
     server.router.add_get("/health", health)
