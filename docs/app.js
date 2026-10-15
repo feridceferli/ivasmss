@@ -3,7 +3,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 // Backend API URL (Kendi Render servis URL'nizi veya relative path kullanın)
-const API_BASE = ""; // Aynıdomain üzerinde çalışıyorsa boş bırakılabilir
+const API_BASE = "https://ivasmss.onrender.com"; // Aynıdomain üzerinde çalışıyorsa boş bırakılabilir
 
 // Telegram initData bilgisini header olarak almak için
 function getAuthHeaders() {
@@ -16,7 +16,7 @@ function getAuthHeaders() {
 // Kullanıcı ve Panel Verilerini Çekme (Dashboard)
 async function fetchDashboardData() {
     try {
-        const response = await fetch(`${API_BASE}/api/dashboard`, {
+        const response = await fetch(`${ivas_sms_session}/api/dashboard`, {
             method: 'GET',
             headers: getAuthHeaders()
         });
