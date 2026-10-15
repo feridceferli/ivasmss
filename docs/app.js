@@ -303,3 +303,52 @@
     }
   }, 30000);
 })();
+async function fetchIncomingSms() {
+    // Telegram WebApp initData-nı əldə edirik
+    const initData = window.Telegram?.WebApp?.initData || '';
+    
+    try {
+        const response = await fetch('/api/incoming-sms', {
+            method: 'GET',
+            headers: {
+                'X-Telegram-Init-Data': initData,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        if (!response.ok) {
+            throw new Error('Server xətası');
+        }
+
+        const data = await response.json();
+        const container = document.getElementById('sms-list-container');
+
+        if (!data.sms_list || data.sms_list.length === 0) {
+            container.innerHTML = '<p style="color: #888;">Hələ ki aktiv gələn SMS yoxdur.</p>';
+            return;
+        }
+
+        // SMS siyahısını HTML olaraq qururuq
+        container.innerHTML = data.sms_list.map(sms => `
+            <div style="background: rgba(255,255,255,0.05); padding: 12px; border-radius: 10px; margin-bottom: 10px; border-left: 4px solid #4CAF50;">
+                <div style="display: flex; justify-content: space-between; font-size: 13px; margin-bottom: 5px;">
+                    <span style="font-weight: bold; color: #4CAF50;">📡 ${sms.service}</span>
+                    <span style="color: #aaa;">🕒 ${sms.time}</span>
+                </div>
+                <div style="font-size: 14px; margin-bottom: 5px;">📞 Nömrə: <code>${sms.number}</code></div>
+                <div style="font-size: 15px; margin-bottom: 8px;">🔑 OTP Kod: <b style="background: #333; padding: 2px 6px; border-radius: 4px; color: #ffeb3b;">${sms.otp}</b></div>
+                <div style="font-size: 12px; color: #ccc; background: rgba(0,0,0,0.2); padding: 6px; border-radius: 6px;">${sms.message}</div>
+            </div>
+        `).join('');
+
+    } async (error) => {
+        console.error('SMS yüklənmədi:', error);
+        document.getElementById('sms-list-container').innerHTML = '<p style="color: #f44336;">SMS-ləri yükləmək mümkün olmadı.</p>';
+    }
+}
+
+// Səhifə açıldıqda dərhal yüklə
+fetchIncomingSms();
+
+// Hər 4 saniyədən bir avtomatik yenilə (Real-time təcrübə üçün)
+setInterval(fetchIncomingSms, 4000);
