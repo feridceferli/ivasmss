@@ -5008,4 +5008,134 @@ async def check_sms_status(activation_id: str, chat_id: int):
             text="⚠️ Vaxt bitdi. SMS daxil olmadı."
         )
 
+import logging
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    CommandHandler,
+    ContextTypes,
+)
+
+# Logging quraşdırması
+logging.basicConfig(
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s", level=logging.INFO
+)
+logger = logging.getLogger(__name__)
+
+# Sadə yaddaş bazası (Real layihədə məlumatların silinməməsi üçün SQLite/PostgreSQL istifadə etməyiniz tövsiyə olunur)
+# Format: { user_id: {"invited_count": 0, "referred_by": None} }
+users_db = {}
+
+
+async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  user = update.effective_user
+  user_id = user.id
+
+  # İstifadəçi bazada yoxdursa, qeydiyyatdan keçirək
+  if user_id not in users_db:
+    users_db[user_id] = {"invited_count": 0, "referred_by": None}
+
+    # Əgər başqasının linki ilə daxil olubsa (məsələn: /start ref_12345)
+    if context.args:
+      arg = context.args[0]
+      if arg.startswith("ref_"):
+        try:
+          referrer_id = int(arg.replace("ref_", ""))
+          # Özünü dəvət etməyin qarşısını alaq
+          if referrer_id != user_id and referrer_id in users_db:
+            if users_db[user_id]["referred_by"] is None:
+              users_db[user_id]["referred_by"] = referrer_id
+              users_db[referrer_id]["invited_count"] += 1
+
+              # Dəvət edən şəxsə bildiriş göndərək
+              await context.bot.send_message(
+                  chat_id=referrer_id,
+                  text=(
+                      "🎉 Təbriklər! Bir dostunuz sizin linkinizlə bota qoşuldu."
+                  ),
+              )
+        except ValueError:
+          pass
+
+  # İstifadəçinin dəvət sayını yoxlayaq
+  invited_count = users_db[user_id]["invited_count"]
+
+  if invited_count < 1:
+    bot_username = context.bot.username
+    ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+
+    keyboard = [
+        [
+            InlineKeyboardButton(
+                "🔗 Dostunu Dəvət Et (Paylaş)",
+                url=(
+                    f"https://t.me/share/url?url={ref_link}&text=Botdan"
+                    " istifadə etmək üçün bu keçidə daxil ol!"
+                ),
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                "🔄 Vəziyyəti Yoxla", callback_data="check_status"
+            )
+        ],
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+
+    await update.message.reply_text(
+        "❌ **Botdan istifadə etmək üçün ən azı 1 dostunuzu dəvət etməlisiniz!**\n\n"
+        f"Sizin dəvət linkiniz:\n`{ref_link}`\n\n"
+        f"Cari dəvət sayınız: {invited_count}/1",
+        reply_markup=reply_markup,
+        parse_mode="Markdown",
+    )
+  else:
+    await update.message.reply_text(
+        "✅ **Şərt ödəndi! Botu indi istifadə edə bilərsiniz.**\n\n"
+        "Xoş gəlmisiniz! Əsas menyu aktivdir."
+    )
+
+
+async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+  query = update.callback_query
+  await query.answer()
+
+  user_id = query.from_user.id
+  if user_id not in users_db:
+    users_db[user_id] = {"invited_count": 0, "referred_by": None}
+
+  invited_count = users_db[user_id]["invited_count"]
+
+  if query.data == "check_status":
+    if invited_count >= 1:
+      await query.edit_message_text(
+          "✅ Şərt ödəndi! Botu indi istifadə edə bilərsiniz."
+      )
+    else:
+      bot_username = context.bot.username
+      ref_link = f"https://t.me/{bot_username}?start=ref_{user_id}"
+      await query.edit_message_text(
+          "❌ Hələ ki heç kim sizin linkinizlə qoşulmayıb.\n\n"
+          f"Dəvət linkiniz:\n`{ref_link}`\n\n"
+          f"Cari dəvət sayınız: {invited_count}/1",
+          parse_mode="Markdown",
+      )
+
+
+def main():
+  # Bot Token-inizi buraya qoyun və ya mühit dəyişənindən oxudun
+  TOKEN = "YOUR_BOT_TOKEN"
+
+  application = ApplicationBuilder().token(TOKEN).build()
+
+  application.add_handler(CommandHandler("start", start))
+  application.add_handler(CallbackQueryHandler(button_handler))
+
+  logger.info("Bot işə düşdü...")
+  application.run_polling()
+
+
+if __name__ == "__main__":
+  main()
 
