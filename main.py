@@ -5325,4 +5325,33 @@ async def handle_ivasmss_webhook(request):
     return web.Response(text=str(e), status=500)
 
 
+import os
+import requests
+
+# Replit Secrets-dən dəyişənlərin oxunması
+NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+
+
+def send_otp_to_group(otp_code):
+  """Gələn OTP kodunu təyin edilmiş Telegram qrupuna göndərir."""
+  if not NOTIFY_GROUP_ID or not TELEGRAM_BOT_TOKEN:
+    print("Xəta: NOTIFY_GROUP_ID və ya TELEGRAM_BOT_TOKEN tapılmadı!")
+    return
+
+  url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+  payload = {
+      "chat_id": NOTIFY_GROUP_ID,
+      "text": f"🔑 Yeni OTP Kodunuz alındı:\n\n`{otp_code}`",
+      "parse_mode": "Markdown",
+  }
+
+  try:
+    response = requests.post(url, json=payload)
+    if response.status_code == 200:
+      print("OTP kod qrupa uğurla göndərildi.")
+    else:
+      print(f"Göndərmə xətası: {response.text}")
+  except Exception as e:
+    print(f"Sorğu zamanı xəta baş verdi: {e}")
 
