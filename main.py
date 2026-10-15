@@ -4976,7 +4976,43 @@ async def run_combined_server():
 def main():
     asyncio.run(run_combined_server())
 
-
+async def miniapp_get_number_api(request):
+    try:
+        # Mini App-dən gələn JSON məlumatını oxuyuruq
+        data = await request.json()
+        service_name = data.get('service')
+        
+        if not service_name:
+            return web.json_response({
+                "success": False, 
+                "message": "Xidmət adı qeyd olunmayıb!"
+            }, status=400)
+        
+        # --- BURADA NÖMRƏ ALMA MƏNTİQİNİZİ YAZIN ---
+        # Məsələn, IvaSMS API-nə sorğu göndərib nömrə aldığınız hissə:
+        # phone_result = ivasms_client.get_number(service_name)
+        
+        # Nümunə üçün test cavabı (öz API funksiyanızla əvəz edin):
+        phone_number = "+994501234567" 
+        success = True 
+        
+        if success:
+            return web.json_response({
+                "success": True, 
+                "number": phone_number
+            })
+        else:
+            return web.json_response({
+                "success": False, 
+                "message": "Aktiv nömrə tapılmadı və ya balansınız yoxdur."
+            })
+            
+    except Exception as e:
+        print(f"Numara alma xətası: {e}")
+        return web.json_response({
+            "success": False, 
+            "message": "Serverdə xəta baş verdi."
+        }, status=500)
 
 # ==================== MİNİ APP GƏLƏN SMS VƏ XİDMƏTLƏR API ====================
 miniapp_incoming_sms = {}  # { uid: [ {service, number, otp, message, time}, ... ] }
