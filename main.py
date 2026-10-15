@@ -5330,16 +5330,16 @@ import requests
 
 # Replit Secrets-dən dəyişənlərin oxunması
 NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
-TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
+BOT_TOKEN = os.getenv("BOT_TOKEN")
 
 
 def send_otp_to_group(otp_code):
   """Gələn OTP kodunu təyin edilmiş Telegram qrupuna göndərir."""
-  if not NOTIFY_GROUP_ID or not TELEGRAM_BOT_TOKEN:
-    print("Xəta: NOTIFY_GROUP_ID və ya TELEGRAM_BOT_TOKEN tapılmadı!")
+  if not NOTIFY_GROUP_ID or not BOT_TOKEN:
+    print("Xəta: NOTIFY_GROUP_ID və ya BOT_TOKEN tapılmadı!")
     return
 
-  url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+  url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
   payload = {
       "chat_id": NOTIFY_GROUP_ID,
       "text": f"🔑 Yeni OTP Kodunuz alındı:\n\n`{otp_code}`",
