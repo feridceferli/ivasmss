@@ -5009,6 +5009,7 @@ async def check_sms_status(activation_id: str, chat_id: int):
         )
 
 import logging
+import os
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.ext import (
     ApplicationBuilder,
@@ -5124,8 +5125,14 @@ async def button_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 def main():
-  # Bot Token-inizi buraya qoyun və ya mühit dəyişənindən oxudun
-  TOKEN = "YOUR_BOT_TOKEN"
+  # Render panelindəki Environment Variables-dən tokeni oxuyuruq
+  TOKEN = os.environ.get("BOT_TOKEN")
+
+  if not TOKEN:
+    raise ValueError(
+        "BOT_TOKEN mühit dəyişəni tapılmadı! Render panelində əlavə etdiyinizə"
+        " əmin olun."
+    )
 
   application = ApplicationBuilder().token(TOKEN).build()
 
@@ -5138,6 +5145,7 @@ def main():
 
 if __name__ == "__main__":
   main()
+
 
 import logging
 from telegram import Update
