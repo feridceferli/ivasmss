@@ -1811,28 +1811,30 @@ async def monitor_loop(app):
                             f"<blockquote>🔑 OTP: <code>{safe_otp_code}</code></blockquote>\n\n"
                             f"<blockquote>📩 FULL SMS:\n<code>{safe_full_sms}</code></blockquote>"
                         )
+                        
+                        # DÜZƏLDİLMİŞ BÖLGƏ: URL formatı tam yazıldı
                         group_buttons = InlineKeyboardMarkup(
                             [
                                 [
                                     InlineKeyboardButton(
                                         "‼️ PANEL",
-                                        url="betrunaz",
+                                        url="https://t.me/betrunaz",
                                         style="danger",
                                     ),
                                     InlineKeyboardButton(
                                         "📢 CHANNEL",
-                                        url="betrunaz",
+                                        url="https://t.me/betrunaz",
                                         style="success",
                                     ),
                                 ]
                             ]
                         )
-  
-
+                        
                         try:
                             await app.bot.send_message(uid, user_msg, parse_mode="HTML")
                         except Exception as e:
                             print(f"❌ User Message Send Fail: {e}")
+                            
                         try:
                             await app.bot.send_message(
                                 OTP_GROUP_ID,
@@ -1840,8 +1842,10 @@ async def monitor_loop(app):
                                 parse_mode="HTML",
                                 reply_markup=group_buttons,
                             )
+                            print("✅ OTP mesajı qrupa uğurla göndərildi.")
                         except Exception as e:
                             print(f"❌ Group Send Fail: {e}")
+
                         save_data(paid_data, PAID_SMS_FILE)
                 current_time = datetime.now()
                 for num_key in list(active_numbers.keys()):
