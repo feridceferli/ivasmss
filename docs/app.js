@@ -1,11 +1,9 @@
-// Telegram WebApp Başlatma
 const tg = window.Telegram.WebApp;
 tg.expand();
 
-// Backend API URL (Kendi Render servis URL'nizi veya relative path kullanın)
-const API_BASE = "https://ivasmss.onrender.com"; // Aynıdomain üzerinde çalışıyorsa boş bırakılabilir
+// Render backend ünvanınızı bura yazın (məsələn: https://ivasmss.onrender.com)
+const API_BASE = "https://ivasmss.onrender.com";
 
-// Telegram initData bilgisini header olarak almak için
 function getAuthHeaders() {
     return {
         'X-Telegram-Init-Data': tg.initData || '',
@@ -13,104 +11,131 @@ function getAuthHeaders() {
     };
 }
 
-// Kullanıcı ve Panel Verilerini Çekme (Dashboard)
-async function fetchDashboardData() {
+// Tab dəyişdirmə məntiqi
+function switchTab(tabName) {
+    document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
+    
+    if (tabName === 'services') {
+        document.getElementById('tab-services').classList.add('active');
+        event.currentTarget.classList.add('active');
+    } else if (tabName === 'active') {
+        document.getElementById('tab-active').classList.add('active');
+        event.currentTarget.classList.add('active');
+        fetchOrders();
+    } else if (tabName === 'history') {
+        document.getElementById('tab-history').classList.add('active');
+        event.currentTarget.classList.add('active');
+        fetchIncomingSms();
+    }
+}
+
+// Dashboard və Profil Məlumatları
+async function fetchDashboard() {
     try {
-        const response = await fetch(`${ivas_sms_session}/api/dashboard`, {
-            method: 'GET',
-            headers: getAuthHeaders()
-        });
-
-        if (!response.ok) {
-            throw new Error('Yetkilendirme hatası veya sunucu yanıt vermedi.');
-        }
-
-        const data = await response.json();
+        const res = await fetch(`${API_BASE}/api/dashboard`, { headers: getAuthHeaders() });
+        if (!res.ok) throw new Error();
+        const data = await res.json();
         
-        // Arayüzü Güncelle
-        document.getElementById('user-name').innerText = data.user.first_name || 'Kullanıcı';
+        document.getElementById('user-name').innerText = data.user.first_name || 'İstifadəçi';
         document.getElementById('user-id').innerText = `ID: ${data.user.id}`;
         document.getElementById('user-balance').innerText = `${data.balance} AZN`;
 
-        // Aktif Siparişleri Listele
-        renderActiveOrders(data.orders || []);
-
-    } catch (error) {
-        console.error('Dashboard verisi alınamadı:', error);
+        // Logo / Avatar yaratma
+        const avatarEl = document.getElementById('user-avatar');
+        if (data.user.photo_url) {
+            avatarEl.innerHTML = `<img src="${data.user.photo_url}" alt="Avatar">`;
+        } else {
+            avatarEl.innerText = (data.user.first_name || 'İ').charAt(0).toUpperCase();
+        }
+    } catch (e) {
+        console.error("Dashboard xətası:", e);
     }
 }
 
-// Gelen SMS / OTP Listesini Çekme
+// API-dən avtomatik gələn xidmətləri (Facebook, TikTok və s.) oxumaq
+async function fetchServices() {
+    try {
+        const res = await fetch(`${API_BASE}/api/services`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        const container = document.getElementById('services-grid-container');
+        
+        if (!data.services || Object.keys(data.services).length === 0) {
+            container.innerHTML = '<p class="hint">Hazırda aktiv xidmət yoxdur.</p>';
+            return;
+        }
+
+        container.innerHTML = Object.keys(data.services).map(svc => `
+            <div class="service-card" onclick="selectService('${svc}')">
+                <span style="font-size: 18px;">📡</span>
+                <div style="font-size: 13px; font-weight: 600; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis;">${svc}</div>
+            </div>
+        `).join('');
+    } catch (e) {
+        document.getElementById('services-grid-container').innerHTML = '<p class="hint">Xidmətləri yükləmək olmadı.</p>';
+    }
+}
+
+// Xidmət seçildikdə bota məlumat göndərmək
+function selectService(serviceName) {
+    tg.sendData(JSON.stringify({ action: "select_service", service: serviceName }));
+}
+
+// Aktiv sifarişlər
+async function fetchOrders() {
+    try {
+        const res = await fetch(`${API_BASE}/api/orders`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        const container = document.getElementById('active-orders-container');
+        
+        if (!data.orders || data.orders.length === 0) {
+            container.innerHTML = '<p class="hint">Aktiv nömrə tapılmadı.</p>';
+            return;
+        }
+
+        container.innerHTML = data.orders.map(o => `
+            <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-bottom: 6px;">
+                <div style="font-weight: bold;">${o.number_masked}</div>
+                <div style="font-size: 12px; color: var(--hint-color);">Range: ${o.range} | ${o.status}</div>
+            </div>
+        `).join('');
+    } catch (e) {}
+}
+
+// Gələn SMS / OTP Siyahısı (Tarixçə)
 async function fetchIncomingSms() {
     try {
-        const response = await fetch(`${API_BASE}/api/incoming-sms`, {
-            method: 'GET',
-            headers: getAuthHeaders()
-        });
+        const res = await fetch(`${API_BASE}/api/incoming-sms`, { headers: getAuthHeaders() });
+        const data = await res.json();
+        const container = document.getElementById('sms-list-container');
+        
+        if (!data.sms_list || data.sms_list.length === 0) {
+            container.innerHTML = '<p class="hint">Hələ ki gələn mesaj yoxdur.</p>';
+            return;
+        }
 
-        if (!response.ok) return;
-
-        const data = await response.json();
-        renderSmsList(data.sms_list || []);
-
-    } catch (error) {
-        console.error('SMS listesi alınamadı:', error);
-    }
-}
-
-// Aktif Siparişleri Ekrana Basma
-function renderActiveOrders(orders) {
-    const container = document.getElementById('active-orders-container');
-    if (!orders || orders.length === 0) {
-        container.innerHTML = '<p style="color: var(--hint-color); text-align: center; margin: 10px 0;">Aktif numara bulunmuyor.</p>';
-        return;
-    }
-
-    container.innerHTML = orders.map(order => `
-        <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center;">
-            <div>
-                <div style="font-weight: bold; font-size: 15px;">${order.number_masked}</div>
-                <div style="font-size: 12px; color: var(--hint-color);">Range: ${order.range} | ${order.status}</div>
+        container.innerHTML = data.sms_list.map(sms => `
+            <div class="sms-item">
+                <div style="display: flex; justify-content: space-between; font-size: 12px; color: var(--hint-color); margin-bottom: 4px;">
+                    <span style="color: var(--success); font-weight: bold;">📡 ${sms.service}</span>
+                    <span>🕒 ${sms.time}</span>
+                </div>
+                <div style="font-size: 13px; margin-bottom: 4px;">Nömrə: <code>${sms.number}</code></div>
+                <div style="font-size: 13px; margin-bottom: 6px;">OTP Kod: <span class="otp-code">${sms.otp}</span></div>
+                <div style="font-size: 11px; color: #cbd5e1; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px;">${sms.message}</div>
             </div>
-            <div style="font-size: 13px; color: #ffeb3b;">⏳ ${Math.floor(order.remaining_seconds / 60)}d</div>
-        </div>
-    `).join('');
+        `).join('');
+    } catch (e) {}
 }
 
-// Gelen SMS'leri Ekrana Basma
-function renderSmsList(smsList) {
-    const container = document.getElementById('sms-list-container');
-    if (!smsList || smsList.length === 0) {
-        container.innerHTML = '<p style="color: var(--hint-color); text-align: center; margin: 10px 0;">Henüz gelen mesaj yok...</p>';
-        return;
-    }
-
-    container.innerHTML = smsList.map(sms => `
-        <div class="sms-item">
-            <div class="sms-header">
-                <span style="font-weight: bold; color: var(--success-color);">📡 ${sms.service}</span>
-                <span>🕒 ${sms.time}</span>
-            </div>
-            <div style="font-size: 14px; margin-bottom: 4px;">Numara: <code>${sms.number}</code></div>
-            <div style="font-size: 14px; margin-bottom: 6px;">OTP Kod: <span class="otp-code">${sms.otp}</span></div>
-            <div style="font-size: 12px; color: #ccc; background: rgba(0,0,0,0.3); padding: 6px; border-radius: 4px;">${sms.message}</div>
-        </div>
-    `).join('');
-}
-
-// Bot içerisindeki numara alma menüsüne yönlendirme
-function openBotGetNumber() {
-    tg.sendData(JSON.stringify({ action: "get_number" }));
-}
-
-// Sayfa yüklendiğinde verileri çek
+// İşə salınma
 document.addEventListener('DOMContentLoaded', () => {
-    fetchDashboardData();
-    fetchIncomingSms();
-
-    // Her 4 saniyede bir otomatik yenile (Real-time güncelleme için)
+    fetchDashboard();
+    fetchServices();
+    
+    // Real-time yenilənmə üçün interval
     setInterval(() => {
-        fetchDashboardData();
+        fetchDashboard();
         fetchIncomingSms();
     }, 4000);
 });
