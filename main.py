@@ -2492,19 +2492,28 @@ async def process_withdraw_confirm(update: Update, context: ContextTypes.DEFAULT
                 ),
             ]
         ]
-        # Replit Secrets-dən qrup ID-sini oxuyuruq
-NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
-
-if NOTIFY_GROUP_ID:
-  await context.bot.send_message(
-      chat_id=NOTIFY_GROUP_ID,
-      text=admin_msg,
-      reply_markup=admin_kb,
-      parse_mode="HTML",
-  )
-
     )
 
+    # Replit Secrets-dən qrup ID-sini oxuyuruq
+    NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
+    if NOTIFY_GROUP_ID:
+      try:
+        await context.bot.send_message(
+            chat_id=NOTIFY_GROUP_ID,
+            text=admin_msg,
+            reply_markup=admin_kb,
+            parse_mode="HTML",
+        )
+      except Exception as e:
+        print(f"Qrupa göndərmə xətası: {e}")
+
+    for admin_id in ADMINS:
+      try:
+        await context.bot.send_message(
+            admin_id, admin_msg, reply_markup=admin_kb, parse_mode="HTML"
+        )
+      except Exception as e:
+        print(f"Admin notify fail {admin_id}: {e}")
 
     for admin_id in ADMINS:
         try:
