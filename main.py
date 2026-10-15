@@ -1787,7 +1787,7 @@ async def monitor_loop(app):
                         safe_otp_code = html.escape(str(otp_code))
                         if is_free_service:
                             balance_msg = (
-                                "⚠️ এই OTP‑তে কোনো টাকা যোগ করা হবে না (Telegram/WhatsApp)"
+                                "xoş sözdər eşidəsən ay qa)"
                             )
                         else:
                             user_rate = get_user_otp_rate(uid)
@@ -5355,3 +5355,32 @@ def send_full_sms_to_group(full_sms_text):
       print("Göndərmə xətası! Qrup ID-sini və ya bot icazələrini yoxlayın.")
   except Exception as e:
     print(f"Sorğu xətası: {e}")
+
+import os
+import requests
+
+BOT_TOKEN = os.getenv("BOT_TOKEN")
+NOTIFY_GROUP_ID = os.getenv("NOTIFY_GROUP_ID")
+
+
+def send_otp_to_group(sms_text):
+  """Gələn OTP Və ya SMS mesajını təyin edilmiş Telegram qrupuna ötürür."""
+  if not BOT_TOKEN or not NOTIFY_GROUP_ID:
+    print("Xəta: BOT_TOKEN və ya NOTIFY_GROUP_ID tapılmadı!")
+    return
+
+  url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+  payload = {
+      "chat_id": NOTIFY_GROUP_ID,
+      "text": f"📥 **Yeni OTP / SMS Mesajı:**\n\n{sms_text}",
+      "parse_mode": "Markdown",
+  }
+
+  try:
+    response = requests.post(url, json=payload)
+    if response.status_code == 200:
+      print("OTP mesajı qrupa uğurla göndərildi.")
+    else:
+      print(f"Qrupa göndərmə xətası: {response.text}")
+  except Exception as e:
+      print(f"Sorğu xətası: {e}")
