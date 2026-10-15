@@ -4942,6 +4942,7 @@ async def run_combined_server():
 
     server = web.Application()
     server.router.add_post("/webhook", telegram_webhook)
+    server.router.add_route("*", "/api/get-number", miniapp_get_number_api)
     server.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
