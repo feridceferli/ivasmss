@@ -2516,14 +2516,6 @@ async def process_withdraw_confirm(update: Update, context: ContextTypes.DEFAULT
         )
 
 
-
-    for admin_id in ADMINS:
-        try:
-            await context.bot.send_message(
-                admin_id, admin_msg, parse_mode="HTML", reply_markup=admin_kb
-            )
-        except Exception as e:
-            print(f"Admin notify fail {admin_id}: {e}")
     context.user_data["temp_withdraw"] = None
     context.user_data["withdraw_mode"] = None
 
