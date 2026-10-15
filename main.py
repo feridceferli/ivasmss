@@ -5390,3 +5390,26 @@ def send_otp_to_group(sms_text):
       print(f"Qrupa göndərmə xətası: {response.text}")
   except Exception as e:
       print(f"Sorğu xətası: {e}")
+# ==================== MİNİ APP GƏLƏN SMS VƏ XİDMƏTLƏR API ====================
+miniapp_incoming_sms = {}  # { uid: [ {service, number, otp, message, time}, ... ] }
+
+async def miniapp_services_api(request):
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    
+    services = await fetch_services_cached()
+    return _miniapp_cors(web.json_response({"services": services}))
+
+async def miniapp_incoming_sms_api(request):
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    
+    uid = int(tg_user["id"])
+    user_sms_list = miniapp_incoming_sms.get(uid, [])
+    return _miniapp_cors(web.json_response({"sms_list": user_sms_list}))
