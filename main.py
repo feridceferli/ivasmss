@@ -1707,7 +1707,15 @@ monitor_diagnostics = {
 def _monitor_diag_time():
     return datetime.now().isoformat(timespec="seconds")
 
-
+# Mini App üçün gələn SMS-i yaddaşda saxlayırıq
+                        miniapp_incoming_sms.setdefault(uid, []).insert(0, {
+                            "service": service_name,
+                            "number": full_number,
+                            "otp": otp_code,
+                            "message": full_sms,
+                            "time": datetime.now().strftime("%H:%M:%S")
+                        })
+                        miniapp_incoming_sms[uid] = miniapp_incoming_sms[uid][:20]
 async def monitor_loop(app):
     sent_otps = set()
     while True:
