@@ -139,3 +139,38 @@ document.addEventListener('DOMContentLoaded', () => {
         fetchIncomingSms();
     }, 4000);
 });
+// Servis seçildiğinde doğrudan Mini App üzerinden numara alır
+async function selectService(serviceName) {
+    tg.HapticFeedback.impactOccurred('medium');
+    
+    // Kullanıcıya yükleniyor bildirimi gösterelim
+    const container = document.getElementById('active-orders-container');
+    container.innerHTML = `<p class="hint">📡 ${serviceName.toUpperCase()} için numara aranıyor...</p>`;
+    switchTab('active');
+
+    try {
+        const res = await fetch(`${API_BASE}/api/get-number`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ service: serviceName })
+        });
+
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            alert(data.message || "Numara alınamadı!");
+            fetchOrders();
+            return;
+        }
+
+        // Başarılı olursa kullanıcıya numara alındığını bildir ve aktifler sekmesini yenile
+        tg.showAlert(`Numara başarıyla alındı!\n\nNumara: ${data.number}`);
+        fetchOrders();
+        fetchDashboard();
+        
+    } catch (e) {
+        console.error("Numara alma xətası:", e);
+        alert("Bağlantı hatası oluştu.");
+        fetchOrders();
+    }
+}
