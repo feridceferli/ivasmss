@@ -95,6 +95,36 @@ Göndəriş arxa planda işləyir və uzun toplu göndərişi webhook sorğusunu
 
 ## Konfiqurasiya
 
+### Nömrələri TXT kimi endirmək və GitHub arxivi
+
+- **📥 NÖMRƏLƏRİM — TXT** və ya `/numbers_txt`: şəxsi çatda yalnız həmin istifadəçiyə ayrılmış nömrələr.
+- Admin üçün **📥 BÜTÜN NÖMRƏLƏR — TXT** və ya `/all_numbers_txt`: API-dən botun aldığı bütün saxlanmış nömrələr.
+- `/numbers_status`: admin üçün GitHub sinxronizasiya vəziyyəti.
+- Hər sətirdə bir `+nömrə` yazılır; təkrar nömrələr silinir. Faylda SMS, OTP, token, istifadəçi ID-si və profil məlumatı olmur. Böyük endirmələr 2 MB-lıq TXT hissələrinə bölünür.
+- Arxiv `/getnum` cavabındakı `full_number` sahəsini saxlayır; əlavə nömrə sifariş etmir və API-dəki bütün ehtiyatı ayrıca çəkmir. İstifadəçi siyahısı nömrə ona ayrıldıqda yenilənir.
+- İlk açılışda mövcud `datarange.json` qeydləri idxal edilir. Silinmiş köhnə qeydlər avtomatik bərpa edilmir. Tarixçə saxlanılır, buna görə TXT-də müddəti bitmiş nömrələr də ola bilər.
+
+GitHub-a avtomatik yükləmək üçün ayrıca **private** repository yaradın və README ilə başladın. Render **Environment** bölməsində aşağıdakıları təyin edin:
+
+| Dəyişən | Dəyər |
+|---|---|
+| `NUMBER_ARCHIVE_GITHUB_REPO` | `istifadəçi/gizli-arxiv-deposu` |
+| `NUMBER_ARCHIVE_GITHUB_TOKEN` | Yalnız həmin depoya `Contents: Read and write` icazəsi olan fine-grained token |
+| `NUMBER_ARCHIVE_GITHUB_BRANCH` | İstəyə bağlı; boşdursa deponun standart branch-i |
+| `NUMBER_ARCHIVE_GITHUB_PATH` | Standart: `numbers.txt` |
+| `NUMBER_ARCHIVE_SYNC_SECONDS` | Standart: `60`; minimum `30` saniyə |
+| `DB_FOLDER` | Qalıcı diskin mount yolu, məsələn `/var/data` |
+
+GitHub bağlantısı qurulmasa da botda TXT endirmə işləyir. Gizli repo/token qurulduqda yerli `numbers.txt` snapshot-u hər dövrdə yenilənir və dəyişiklik olduqda GitHub-a yazılır. Açıq depoya nömrə yüklənmir. Mövcud uzaq siyahı yerli siyahı ilə birləşdirilir; yazı toqquşmasında yenidən oxunur və cəhd edilir. Müvəqqəti xətadan sonra növbəti dövrdə təkrar sınanır. Status və server logları xətanı göstərir; tokenlər loglanmır.
+
+`number_archive.sqlite3` həm bütün nömrələri, həm istifadəçi üzrə ayrılmaları saxlayır. **DB_FOLDER qalıcı diskə bağlı olmalıdır**: GitHub-dakı TXT-dən bütün nömrələr bərpa oluna bilər, amma istifadəçi üzrə tarixçə bərpa edilmir, çünki TXT-də istifadəçi ID-ləri yoxdur. Qalıcı disk olmadan GitHub-a hələ göndərilməmiş nömrələr restart zamanı itə bilər. Sinxronizasiya üçün bir bot instansiyası istifadə edin. GitHub TXT limiti bu tətbiqdə 40 MB-dır; limitə çatdıqda arxivin ayrıca saxlanma strategiyasına keçirilməsi lazımdır.
+
+Arxiv testləri (real API, GitHub və Telegram çağırışı etmir):
+
+```bash
+python -m unittest test_number_archive -v
+```
+
 Dəyişənləri Render **Environment** bölməsində və ya lokal terminalın mühitində təyin edin. Real token və API açarlarını GitHub-a yükləməyin.
 
 | Dəyişən | Məcburidir? | Təyinat |
@@ -265,4 +295,5 @@ Layihə **GNU General Public License v3.0 or later** altında yayımlanır. Ətr
 [Layihə ilə bağlı əlaqə — @xudafis](https://t.me/xudafis)
 
 </div>
+
 

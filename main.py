@@ -1,5 +1,6 @@
 import asyncio
 from data_storage import data_path, atomic_save
+from number_archive import NumberArchive, txt_chunks
 import io
 import re
 import json
@@ -60,6 +61,7 @@ SYSTEM_CONFIG_FILE = data_path("system_config.json")
 USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
+number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397, 1667507073, 8431489105]
@@ -771,6 +773,7 @@ async def get_number_from_api(rid: str):
         result = r.json()
         if result.get("meta", {}).get("code") == 200:
             data = result["data"]
+            await asyncio.to_thread(number_archive.record, data.get("full_number"))
             return data.get("full_number"), data.get("country")
         return None, None
     except Exception as e:
@@ -898,6 +901,7 @@ def save_range_db(data):
 
 
 def save_number_range_info(uid, number, range_text):
+    number_archive.record(number, uid)
     db = load_range_db()
     flag, name = get_country_info(number)
     db[normalize_number(number)] = {
@@ -1027,10 +1031,12 @@ def main_keyboard(user_id):
         ],
     ]
     if is_admin(user_id):
+        rows.append([InlineKeyboardButton("📥 BÜTÜN NÖMRƏLƏR — TXT", callback_data="menu_all_numbers_txt")])
         rows.append([
             premium_inline_button(labels["admin"], "admin",
                                   callback_data="menu_admin", style="danger")
         ])
+    rows.append([InlineKeyboardButton("📥 NÖMRƏLƏRİM — TXT", callback_data="menu_numbers_txt")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -1920,6 +1926,53 @@ async def fake_otp_loop(app):
             print(f"Demo OTP loop error: {e}")
             await asyncio.sleep(5)
 
+
+
+async def download_numbers_txt(update, context, all_numbers=False):
+    user = update.effective_user
+    message = update.effective_message
+    if not user or not message:
+        return
+    if not update.effective_chat or update.effective_chat.type != "private":
+        await message.reply_text("TXT faylını botun şəxsi çatından endirin.")
+        return
+    uid = user.id
+    if is_user_banned(uid):
+        await message.reply_text("🚫 Girişiniz məhdudlaşdırılıb.")
+        return
+    if all_numbers and not is_admin(uid):
+        await message.reply_text("Bu komanda yalnız admin üçündür.")
+        return
+    for channel in load_required_channels():
+        joined, _ = await check_user_joined(context.bot, uid, channel)
+        if not joined:
+            await message.reply_text("Əvvəlcə /start ilə tələb olunan kanal/qrupa qoşulun.")
+            return
+    text = await asyncio.to_thread(number_archive.text, None if all_numbers else uid)
+    if not text:
+        await message.reply_text("Endirmək üçün saxlanmış nömrə yoxdur.")
+        return
+    for index, content in enumerate(txt_chunks(text), 1):
+        prefix = "all_numbers" if all_numbers else "my_numbers"
+        await message.reply_document(
+            document=io.BytesIO(content), filename=f"{prefix}_{index}.txt",
+            caption=f"📥 Nömrə arxivi • {content.count(bytes([10]))} nömrə",
+        )
+
+
+async def numbers_txt_command(update, context):
+    await download_numbers_txt(update, context)
+
+
+async def all_numbers_txt_command(update, context):
+    await download_numbers_txt(update, context, all_numbers=True)
+
+
+async def numbers_status_command(update, context):
+    if (update.effective_user and is_admin(update.effective_user.id)
+            and update.effective_chat and update.effective_chat.type == "private"
+            and not is_user_banned(update.effective_user.id)):
+        await update.effective_message.reply_text(number_archive.status)
 
 
 async def show_active_numbers(update, context):
@@ -4259,6 +4312,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # USER INLINE MENU
+    if data in ("menu_numbers_txt", "menu_all_numbers_txt"):
+        await download_numbers_txt(update, context, all_numbers=data == "menu_all_numbers_txt")
+        return
     if data == "menu_language":
         lang = get_user_language(uid)
         prompt = (
@@ -4885,6 +4941,8 @@ async def miniapp_admin_api(request):
 
 
 async def post_init(application):
+    await asyncio.to_thread(number_archive.import_legacy, load_range_db())
+    application.bot_data["number_archive_task"] = asyncio.create_task(number_archive.run())
     for _ in range(20):
         asyncio.create_task(worker())
     asyncio.create_task(monitor_loop(application))
@@ -4893,6 +4951,9 @@ async def post_init(application):
 
 
 def register_handlers(app):
+    app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
+    app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
+    app.add_handler(CommandHandler("numbers_status", numbers_status_command))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
     app.add_handler(CommandHandler("get1number", get1number_command))
@@ -4967,6 +5028,10 @@ async def run_combined_server():
     try:
         await asyncio.Event().wait()
     finally:
+        archive_task = app.bot_data.get("number_archive_task")
+        if archive_task:
+            archive_task.cancel()
+            await asyncio.gather(archive_task, return_exceptions=True)
         await runner.cleanup()
         await app.bot.delete_webhook()
         await app.stop()
@@ -5108,3 +5173,4 @@ async def miniapp_get_number_api(request):
         "service": service.upper(),
         "range": range_display
     }))
+
