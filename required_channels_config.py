@@ -27,7 +27,8 @@ def merge_channels(runtime, defaults, environ=None, include_pending=False):
         env_value = str(environ.get(configured.get("chat_id_env", ""), "")).strip()
         if env_value.startswith("-") and env_value[1:].isdigit():
             row["chat_id"] = int(env_value)
-        row["verification_pending"] = not bool(row.get("chat_id") or row.get("username"))
+        row["verification_pending"] = (row.get("verification_required", True) is not False
+                                       and not bool(row.get("chat_id") or row.get("username")))
         # A newly staged invite URL alone cannot be used with getChatMember.
         # Do not create an impossible gate; retain any pre-existing gate as-is.
         if include_pending or not row["verification_pending"] or previous:

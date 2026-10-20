@@ -14,9 +14,10 @@
   },
   {
     "link": "https://t.me/+MCTJqBiqQ1piMjIy",
-    "label": "📢 Kanal 3",
+    "label": "Kapital Carde",
     "chat_id": null,
     "chat_id_env": "REQUIRED_CHANNEL_3_ID",
-    "style": "primary"
+    "style": "primary",
+    "verification_required": false
   }
 ]

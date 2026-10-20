@@ -586,6 +586,9 @@ async def resolve_chat_id_from_username(bot, username):
 
 
 async def check_user_joined(bot, user_id, channel_entry):
+    # Optional channel links stay visible without requiring membership.
+    if channel_entry.get("verification_required", True) is False:
+        return True, None
     lang = get_user_language(user_id)
     chat_id = channel_entry.get("chat_id")
     if not chat_id:
