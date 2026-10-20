@@ -5,7 +5,7 @@ import io
 import re
 import json
 import html
-import os  # <--- Webhook & PORT এর জন্য ইম্পোর্ট যোগ করা হয়েছে
+import os  # Operating system utilities
 import hmac
 import hashlib
 import time
@@ -35,7 +35,7 @@ from telegram.ext import (
 from telegram.error import TelegramError
 from aiohttp import web
 from bot_localization import install_azerbaijani_localization, normalize_button_input
-from bot_languages import t, language_keyboard, menu_labels, normalize_language
+from bot_languages import t, language_keyboard, menu_labels, normalize_language, membership_keyboard
 from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons_enabled,
                         disable_premium_icons, is_premium_emoji_error)
 
@@ -530,7 +530,7 @@ def add_required_channel(link, label=None, chat_id=None):
     channels = load_required_channels()
     for ch in channels:
         if ch.get("link") == link:
-            return False, "এই লিংক ইতিমধ্যে আছে।"
+            return False, 'Bu keçid artıq mövcuddur.'
     if not label:
         label = link.replace("https://t.me/", "").replace("@", "")
         if label.startswith("+"):
@@ -551,11 +551,11 @@ def add_required_channel(link, label=None, chat_id=None):
         else:
             return (
                 False,
-                "লিংক থেকে চ্যাট আইডি বের করা যায়নি। অনুগ্রহ করে চ্যাট আইডি সহ যোগ করুন অথবা সঠিক লিংক দিন।",
+                'Keçiddən çat ID-sini çıxarmaq mümkün olmadı. Zəhmət olmasa, çat ID-si ilə birlikdə əlavə edin və ya düzgün keçid verin.',
             )
     channels.append(entry)
     save_required_channels(channels)
-    return True, "সফলভাবে যোগ করা হয়েছে।"
+    return True, 'Uğurla əlavə edildi.'
 
 
 def remove_required_channel(link_or_label):
@@ -569,8 +569,8 @@ def remove_required_channel(link_or_label):
         new_channels.append(ch)
     if removed:
         save_required_channels(new_channels)
-        return True, "সরানো হয়েছে।"
-    return False, "কোনো ম্যাচ পাওয়া যায়নি।"
+        return True, 'Silindi.'
+    return False, 'Heç bir uyğunluq tapılmadı.'
 
 
 def get_all_required_channels():
@@ -586,6 +586,7 @@ async def resolve_chat_id_from_username(bot, username):
 
 
 async def check_user_joined(bot, user_id, channel_entry):
+    lang = get_user_language(user_id)
     chat_id = channel_entry.get("chat_id")
     if not chat_id:
         username = channel_entry.get("username")
@@ -600,9 +601,9 @@ async def check_user_joined(bot, user_id, channel_entry):
                         break
                 save_required_channels(channels)
             else:
-                return False, f"❌ চ্যাট আইডি বের করা যায়নি: {channel_entry.get('link')}"
+                return False, t(lang, "membership_chat_unresolved")
     if not chat_id:
-        return False, f"❌ চ্যাট আইডি অনুপস্থিত: {channel_entry.get('link')}"
+        return False, t(lang, "membership_chat_missing")
 
     try:
         member = await bot.get_chat_member(chat_id, user_id)
@@ -610,36 +611,43 @@ async def check_user_joined(bot, user_id, channel_entry):
             return True, None
         else:
             return False, None
-    except TelegramError as e:
-        return False, f"⚠️ বট চেক করতে পারেনি: {str(e)[:100]}"
+    except TelegramError:
+        return False, t(lang, "membership_check_error")
 
 
 async def verify_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
+    lang = get_user_language(uid)
     await query.answer()
 
     channels = load_required_channels()
     if not channels:
         await query.edit_message_text(
-            "✅ কোনো চেক করার চ্যানেল নেই। আপনি সরাসরি ব্যবহার করতে পারেন।"
+            t(lang, "membership_no_channels")
         )
         await show_main_menu(update, context, uid)
         return
 
     failed = []
+    unavailable = []
     for ch in channels:
         ok, error = await check_user_joined(context.bot, uid, ch)
         if not ok:
-            failed.append(ch.get("label", ch.get("link", "Unknown")))
+            label = html.escape(str(ch.get("label") or ch.get("link") or t(lang, "join_channel")))
+            (unavailable if error else failed).append(label)
 
-    if failed:
-        msg = (
-            "❌ **ভেরিফিকেশন ব্যর্থ!**\n\nআপনি নিচের চ্যানেল/গ্রুপগুলোতে জয়েন করেননি:\n"
-            + "\n".join(f"• {label}" for label in failed)
+    if failed or unavailable:
+        parts = []
+        if failed:
+            parts.append(t(lang, "membership_failed") + "\n" + "\n".join(f"• {label}" for label in failed))
+            parts.append(t(lang, "membership_retry"))
+        if unavailable:
+            parts.append(t(lang, "membership_unavailable") + "\n" + "\n".join(f"• {label}" for label in unavailable))
+        await query.edit_message_text(
+            "\n\n".join(parts), parse_mode="HTML",
+            reply_markup=membership_keyboard(channels, lang),
         )
-        msg += "\n\nজয়েন করার পর আবার **Verify** বাটন ক্লিক করুন।"
-        await query.edit_message_text(msg, parse_mode="Markdown")
         return
 
     user_data = get_user(uid)
@@ -649,7 +657,7 @@ async def verify_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     save_data(all_data)
 
     await query.edit_message_text(
-        "✅ **ভেরিফিকেশন সম্পূর্ণ!**\n\nআপনি এখন বটের সব ফিচার ব্যবহার করতে পারবেন।"
+        t(lang, "membership_verified")
     )
     await show_main_menu(update, context, uid)
 
@@ -1426,7 +1434,7 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         msg = (
             "<b>🏆 TOP 10 OTP LEADERBOARD 🏆</b>\n"
             "━━━━━━━━━━━━━━━━━━━━\n\n"
-            "❌ আজ পর্যন্ত কেউ OTP পায়নি।\n"
+            '❌ Hələ heç kim OTP almayıb.\n'
         )
     else:
         msg = "<b>🏆 TOP 10 OTP RECEIVERS (TODAY) 🏆</b>\n━━━━━━━━━━━━━━━━━━━━\n\n"
@@ -1440,7 +1448,7 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             else:
                 medal = f"{idx}️⃣"
             msg += f"{medal} <b>{name}</b>\n   🔑 <code>{count}</code> OTPs\n\n"
-        msg += "━━━━━━━━━━━━━━━━━━━━\n📊 <i>প্রতিদিন রাত ১২টায় রিসেট হয়</i>"
+        msg += '━━━━━━━━━━━━━━━━━━━━\n📊 <i>Hər gün gecə saat 12-də sıfırlanır</i>'
     await update.effective_message.reply_text(
         msg, parse_mode="HTML", reply_markup=main_keyboard(uid)
     )
@@ -1626,7 +1634,7 @@ def _build_countries_keyboard(ranges, service):
             [
                 [
                     InlineKeyboardButton(
-                        "❌ কোন দেশ উপলব্ধ নেই",
+                        '❌ Heç bir ölkə mövcud deyil',
                         callback_data="back_services",
                         style="danger",
                     )
@@ -1670,7 +1678,7 @@ async def show_app_selection(update, context):
     services = await fetch_services_cached()
     if not services:
         await update.effective_message.reply_text(
-            "⚠️ <b>কোনো সার্ভিস উপলব্ধ নেই</b>\n⏳ কিছুক্ষণ পর আবার চেষ্টা করুন।",
+            '⚠️ <b>Heç bir xidmət mövcud deyil</b>\n⏳ Bir azdan yenidən cəhd edin.',
             parse_mode="HTML",
             reply_markup=main_keyboard(uid),
         )
@@ -1680,7 +1688,7 @@ async def show_app_selection(update, context):
     filtered_services = dict(sorted(services.items()))
     if not filtered_services:
         await update.effective_message.reply_text(
-            "⚠️ <b>কোনো সার্ভিস উপলব্ধ নেই</b>\n⏳ কিছুক্ষণ পর আবার চেষ্টা করুন।",
+            '⚠️ <b>Heç bir xidmət mövcud deyil</b>\n⏳ Bir azdan yenidən cəhd edin.',
             parse_mode="HTML",
             reply_markup=main_keyboard(uid),
         )
@@ -2024,9 +2032,9 @@ async def fast_allocate_number(query, context, rid, service, range_display):
         return
     if not num:
         await query.message.edit_text(
-            "❌ <b>Number পাওয়া যায়নি।</b>\n\n"
-            "<blockquote>⚠️ এই range-এ এখন number নেই বা server busy।\n"
-            "আরেকটি range চেষ্টা করুন।</blockquote>",
+            '❌ <b>Nömrə tapılmadı.</b>\n\n'
+            '<blockquote>⚠️ Bu diapazonda hazırda nömrə yoxdur və ya server məşğuldur.\n'
+            'Başqa diapazonu sınayın.</blockquote>',
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -2287,7 +2295,7 @@ async def perform_otp_search(update, context, target_num):
                             payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
                         else:
                             payment_status = (
-                                "⚠️ এই OTP‑তে কোনো টাকা যোগ করা হয়নি (Telegram/WhatsApp)"
+                                '⚠️ Bu OTP üçün pul əlavə edilməyib (Telegram/WhatsApp)'
                             )
                         paid_data[key] = {"uid": uid, "otp": otp_code}
                     save_data(paid_data, PAID_SMS_FILE)
@@ -2383,7 +2391,7 @@ async def withdraw_method_selected(update: Update, context: ContextTypes.DEFAULT
         config = load_system_config()
         if not config["payment_methods"].get(method, False):
             await update.effective_message.reply_text(
-                "⚠️ এই মেথড বর্তমানে বন্ধ আছে। অন্য মেথড নির্বাচন করুন।",
+                '⚠️ Bu metod hazırda bağlıdır. Başqa bir metod seçin.',
                 reply_markup=withdraw_method_keyboard(),
             )
             return
@@ -2841,7 +2849,7 @@ async def show_banned_users_list(update, context):
 async def admin_change_min_withdraw_start(update, context):
     context.user_data["admin_min_withdraw_mode"] = True
     await update.effective_message.reply_text(
-        "💵 সেন্ড দ্য নিউ মিনিমাম উইথড্র অ্যামাউন্ট (শুধু সংখ্যা):\n\nবর্তমান মান: "
+        '💵 YENİ MİNİMUM ÇIXARIŞ MƏBLƏĞİNİ GÖNDƏRİN (yalnız rəqəm):\n\nCari dəyər: '
         + str(load_system_config()["min_withdraw"]),
         reply_markup=cancel_keyboard(),
     )
@@ -2856,12 +2864,12 @@ async def admin_change_min_withdraw_amount(update, context):
             raise ValueError
         update_min_withdraw(new_min)
         await update.effective_message.reply_text(
-            f"✅ মিনিমাম উইথড্র অ্যামাউন্ট পরিবর্তন করে {new_min} AZN করা হয়েছে।",
+            f"✅ Minimum çıxarış məbləği {new_min} AZN olaraq dəyişdirildi.",
             reply_markup=system_config_keyboard(),
         )
     except:
         await update.effective_message.reply_text(
-            "❌ ভ্যালিড অ্যামাউন্ট দিন।", reply_markup=system_config_keyboard()
+            '❌ Etibarlı məbləğ daxil edin.', reply_markup=system_config_keyboard()
         )
     finally:
         context.user_data["admin_min_withdraw_mode"] = False
@@ -2871,7 +2879,7 @@ async def admin_change_otp_rate_start(update, context):
     context.user_data["admin_otp_rate_mode"] = True
     current_rate = get_otp_rate()
     await update.effective_message.reply_text(
-        f"💲 বর্তমান OTP রেট: `{current_rate:.2f} AZN`\n\nসেন্ড দ্য নিউ রেট (শুধু সংখ্যা, যেমন: `0.25`):\n\n<blockquote>সাবধান: এটি সব নতুন OTP-তে প্রযোজ্য হবে।</blockquote>",
+        f"💲 Cari OTP tarifi: `{current_rate:.2f} AZN`\n\nYeni tarifi göndərin (yalnız rəqəm, məsələn: `0.25`):\n\n<blockquote>Diqqət: bu tarif bütün yeni OTP-lərə tətbiq ediləcək.</blockquote>",
         parse_mode="HTML",
         reply_markup=cancel_keyboard(),
     )
@@ -2886,13 +2894,13 @@ async def admin_change_otp_rate_amount(update, context):
             raise ValueError
         update_otp_rate(new_rate)
         await update.effective_message.reply_text(
-            f"✅ OTP রেট পরিবর্তন করে `{new_rate:.2f} AZN` করা হয়েছে।\n\nনতুন OTP গুলো এই হারে যুক্ত হবে।",
+            f"✅ OTP tarifi `{new_rate:.2f} AZN` olaraq dəyişdirildi.\n\nYeni OTP-lər bu tariflə hesablanacaq.",
             parse_mode="HTML",
             reply_markup=system_config_keyboard(),
         )
     except:
         await update.effective_message.reply_text(
-            "❌ ভ্যালিড রেট দিন (যেমন: 0.25)।", reply_markup=system_config_keyboard()
+            '❌ Etibarlı dərəcə daxil edin (məsələn: 0.25).', reply_markup=system_config_keyboard()
         )
     finally:
         context.user_data["admin_otp_rate_mode"] = False
@@ -2902,7 +2910,7 @@ async def admin_change_otp_rate_amount(update, context):
 async def admin_set_user_otp_rate_start(update, context):
     context.user_data["admin_set_otp_rate_mode"] = "user"
     await update.effective_message.reply_text(
-        "🔧 **SET USER OTP RATE**\n\nদয়া করে ইউজার আইডি ইনপুট দিন (শুধু সংখ্যা):",
+        '🔧 **İSTİFADƏÇİ OTP DƏRƏCƏSİNİ TƏYİN ET**\n\nZəhmət olmasa istifadəçi ID-sini daxil edin (yalnız rəqəm):',
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
     )
@@ -2913,18 +2921,18 @@ async def admin_set_user_otp_rate_user(update, context):
     if uid_str == "❌ CANCEL":
         context.user_data["admin_set_otp_rate_mode"] = None
         await update.effective_message.reply_text(
-            "❌ অপারেশন বাতিল করা হয়েছে।", reply_markup=system_config_keyboard()
+            '❌ Əməliyyat ləğv edildi.', reply_markup=system_config_keyboard()
         )
         return
     if not uid_str.isdigit():
         await update.effective_message.reply_text(
-            "❌ ভ্যালিড ইউজার আইডি দিন (শুধু সংখ্যা)!", reply_markup=cancel_keyboard()
+            '❌ Etibarlı istifadəçi ID-si daxil edin (yalnız rəqəm)!', reply_markup=cancel_keyboard()
         )
         return
     uid_int = int(uid_str)
     if not user_exists(uid_int):
         await update.effective_message.reply_text(
-            "❌ এই ইউজারটি রেজিস্টার্ড নয়। আবার চেষ্টা করুন।", reply_markup=cancel_keyboard()
+            '❌ Bu istifadəçi qeydiyyatdan keçməyib. Yenidən cəhd edin.', reply_markup=cancel_keyboard()
         )
         return
     context.user_data["admin_set_otp_rate_user"] = uid_int
@@ -2932,10 +2940,10 @@ async def admin_set_user_otp_rate_user(update, context):
     current_rate = get_user_otp_rate(uid_int)
     global_rate = get_otp_rate()
     await update.effective_message.reply_text(
-        f"বর্তমান ইউজার রেট: `{current_rate:.2f} AZN`\n"
-        f"গ্লোবাল রেট: `{global_rate:.2f} AZN`\n\n"
-        "নতুন রেট ইনপুট দিন (শুধু সংখ্যা, যেমন: 0.25):\n"
-        "রেট 0 দিলে কাস্টম রেট মুছে যাবে এবং গ্লোবাল রেট ব্যবহার হবে।",
+        f"İstifadəçinin cari tarifi: `{current_rate:.2f} AZN`\n"
+        f"Ümumi tarif: `{global_rate:.2f} AZN`\n\n"
+        'Yeni tarifi daxil edin (yalnız rəqəm, məsələn: 0.25):\n'
+        'Tarifi 0 etsəniz, fərdi tarif silinəcək və ümumi tarif istifadə olunacaq.',
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
     )
@@ -2948,7 +2956,7 @@ async def admin_set_user_otp_rate_amount(update, context):
     if not uid:
         context.user_data["admin_set_otp_rate_mode"] = None
         await update.effective_message.reply_text(
-            "⚠️ সেশন শেষ। আবার চেষ্টা করুন।", reply_markup=system_config_keyboard()
+            '⚠️ Sessiya bitdi. Yenidən cəhd edin.', reply_markup=system_config_keyboard()
         )
         return
     text = normalize_button_input(update.message.text.strip())
@@ -2956,7 +2964,7 @@ async def admin_set_user_otp_rate_amount(update, context):
         context.user_data["admin_set_otp_rate_mode"] = None
         context.user_data["admin_set_otp_rate_user"] = None
         await update.effective_message.reply_text(
-            "❌ অপারেশন বাতিল করা হয়েছে।", reply_markup=system_config_keyboard()
+            '❌ Əməliyyat ləğv edildi.', reply_markup=system_config_keyboard()
         )
         return
     try:
@@ -2965,19 +2973,19 @@ async def admin_set_user_otp_rate_amount(update, context):
             raise ValueError
     except:
         await update.effective_message.reply_text(
-            "❌ ভ্যালিড রেট ইনপুট দিন (যেমন: 0.25)!", reply_markup=cancel_keyboard()
+            '❌ Etibarlı dərəcə daxil edin (məsələn: 0.25)!', reply_markup=cancel_keyboard()
         )
         return
     set_user_otp_rate(uid, rate)
     if rate > 0:
         await update.effective_message.reply_text(
-            f"✅ ইউজার `{uid}` এর জন্য OTP রেট `{rate:.2f} AZN` সেট করা হয়েছে।",
+            f"✅ İstifadəçi `{uid}` üçün OTP tarifi `{rate:.2f} AZN` olaraq təyin edildi.",
             parse_mode="Markdown",
             reply_markup=system_config_keyboard(),
         )
     else:
         await update.effective_message.reply_text(
-            f"✅ ইউজার `{uid}` এর কাস্টম OTP রেট মুছে ফেলা হয়েছে। এখন গ্লোবাল রেট `{get_otp_rate():.2f} AZN` প্রযোজ্য হবে।",
+            f"✅ İstifadəçi `{uid}` üçün fərdi OTP tarifi silindi. İndi ümumi tarif — `{get_otp_rate():.2f} AZN` tətbiq ediləcək.",
             parse_mode="Markdown",
             reply_markup=system_config_keyboard(),
         )
@@ -2988,7 +2996,7 @@ async def admin_set_user_otp_rate_amount(update, context):
 async def admin_view_user_otp_rate_start(update, context):
     context.user_data["admin_view_otp_rate_mode"] = True
     await update.effective_message.reply_text(
-        "📋 **VIEW USER OTP RATE**\n\nদয়া করে ইউজার আইডি ইনপুট দিন (শুধু সংখ্যা):",
+        '📋 **İSTİFADƏÇİ OTP DƏRƏCƏSİNƏ BAX**\n\nZəhmət olmasa istifadəçi ID-sini daxil edin (yalnız rəqəm):',
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
     )
@@ -3001,18 +3009,18 @@ async def admin_view_user_otp_rate(update, context):
     if uid_str == "❌ CANCEL":
         context.user_data["admin_view_otp_rate_mode"] = None
         await update.effective_message.reply_text(
-            "❌ অপারেশন বাতিল করা হয়েছে।", reply_markup=system_config_keyboard()
+            '❌ Əməliyyat ləğv edildi.', reply_markup=system_config_keyboard()
         )
         return
     if not uid_str.isdigit():
         await update.effective_message.reply_text(
-            "❌ ভ্যালিড ইউজার আইডি দিন (শুধু সংখ্যা)!", reply_markup=cancel_keyboard()
+            '❌ Etibarlı istifadəçi ID-si daxil edin (yalnız rəqəm)!', reply_markup=cancel_keyboard()
         )
         return
     uid_int = int(uid_str)
     if not user_exists(uid_int):
         await update.effective_message.reply_text(
-            "❌ এই ইউজারটি রেজিস্টার্ড নয়।", reply_markup=system_config_keyboard()
+            '❌ Bu istifadəçi qeydiyyatdan keçməyib.', reply_markup=system_config_keyboard()
         )
         context.user_data["admin_view_otp_rate_mode"] = None
         return
@@ -3022,12 +3030,12 @@ async def admin_view_user_otp_rate(update, context):
     has_custom = str(uid_int) in rates and rates[str(uid_int)] > 0
     msg = (
         f"📊 **USER OTP RATE INFO**\n"
-        f"🆔 ইউজার: `{uid_int}`\n"
+        f"🆔 İstifadəçi: `{uid_int}`\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🎯 কাস্টম রেট: `{custom_rate:.2f} AZN`\n"
-        f"🌐 গ্লোবাল রেট: `{global_rate:.2f} AZN`\n"
+        f"🎯 Fərdi tarif: `{custom_rate:.2f} AZN`\n"
+        f"🌐 Ümumi tarif: `{global_rate:.2f} AZN`\n"
         f"━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔹 {'এই ইউজারের জন্য কাস্টম রেট সক্রিয়।' if has_custom else 'এই ইউজারের জন্য কাস্টম রেট নেই, গ্লোবাল রেট ব্যবহার হবে।'}"
+        f"🔹 {'Bu istifadəçi üçün xüsusi dərəcə aktivdir.' if has_custom else 'Bu istifadəçi üçün xüsusi dərəcə yoxdur, qlobal dərəcə istifadə olunacaq.'}"
     )
     await update.effective_message.reply_text(
         msg, parse_mode="Markdown", reply_markup=system_config_keyboard()
@@ -3115,7 +3123,7 @@ async def admin_toggle_payment_methods(update, context):
         [InlineKeyboardButton("🔙 BACK", callback_data="back_to_admin_panel")]
     )
     await update.effective_message.reply_text(
-        "💳 পেমেন্ট মেথড টগল করুন:\n\nসবুজ চিহ্ন মানে সচল, লাল মানে বন্ধ।\nক্লিক করে চেঞ্জ করুন।",
+        '💳 Ödəniş üsulunu dəyişin:\n\nYaşıl işarə aktiv, qırmızı isə deaktiv deməkdir.\nDəyişmək üçün klikləyin.',
         reply_markup=InlineKeyboardMarkup(buttons),
     )
 
@@ -3129,9 +3137,9 @@ async def handle_toggle_method_callback(
     if data.startswith("toggle_method_"):
         method = data.replace("toggle_method_", "")
         new_state = toggle_payment_method(method)
-        status = "সচল ✅" if new_state else "বন্ধ ❌"
+        status = 'aktiv ✅' if new_state else 'deaktiv ❌'
         await query.edit_message_text(
-            f"✅ {method} মেথড এখন {status}।", reply_markup=query.message.reply_markup
+            f"✅ {method} üsulunun hazırkı vəziyyəti: {status}।", reply_markup=query.message.reply_markup
         )
         config = load_system_config()
         methods = config["payment_methods"]
@@ -3159,10 +3167,10 @@ async def admin_add_channel_start(update, context):
     context.user_data["add_channel_mode"] = True
     await update.effective_message.reply_text(
         "➕ **ADD CHANNEL/GROUP**\n\n"
-        "ফরম্যাট: `লিংক|লেবেল` (লেবেল ঐচ্ছিক)\n"
-        "উদাহরণ: `https://t.me/betrunaz|📢 আমাদের চ্যানেল`\n"
-        "যদি লেবেল না দেন, তাহলে লিংক থেকে স্বয়ংক্রিয় তৈরি হবে।\n\n"
-        "প্রাইভেট লিংকের জন্য: `লিংক|চ্যাট_আইডি|লেবেল`",
+        'Format: `link|ad` (ad məcburi deyil)\n'
+        'Nümunə: `https://t.me/betrunaz|📢 Kanalımız`\n'
+        'Ad daxil etməsəniz, linkdən avtomatik yaradılacaq.\n\n'
+        'Özəl link üçün: `link|çat_id|ad`',
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
     )
@@ -3175,7 +3183,7 @@ async def admin_process_add_channel(update, context):
     if text == "❌ CANCEL":
         context.user_data["add_channel_mode"] = None
         await update.effective_message.reply_text(
-            "❌ বাতিল করা হয়েছে।", reply_markup=required_channels_keyboard()
+            '❌ Ləğv edildi.', reply_markup=required_channels_keyboard()
         )
         return
     parts = text.split("|")
@@ -3206,7 +3214,7 @@ async def admin_process_add_channel(update, context):
 async def admin_remove_channel_start(update, context):
     context.user_data["remove_channel_mode"] = True
     await update.effective_message.reply_text(
-        "❌ **REMOVE CHANNEL/GROUP**\n\nদয়া করে যে লিংক বা লেবেল রিমুভ করতে চান তা দিন:",
+        '❌ **KANAL/QRUPU SİL**\n\nZəhmət olmasa silmək istədiyiniz link və ya etiketi daxil edin:',
         parse_mode="Markdown",
         reply_markup=cancel_keyboard(),
     )
@@ -3219,7 +3227,7 @@ async def admin_process_remove_channel(update, context):
     if text == "❌ CANCEL":
         context.user_data["remove_channel_mode"] = None
         await update.effective_message.reply_text(
-            "❌ বাতিল করা হয়েছে।", reply_markup=required_channels_keyboard()
+            '❌ Ləğv edildi.', reply_markup=required_channels_keyboard()
         )
         return
     success, msg = remove_required_channel(text)
@@ -3236,16 +3244,16 @@ async def admin_list_channels(update, context):
     channels = get_all_required_channels()
     if not channels:
         await update.effective_message.reply_text(
-            "📋 কোনো চ্যানেল/গ্রুপ যোগ করা হয়নি।", reply_markup=required_channels_keyboard()
+            '📋 Heç bir kanal/qrup əlavə edilməyib.', reply_markup=required_channels_keyboard()
         )
         return
-    text = "📋 **বর্তমান চ্যানেল/গ্রুপ লিস্ট:**\n\n"
+    text = '📋 **Mövcud kanal/qrup siyahısı:**\n\n'
     for i, ch in enumerate(channels, 1):
         link = ch.get("link", "N/A")
         label = ch.get("label", "N/A")
         style = ch.get("style", "primary")
         cid = ch.get("chat_id", "N/A")
-        text += f"{i}. লেবেল: `{label}`\n   লিংক: `{link}`\n   স্টাইল: `{style}`\n   chat_id: `{cid}`\n\n"
+        text += f"{i}. Ad: `{label}`\n   Link: `{link}`\n   Üslub: `{style}`\n   chat_id: `{cid}`\n\n"
     await update.effective_message.reply_text(
         text, parse_mode="Markdown", reply_markup=required_channels_keyboard()
     )
@@ -3549,7 +3557,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if not re.search(r"\d", range_text):
             await update.effective_message.reply_text(
                 "❌ <b>INVALID RANGE!</b>\n\n"
-                "<blockquote>সঠিক উদাহরণ: <code>234XXX</code> বা <code>26134</code></blockquote>",
+                '<blockquote>Düzgün nümunə: <code>234XXX</code> və ya <code>26134</code></blockquote>',
                 parse_mode="HTML",
                 reply_markup=main_keyboard(uid),
             )
@@ -4173,20 +4181,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             if not ok:
                 missing.append(ch)
         if missing:
-            msg = "🔐 **Məcburi üzvlük tələb olunur / Membership required**\n\n"
-            msg += "Botdan istifadə etmək üçün aşağıdakı kanal/qrupa qoşulun və sonra **✅ Yoxla / Verify** düyməsinə basın."
-            keyboard_buttons = []
-            for ch in channels:
-                link = ch.get("link", "")
-                label = ch.get("label", link)
-                style = ch.get("style", "primary")
-                keyboard_buttons.append([InlineKeyboardButton(label, url=link, style=style)])
-            keyboard_buttons.append([
-                InlineKeyboardButton("✅ Yoxla / Verify", callback_data="verify_me", style="success")
-            ])
+            lang = get_user_language(uid)
             await update.effective_message.reply_text(
-                msg, parse_mode="Markdown",
-                reply_markup=InlineKeyboardMarkup(keyboard_buttons),
+                t(lang, "membership_required"),
+                reply_markup=membership_keyboard(channels, lang),
             )
             return
 
@@ -4284,15 +4282,10 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 if not ok:
                     missing.append(ch)
             if missing:
-                buttons = [
-                    [InlineKeyboardButton(ch.get("label", ch.get("link", "Join")), url=ch.get("link", ""), style=ch.get("style", "primary"))]
-                    for ch in channels
-                ]
-                buttons.append([InlineKeyboardButton("✅ Yoxla / Verify", callback_data="verify_me", style="success")])
+                lang = get_user_language(uid)
                 await query.message.reply_text(
-                    "🔐 Botdan istifadə etmək üçün tələb olunan kanal/qrupa üzv olmalısınız.\n"
-                    "Membership is required to use the bot.",
-                    reply_markup=InlineKeyboardMarkup(buttons),
+                    t(lang, "membership_required"),
+                    reply_markup=membership_keyboard(channels, lang),
                 )
                 return
 
@@ -4394,11 +4387,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         services = await fetch_services_cached()
         if service not in services:
-            await query.answer("এই সার্ভিস বর্তমানে উপলব্ধ নেই।", show_alert=True)
+            await query.answer('Bu xidmət hazırda mövcud deyil.', show_alert=True)
             return
         ranges = services[service]
         if not ranges:
-            await query.answer("এই সার্ভিসের জন্য কোনো রেঞ্জ উপলব্ধ নেই।", show_alert=True)
+            await query.answer('Bu xidmət üçün heç bir diapazon mövcud deyil.', show_alert=True)
             return
         context.user_data["la_service"] = service
         context.user_data["la_ranges"] = ranges
@@ -4428,9 +4421,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["mode"] = "custom_range"
         await query.message.edit_text(
             "⚙️ <b>CUSTOM RANGE</b>\n\n"
-            "<blockquote>📶 আপনার কাস্টম range টাইপ করুন।\n"
-            "উদাহরণ: <code>234XXX</code> বা <code>26134</code></blockquote>\n\n"
-            "<blockquote>⌨️ নিচে range লিখে Send করুন:</blockquote>",
+            '<blockquote>📶 Fərdi diapazonunuzu daxil edin.\n'
+            'Nümunə: <code>234XXX</code> və ya <code>26134</code></blockquote>\n\n'
+            '<blockquote>⌨️ Aşağıda diapazonu yazıb göndərin:</blockquote>',
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [
@@ -4448,7 +4441,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "back_services":
         services = await fetch_services_cached()
         if not services:
-            await query.message.edit_text("❌ কোনো সার্ভিস উপলব্ধ নেই।")
+            await query.message.edit_text('❌ Heç bir xidmət mövcud deyil.')
             return
         displayed_services = dict(sorted(services.items()))
         context.user_data["la_services"] = displayed_services
@@ -4584,7 +4577,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "back_to_services":
         services = await fetch_services_cached()
         if not services:
-            await query.edit_message_text("❌ কোনো সার্ভিস উপলব্ধ নেই।")
+            await query.edit_message_text('❌ Heç bir xidmət mövcud deyil.')
             return
         keyboard = _build_services_keyboard(services)
         await query.edit_message_text(
