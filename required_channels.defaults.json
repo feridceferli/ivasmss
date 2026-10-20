@@ -1,0 +1,22 @@
+[
+  {
+    "link": "https://t.me/betrunaz",
+    "label": "📢 @betrunaz",
+    "username": "betrunaz",
+    "style": "primary"
+  },
+  {
+    "link": "https://t.me/+zNOPEh3GpI83ZDli",
+    "label": "📢 Kanal 2",
+    "chat_id": null,
+    "chat_id_env": "REQUIRED_CHANNEL_2_ID",
+    "style": "success"
+  },
+  {
+    "link": "https://t.me/+MCTJqBiqQ1piMjIy",
+    "label": "📢 Kanal 3",
+    "chat_id": null,
+    "chat_id_env": "REQUIRED_CHANNEL_3_ID",
+    "style": "primary"
+  }
+]
