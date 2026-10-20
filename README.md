@@ -4,7 +4,7 @@
 
 ### Telegram Bot · Mini App · Admin Panel
 
-**Python ilə hazırlanmış Telegram idarəetmə sistemi**
+**Telegram idarəetməsi · Nömrə arxivi · TXT endirmə · GitHub ehtiyat nüsxəsi**
 
 [![Python](https://img.shields.io/badge/Python-3.10+-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Telegram](https://img.shields.io/badge/Telegram-Mini%20App-229ED9?style=for-the-badge&logo=telegram&logoColor=white)](https://core.telegram.org/bots/webapps)
@@ -23,6 +23,18 @@
 
 Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegram sessiyası olmadığı üçün şəxsi panelə giriş alınmaya bilər.
 
+## Mündəricat
+
+- [İmkanlar](#imkanlar)
+- [Xidmətlər və mövcudluq bildirişləri](#xidmətlər-və-mövcudluq-bildirişləri)
+- [TXT arxivi və bot komandaları](#txt-arxivi-və-bot-komandaları)
+- [GitHub arxivini qurmaq](#github-arxivini-qurmaq)
+- [Konfiqurasiya](#konfiqurasiya)
+- [Lokal quraşdırma](#lokal-quraşdırma)
+- [Render-də yerləşdirmə](#render-də-yerləşdirmə)
+- [Yoxlama](#yoxlama)
+- [Problemlərin həlli](#problemlərin-həlli)
+
 ## İmkanlar
 
 | Bölmə | İmkan |
@@ -30,6 +42,9 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 | 🤖 Telegram botu | Menyu və komandalar vasitəsilə idarəetmə; API-də aktiv olan xidmətlərin siyahısı |
 | 🌐 Dil seçimi | Azərbaycan, ingilis və türk dili üçün menyu dəstəyi |
 | 📱 Mini App | Mobil uyğun şəxsi panel |
+| 📥 TXT endirmə | İstifadəçi üçün öz nömrələri; admin üçün bütün arxiv |
+| 🗃️ Nömrə arxivi | SQLite bazası, təkrarsız nömrələr və yerli TXT nüsxəsi |
+| ☁️ GitHub arxivi | Ayrı gizli depoya avtomatik yükləmə və xəta zamanı təkrar cəhd |
 | 👤 Profil | İstifadəçi məlumatları və statistika |
 | 💰 Balans | AZN balansının göstərilməsi və admin tərəfindən dəyişdirilməsi |
 | 📊 Sifarişlər | Aktiv sifarişlər və tarixçə |
@@ -60,6 +75,18 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 - Xidmətə daxil olduqda ölkələr və uyğun diapazonlar göstərilir. **“RANGE-LƏRƏ BAX (MƏLUMAT)”** bölməsi diapazonları ölkə üzrə nəzərdən keçirmək üçündür; oradan nömrə sifarişi verilmir.
 - Bot API-də yeni xidmət və ya yeni xidmət/ölkə mövcudluğu aşkar etdikdə istifadəçilərə, `NOTIFY_GROUP_ID` qurulubsa həmin qrupa da bildiriş göndərir. Yoxlama təxminən hər 30 saniyədə aparılır. Bot restartından sonrakı ilk yoxlama mövcud vəziyyəti yadda saxlayır və həmin anda olan xidmətləri yeni kimi elan etmir.
 
+### API-dən hansı məlumatlar gəlir?
+
+Aşağıdakı cədvəl hazırkı kodun istifadə etdiyi sorğuları təsvir edir:
+
+| Sorğu | Kodda istifadə olunan məlumat | Arxivə təsiri |
+|---|---|---|
+| `GET /liveaccess` | Xidmətlər və onlara aid diapazonlar | Yeni xidmət/ölkə mövcudluğu aşkarlanır; tam nömrə siyahısı alınmır |
+| `POST /getnum` | `rid` üzrə cavabdakı `full_number` | Alınmış nömrə arxivə yazılır |
+| `GET /success-otp` | Botun SMS/OTP axınında işlənən məlumat | SMS/OTP mətni TXT arxivinə daxil edilmir |
+
+**Yeni xidmət aşkarlananda onun ölkə kodu altındakı bütün nömrələri avtomatik sifariş etmək hazırda tətbiq edilməyib.** Mövcud inteqrasiyada tam nömrə siyahısını qaytaran toplu sorğu müəyyən edilməyib. Diapazon sayı nömrə sayı deyil. Arxiv yalnız botun aldığı nömrələri və mövcud arxivdən bərpa olunan qeydləri əhatə edir.
+
 ## Toplu mesaj necə göndərilir?
 
 1. Admin hesabı ilə botu açın. Birbaşa başlamaq üçün şəxsi çatda `/broadcast` yazın.
@@ -80,6 +107,9 @@ Göndəriş arxa planda işləyir və uzun toplu göndərişi webhook sorğusunu
 | Fayl | Təyinat |
 |---|---|
 | `main.py` | Bot, webhook serveri və Mini App API |
+| `number_archive.py` | SQLite nömrə arxivi, TXT çıxışı və gizli GitHub depo sinxronizasiyası |
+| `test_number_archive.py` | Arxiv, istifadəçi icazələri və GitHub toqquşma testləri |
+| `data_storage.py` | JSON məlumatları üçün saxlama yolları və atomik yazma köməkçisi |
 | `safe_broadcast.py` | Toplu məlumat bildirişi, Telegram limitləri və təkrar cəhdlər |
 | `bot_languages.py` | Dil seçimi və menyu mətnləri |
 | `bot_localization.py` | Mətnlərin lokallaşdırılması və düymə girişlərinin uyğunlaşdırılması |
@@ -93,37 +123,109 @@ Göndəriş arxa planda işləyir və uzun toplu göndərişi webhook sorğusunu
 | `docs/app.js` | Mini App məntiqi və backend ünvanı |
 | `docs/style.css` | Mini App görünüşü |
 
-## Konfiqurasiya
+## TXT arxivi və bot komandaları
 
-### Nömrələri TXT kimi endirmək və GitHub arxivi
+Komandaları botun **şəxsi çatında** istifadə edin:
 
-- **📥 NÖMRƏLƏRİM — TXT** və ya `/numbers_txt`: şəxsi çatda yalnız həmin istifadəçiyə ayrılmış nömrələr.
-- Admin üçün **📥 BÜTÜN NÖMRƏLƏR — TXT** və ya `/all_numbers_txt`: API-dən botun aldığı bütün saxlanmış nömrələr.
-- `/numbers_status`: admin üçün GitHub sinxronizasiya vəziyyəti.
-- Hər sətirdə bir `+nömrə` yazılır; təkrar nömrələr silinir. Faylda SMS, OTP, token, istifadəçi ID-si və profil məlumatı olmur. Böyük endirmələr 2 MB-lıq TXT hissələrinə bölünür.
-- Arxiv `/getnum` cavabındakı `full_number` sahəsini saxlayır; əlavə nömrə sifariş etmir və API-dəki bütün ehtiyatı ayrıca çəkmir. İstifadəçi siyahısı nömrə ona ayrıldıqda yenilənir.
-- İlk açılışda mövcud `datarange.json` qeydləri idxal edilir. Silinmiş köhnə qeydlər avtomatik bərpa edilmir. Tarixçə saxlanılır, buna görə TXT-də müddəti bitmiş nömrələr də ola bilər.
+| Komanda / düymə | Kim istifadə edir? | Nəticə |
+|---|---|---|
+| `/numbers_txt` · **📥 NÖMRƏLƏRİM — TXT** | İstifadəçi | Yalnız özünə ayrılmış nömrələrin tarixçəsi |
+| `/all_numbers_txt` · **📥 BÜTÜN NÖMRƏLƏR — TXT** | Admin | Botun saxladığı bütün nömrələr |
+| `/numbers_status` | Admin | GitHub arxivinin son sinxronizasiya vəziyyəti |
 
-GitHub-a avtomatik yükləmək üçün ayrıca **private** repository yaradın və README ilə başladın. Render **Environment** bölməsində aşağıdakıları təyin edin:
+Ban edilmiş istifadəçilər fayl endirə bilmir. Endirmə zamanı tələb olunan kanal/qrup üzvlüyü də yoxlanır. Qrup çatına TXT faylı göndərilmir.
 
-| Dəyişən | Dəyər |
+### Faylın formatı
+
+- UTF-8 mətn, hər sətirdə bir `+nömrə`.
+- Təkrar nömrələr bir dəfə saxlanılır; nömrələr sıralanır.
+- TXT-də yalnız nömrələr olur; SMS, OTP, token, istifadəçi ID-si və profil məlumatı daxil edilmir.
+- Bot faylları `my_numbers_1.txt` və `all_numbers_1.txt` adları ilə göndərir. Böyük siyahılar təxminən 2 MB-lıq hissələrə bölünür.
+- Arxiv tarixçədir: nömrənin faylda olması onun hazırda aktiv olduğunu göstərmir.
+
+### Saxlama və bərpa
+
+| Fayl | Təyinat |
 |---|---|
-| `NUMBER_ARCHIVE_GITHUB_REPO` | `istifadəçi/gizli-arxiv-deposu` |
-| `NUMBER_ARCHIVE_GITHUB_TOKEN` | Yalnız həmin depoya `Contents: Read and write` icazəsi olan fine-grained token |
-| `NUMBER_ARCHIVE_GITHUB_BRANCH` | İstəyə bağlı; boşdursa deponun standart branch-i |
-| `NUMBER_ARCHIVE_GITHUB_PATH` | Standart: `numbers.txt` |
-| `NUMBER_ARCHIVE_SYNC_SECONDS` | Standart: `60`; minimum `30` saniyə |
-| `DB_FOLDER` | Qalıcı diskin mount yolu, məsələn `/var/data` |
+| `number_archive.sqlite3` | Bütün nömrələr və istifadəçi üzrə ayrılma qeydləri |
+| `numbers.txt` | Yerli tam siyahı; hər sinxronizasiya dövründə yenilənir |
+| `datarange.json` | Bot başlayanda arxivə idxal edilən mövcud qeydlər |
 
-GitHub bağlantısı qurulmasa da botda TXT endirmə işləyir. Gizli repo/token qurulduqda yerli `numbers.txt` snapshot-u hər dövrdə yenilənir və dəyişiklik olduqda GitHub-a yazılır. Açıq depoya nömrə yüklənmir. Mövcud uzaq siyahı yerli siyahı ilə birləşdirilir; yazı toqquşmasında yenidən oxunur və cəhd edilir. Müvəqqəti xətadan sonra növbəti dövrdə təkrar sınanır. Status və server logları xətanı göstərir; tokenlər loglanmır.
+GitHub konfiqurasiyası olmasa da yerli arxiv və botdan TXT endirmə işləyir. Standart dövr 60 saniyədir. Mövcud GitHub siyahısı yerli arxivlə birləşdirilir; məzmun dəyişməyibsə yeni commit yaradılmır. Yazı toqquşmasında uzaq fayl yenidən oxunur, müvəqqəti xətalarda növbəti dövrdə cəhd edilir.
 
-`number_archive.sqlite3` həm bütün nömrələri, həm istifadəçi üzrə ayrılmaları saxlayır. **DB_FOLDER qalıcı diskə bağlı olmalıdır**: GitHub-dakı TXT-dən bütün nömrələr bərpa oluna bilər, amma istifadəçi üzrə tarixçə bərpa edilmir, çünki TXT-də istifadəçi ID-ləri yoxdur. Qalıcı disk olmadan GitHub-a hələ göndərilməmiş nömrələr restart zamanı itə bilər. Sinxronizasiya üçün bir bot instansiyası istifadə edin. GitHub TXT limiti bu tətbiqdə 40 MB-dır; limitə çatdıqda arxivin ayrıca saxlanma strategiyasına keçirilməsi lazımdır.
+**Qalıcı saxlama üçün `DB_FOLDER` həqiqi qalıcı diskə yönəlməlidir.** GitHub TXT nüsxəsindən ümumi nömrə siyahısı bərpa olunur, amma istifadəçi üzrə tarixçə bərpa olunmur. Qalıcı disk yoxdursa hələ GitHub-a göndərilməmiş nömrələr restart zamanı itə bilər. Əvvəl silinmiş və heç bir nüsxəsi qalmamış məlumat bərpa edilmir.
 
-Arxiv testləri (real API, GitHub və Telegram çağırışı etmir):
+Botu bir instansiya ilə işlədin. Bu tətbiq GitHub TXT arxivini 40 MB ilə məhdudlaşdırır; həddə çatdıqda saxlama mexanizmini genişləndirmək lazımdır.
 
-```bash
-python -m unittest test_number_archive -v
+## GitHub arxivini qurmaq
+
+### 1. Gizli depo yaradın
+
+[GitHub → New repository](https://github.com/new) səhifəsini açın:
+
+| Sahə | Nümunə |
+|---|---|
+| Owner | `feridceferli` |
+| Repository name | `numbers-archive` |
+| Visibility | **Private** |
+| Add README | Aktiv |
+
+**Create repository** seçin. Aşağıdakı nümunələr bu adda depo yaratdığınızı fərz edir. Başqa ad seçsəniz konfiqurasiyadakı depo adını dəyişin. Kod arxivi açıq depoya yükləməyə icazə vermir.
+
+### 2. Yazma icazəli token yaradın
+
+[GitHub → Fine-grained token yarat](https://github.com/settings/personal-access-tokens/new) səhifəsini açın:
+
+| Sahə | Dəyər |
+|---|---|
+| Token name | `Numbers Archive Bot` |
+| Resource owner | Arxiv deposunun sahibi |
+| Expiration | Özünüzə uyğun müddət; məsələn, 90 gün |
+| Repository access | **Only select repositories** |
+| Selected repositories | `numbers-archive` |
+| Repository permissions → Contents | **Read and write** |
+
+**Generate token** seçin. Tokeni kopyalayıb yalnız serverin mühit dəyişəninə yerləşdirin. Tokenin müddəti bitəndə Render-də dəyəri yeniləyib deploy edin.
+
+### 3. Render-də dəyişənləri əlavə edin
+
+[Render Dashboard](https://dashboard.render.com/) → botun xidməti → **Environment** → **Add Environment Variable**:
+
+| Dəyişən | Dəyər | Tələb |
+|---|---|---|
+| `NUMBER_ARCHIVE_GITHUB_REPO` | `feridceferli/numbers-archive` | GitHub sinxronizasiyası üçün |
+| `NUMBER_ARCHIVE_GITHUB_TOKEN` | Yaratdığınız token | GitHub sinxronizasiyası üçün |
+| `NUMBER_ARCHIVE_GITHUB_BRANCH` | Boş buraxıla bilər | Boşdursa deponun standart branch-i |
+| `NUMBER_ARCHIVE_GITHUB_PATH` | `numbers.txt` | İstəyə bağlı; standart dəyər |
+| `NUMBER_ARCHIVE_SYNC_SECONDS` | `60` | İstəyə bağlı; minimum 30 saniyə |
+| `DB_FOLDER` | Məsələn, `/var/data` | Bu yola qalıcı disk qoşulmalıdır |
+
+Repo dəyərində URL yox, yalnız `istifadəçi/depo` yazılır. Tokeni dırnaqsız və əlavə boşluqsuz daxil edin. Mövcud bot və API dəyişənlərini saxlayın.
+
+**Save, rebuild, and deploy** seçin. Deploy-un uğurla tamamlandığını və TXT dəstəyini ehtiva edən kod versiyasının yerləşdirildiyini yoxlayın.
+
+### 4. Nəticəni yoxlayın
+
+Admin hesabı ilə botun şəxsi çatında:
+
+```text
+/numbers_status
+/all_numbers_txt
 ```
+
+| Status mətni | Mənası |
+|---|---|
+| `GitHub sinxronizasiyası hələ başlamayıb.` | Arxiv dövrü hələ nəticə verməyib |
+| `Yerli TXT hazırdır; GitHub repo/token konfiqurasiyası yoxdur.` | GitHub dəyişənlərindən biri və ya hər ikisi boşdur |
+| `GitHub arxivi yeniləndi.` | Son dövrdə fayl GitHub-a yazılıb |
+| `GitHub arxivi yenidir.` | Uzaq fayl yoxlanıb, əlavə yazmağa ehtiyac yoxdur |
+| `GitHub sinxronizasiya xətası (...); yenidən sınanacaq.` | Sinxronizasiya alınmayıb; səbəbi aşağıdakı problem cədvəli ilə yoxlayın |
+
+Ən azı bir nömrə saxlanandan və sinxronizasiya tamamlanandan sonra gizli depoda `numbers.txt` görünür. Boş arxiv üçün GitHub-da yeni boş fayl yaradılmır. Status son dövrün nəticəsidir; sonradan alınmış nömrə növbəti dövrdə yüklənə bilər.
+
+Rəsmi təlimatlar: [GitHub tokenləri](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens) · [Render mühit dəyişənləri](https://render.com/docs/configure-environment-variables).
+
+## Konfiqurasiya
 
 Dəyişənləri Render **Environment** bölməsində və ya lokal terminalın mühitində təyin edin. Real token və API açarlarını GitHub-a yükləməyin.
 
@@ -135,7 +237,7 @@ Dəyişənləri Render **Environment** bölməsində və ya lokal terminalın m�
 | `WEBAPP_URL` | Xeyr | Mini App HTTPS ünvanı; standart ünvan `https://feridceferli.github.io/ivasmss/` |
 | `WEBHOOK_URL` | Render-də xeyr | Tam webhook ünvanı, məsələn `https://example.com/webhook` |
 | `RENDER_EXTERNAL_URL` | Render avtomatik verir | `WEBHOOK_URL` yoxdursa bu ünvana `/webhook` əlavə edilir |
-| `DB_FOLDER` | Xeyr | JSON məlumatları üçün qalıcı disk qovluğu, məsələn `/var/data` |
+| `DB_FOLDER` | Xeyr | JSON və SQLite arxivi üçün qovluq; qalıcı disk yolu, məsələn `/var/data` |
 | `PORT` | Xeyr | HTTP portu; standart `8080`, Render öz portunu verir |
 | `NOTIFY_GROUP_ID` | Xeyr | Qrup bildirişləri üçün qrup ID-si |
 | `NOTIFY_BOT_TOKEN` | Xeyr | Qrup bildiriş botu; boşdursa əsas `BOT_TOKEN` istifadə olunur |
@@ -223,7 +325,7 @@ Render-in pulsuz web xidməti **15 dəqiqə giriş trafiki olmayanda dayanır**.
 Davamlı istifadə üçün:
 
 - Boşdayanma səbəbindən yuxuya getməyən ödənişli compute planı istifadə edin.
-- JSON fayllarını qalıcı diskin mount yoluna yazmaq üçün kodu uyğunlaşdırın və ya məlumat bazasına keçin.
+- Qalıcı disk qoşun və mövcud `DB_FOLDER` dəstəyi ilə JSON və SQLite fayllarını həmin diskə yazdırın.
 - Təkcə planı yüksəltmək və ya disk qoşmaq faylları avtomatik qorumur: kod həqiqətən qalıcı saxlama yerinə yazmalıdır. `DB_FOLDER` mühit dəyişənini diskin mount yoluna (məsələn `/var/data`) təyin edin. JSON faylları bu qovluqda saxlanılır. İlk keçiddə hələ mövcud olan yerli JSON faylları yeni qovluğa köçürülür; əvvəl itmiş istifadəçilər avtomatik bərpa edilmir.
 
 Rəsmi məlumat: [Render Free](https://render.com/docs/free) · [Persistent Disks](https://render.com/docs/disks).
@@ -259,15 +361,24 @@ Bu endpoint HTTP serverinin cavab verdiyini göstərir; bütün xarici API-ləri
 **Avtomatik testlər**
 
 ```bash
-python -m unittest test_safe_broadcast test_premium_ui -v
+python -m unittest test_safe_broadcast test_premium_ui test_number_archive -v
 ```
 
-GitHub Actions-da toplu bildiriş və Premium UI üçün ayrıca yoxlamalar mövcuddur. Testlər real istifadəçilərə bildiriş göndərmir.
+GitHub Actions-da toplu bildiriş və Premium UI üçün ayrıca yoxlamalar mövcuddur. Arxiv testləri istifadəçi üzrə giriş məhdudiyyətlərini, təkrarların silinməsini, restartdan sonra saxlanmanı və GitHub yazı toqquşmalarını yoxlayır. Testlər real API-dən nömrə almır, GitHub-a arxiv yükləmir və real istifadəçilərə bildiriş göndərmir.
 
 ## Problemlərin həlli
 
 | Problem | Yoxlanılacaq məqam |
 |---|---|
+| TXT komandası cavab vermir | Son kodun deploy olunması, şəxsi çat, admin icazəsi və ban vəziyyəti |
+| TXT boşdur və ya saxlanmış nömrə yoxdur | Botun həqiqətən nömrə alması; istifadəçi üçün özünə ayrılma qeydi; arxiv diskinin qorunması |
+| Yeni xidmət göründü, amma bütün nömrələr TXT-də yoxdur | Yeni xidmət bildirişi toplu nömrə sifarişini başlatmır; yalnız alınmış nömrələr arxivləşdirilir |
+| GitHub repo/token konfiqurasiyası yoxdur | Hər iki `NUMBER_ARCHIVE_GITHUB_...` əsas dəyişəninin dolu olması və deploy |
+| GitHub xətası `401` | Tokenin düzgünlüyü, müddəti və ləğv edilib-edilməməsi |
+| GitHub xətası `403` və ya `404` | Repo adı, tokenin seçilmiş depoya girişi və `Contents: Read and write` icazəsi; 403 limitlə də bağlı ola bilər |
+| GitHub xətası `ValueError` | Deponun Private olması, TXT yolunun düzgünlüyü, uzaq faylda yalnız nömrələrin olması və 40 MB həddi |
+| GitHub xətası `RuntimeError` | Təkrar yazı toqquşması; eyni arxivə yazan başqa prosesləri yoxlayın |
+| GitHub-da nömrələr var, istifadəçinin TXT-si boşdur | Ümumi TXT istifadəçi ilə nömrə əlaqəsini saxlamır; SQLite və ya mövcud `datarange.json` qeydləri lazımdır |
 | Bot gec cavab verir | Render Free planında xidmətin yuxuya getməsi və deploy vəziyyəti |
 | İstifadəçilər və balanslar yox olub | Yerli JSON fayllarının qalıcı saxlama yerinə yazılıb-yazılmaması |
 | Toplu mesaj hamıya çatmır | `users.json` siyahısı, botun bloklanması və göndəriş nəticə sayğacları |
@@ -295,5 +406,3 @@ Layihə **GNU General Public License v3.0 or later** altında yayımlanır. Ətr
 [Layihə ilə bağlı əlaqə — @xudafis](https://t.me/xudafis)
 
 </div>
-
-
