@@ -1,20 +1,20 @@
 [
   {
     "link": "https://t.me/betrunaz",
-    "label": "📢 @betrunaz",
+    "label": "Aze Sms Panel Otp",
     "username": "betrunaz",
     "style": "primary"
   },
   {
     "link": "https://t.me/+zNOPEh3GpI83ZDli",
-    "label": "📢 Kanal 2",
+    "label": "ZAT sharing group",
     "chat_id": -1003591666709,
     "chat_id_env": "REQUIRED_CHANNEL_2_ID",
     "style": "success"
   },
   {
     "link": "https://t.me/+MCTJqBiqQ1piMjIy",
-    "label": "Kapital Carde",
+    "label": "𝐊𝐚𝐩𝐢𝐭𝐚𝐥 𝐂𝐚𝐫𝐝𝐞𝐫",
     "chat_id": null,
     "chat_id_env": "REQUIRED_CHANNEL_3_ID",
     "style": "primary",
