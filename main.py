@@ -35,7 +35,7 @@ from telegram.ext import (
 from telegram.error import TelegramError
 from aiohttp import web
 from bot_localization import install_azerbaijani_localization, normalize_button_input
-from bot_languages import t, language_keyboard, menu_labels, normalize_language, membership_keyboard
+from bot_languages import t, language_keyboard, menu_labels, normalize_language, membership_keyboard, otp_copy_keyboard
 from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons_enabled,
                         disable_premium_icons, is_premium_emoji_error)
 
@@ -1503,7 +1503,10 @@ async def process_2fa_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"<blockquote>⏳ EXPIRES IN: 30 SECONDS</blockquote>\n"
         f"📅 {now.strftime('%d %B, %Y')} | {now.strftime('%I:%M %p')}"
     )
-    await update.effective_message.reply_text(final_msg, parse_mode="HTML")
+    await update.effective_message.reply_text(
+        final_msg, parse_mode="HTML",
+        reply_markup=otp_copy_keyboard(otp_code, get_user_language(uid)),
+    )
 
 
 # ==================== GET NUMBER — SERVICE SELECTION ====================
@@ -1848,7 +1851,10 @@ async def monitor_loop(app):
                         )
                         
                         try:
-                            await app.bot.send_message(uid, user_msg, parse_mode="HTML")
+                            await app.bot.send_message(
+                                uid, user_msg, parse_mode="HTML",
+                                reply_markup=otp_copy_keyboard(otp_code, get_user_language(uid)),
+                            )
                             miniapp_incoming_sms.setdefault(uid, []).insert(0, {
                                 "service": service_name,
                                 "number": full_number,
@@ -1924,7 +1930,10 @@ async def fake_otp_loop(app):
             )
 
             try:
-                await app.bot.send_message(OTP_GROUP_ID, group_msg, parse_mode="HTML")
+                await app.bot.send_message(
+                    OTP_GROUP_ID, group_msg, parse_mode="HTML",
+                    reply_markup=otp_copy_keyboard(otp_code),
+                )
                 config = load_fake_otp_config()
                 config["sent_count"] = int(config.get("sent_count", 0)) + 1
                 save_fake_otp_config(config)
@@ -2314,7 +2323,8 @@ async def perform_otp_search(update, context, target_num):
                         f"<b>{payment_status}</b>"
                     )
                     await update.effective_message.reply_text(
-                        msg, parse_mode="HTML", reply_markup=main_keyboard(int(uid))
+                        msg, parse_mode="HTML",
+                        reply_markup=otp_copy_keyboard(otp_code, get_user_language(int(uid)))
                     )
         else:
             await status_msg.edit_text("❌ SERVER RETURNED AN ERROR.")

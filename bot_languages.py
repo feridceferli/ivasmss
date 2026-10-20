@@ -1,11 +1,12 @@
 """Per-user Azerbaijani / English / Turkish UI language helpers."""
-from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+from telegram import CopyTextButton, InlineKeyboardButton, InlineKeyboardMarkup
 
 DEFAULT_LANGUAGE = "az"
 SUPPORTED_LANGUAGES = {"az", "en", "tr"}
 
 TEXT = {
     "az": {
+        "copy_code": "📋 Kodu kopyala",
         "choose_language": "🌐 Dili seçin",
         "language_saved": "✅ Dil Azərbaycan dili olaraq seçildi.",
         "membership_required": "🔐 Botdan istifadə etmək üçün aşağıdakı kanal və qruplara qoşulun, sonra «✅ Yoxla» düyməsinə basın.",
@@ -32,6 +33,7 @@ TEXT = {
         "mini_app": "🚀 MİNİ TƏTBİQ",
     },
     "tr": {
+        "copy_code": "📋 Kodu kopyala",
         "choose_language": "🌐 Dil seçin",
         "language_saved": "✅ Dil Türkçe olarak seçildi.",
         "membership_required": "🔐 Botu kullanmak için aşağıdaki kanal ve gruplara katılın, ardından «✅ Kontrol et» düğmesine basın.",
@@ -58,6 +60,7 @@ TEXT = {
         "mini_app": "🚀 MİNİ UYGULAMA",
     },
     "en": {
+        "copy_code": "📋 Copy code",
         "choose_language": "🌐 Choose language",
         "language_saved": "✅ Language set to English.",
         "membership_required": "🔐 Join the channels and groups below to use the bot, then press «✅ Verify».",
@@ -119,3 +122,15 @@ def menu_labels(language):
         "admin", "mini_app",
     )}
 
+
+
+def otp_copy_keyboard(code, language="az"):
+    """Copy only the displayed code; omit unavailable or invalid values."""
+    if code is None:
+        return None
+    code = str(code).strip()
+    if not code or code == "N/A" or len(code) > 256:
+        return None
+    return InlineKeyboardMarkup([[InlineKeyboardButton(
+        t(language, "copy_code"), copy_text=CopyTextButton(text=code),
+    )]])
