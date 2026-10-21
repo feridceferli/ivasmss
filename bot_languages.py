@@ -6,6 +6,10 @@ SUPPORTED_LANGUAGES = {"az", "en", "tr"}
 
 TEXT = {
     "az": {
+        "all_countries": "🌍 Bütün ölkələr",
+        "choose_country": "Ölkə seçin:",
+        "no_countries": "Hazırda heç bir ölkə mövcud deyil.",
+        "countries_back": "🔙 Əsas menyu",
         "copy_code": "📋 Kodu kopyala",
         "choose_language": "🌐 Dili seçin",
         "language_saved": "✅ Dil Azərbaycan dili olaraq seçildi.",
@@ -33,6 +37,10 @@ TEXT = {
         "mini_app": "🚀 MİNİ TƏTBİQ",
     },
     "tr": {
+        "all_countries": "🌍 Tüm ülkeler",
+        "choose_country": "Ülke seçin:",
+        "no_countries": "Şu anda kullanılabilir ülke yok.",
+        "countries_back": "🔙 Ana menü",
         "copy_code": "📋 Kodu kopyala",
         "choose_language": "🌐 Dil seçin",
         "language_saved": "✅ Dil Türkçe olarak seçildi.",
@@ -60,6 +68,10 @@ TEXT = {
         "mini_app": "🚀 MİNİ UYGULAMA",
     },
     "en": {
+        "all_countries": "🌍 All countries",
+        "choose_country": "Choose a country:",
+        "no_countries": "No countries are currently available.",
+        "countries_back": "🔙 Main menu",
         "copy_code": "📋 Copy code",
         "choose_language": "🌐 Choose language",
         "language_saved": "✅ Language set to English.",

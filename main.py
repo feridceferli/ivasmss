@@ -1005,6 +1005,8 @@ def main_keyboard(user_id):
         premium_inline_button("🧩 IVAS SMS WEB PANEL", "ivas_panel",
                               callback_data="menu_ivas_web_panel")
     ])
+    rows.append([InlineKeyboardButton(t(lang, "all_countries"),
+                                      callback_data="menu_all_countries", style="primary")])
     rows += [
         [
             premium_inline_button(labels["get_number"], "get_number",
@@ -1672,6 +1674,54 @@ def _build_countries_keyboard(ranges, service):
         [InlineKeyboardButton("◀️ BACK", callback_data="back_services", style="danger")]
     )
     return InlineKeyboardMarkup(rows)
+
+
+
+def _collect_all_countries(services):
+    """Merge available service ranges into one country entry per calling prefix."""
+    countries = {}
+    for service, ranges in sorted(services.items()):
+        for range_text in ranges or []:
+            rid = re.sub(r"[^0-9]", "", str(range_text))
+            prefix = get_country_prefix_from_number(rid) if rid else ""
+            if not prefix or prefix in countries:
+                continue
+            flag, name = get_country_by_prefix(prefix)
+            countries[prefix] = {
+                "flag": flag, "name": name, "rid": rid, "service": service,
+            }
+    return sorted(countries.values(), key=lambda row: row["name"].casefold())
+
+
+async def show_all_countries(update, context, page=0, refresh=True):
+    uid = update.effective_user.id
+    lang = get_user_language(uid)
+    if refresh or "all_country_rows" not in context.user_data:
+        services = await fetch_services_cached()
+        context.user_data["all_country_rows"] = _collect_all_countries(services or {})
+    countries = context.user_data["all_country_rows"]
+    page_size = 30
+    pages = max(1, (len(countries) + page_size - 1) // page_size)
+    page = max(0, min(page, pages - 1))
+    rows = []
+    for info in countries[page * page_size:(page + 1) * page_size]:
+        rows.append([InlineKeyboardButton(
+            f"{info['flag']} {info['name']}",
+            callback_data=f"menu_all_country_{info['rid']}",
+        )])
+    navigation = []
+    if page:
+        navigation.append(InlineKeyboardButton("◀️", callback_data=f"menu_countries_page_{page - 1}"))
+    if page + 1 < pages:
+        navigation.append(InlineKeyboardButton("▶️", callback_data=f"menu_countries_page_{page + 1}"))
+    if navigation:
+        rows.append(navigation)
+    rows.append([InlineKeyboardButton(t(lang, "countries_back"), callback_data="back_to_main")])
+    text = t(lang, "all_countries") + f" ({len(countries)})\n\n"
+    text += t(lang, "choose_country") if countries else t(lang, "no_countries")
+    if pages > 1:
+        text += f"\n{page + 1}/{pages}"
+    await update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(rows))
 
 
 async def show_app_selection(update, context):
@@ -4385,6 +4435,26 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "menu_admin" and is_admin(uid):
         context.user_data["admin_mode"] = "main"
         await query.message.reply_text("⌬━━━━━━━━━━━━━━━━━━━━⌬\n   WELCOME ADMIN PANEL\n⌬━━━━━━━━━━━━━━━━━━━━⌬", reply_markup=admin_main_keyboard())
+        return
+
+    if data == "menu_all_countries":
+        await show_all_countries(update, context)
+        return
+    if data.startswith("menu_countries_page_"):
+        try:
+            page = int(data.removeprefix("menu_countries_page_"))
+        except ValueError:
+            return
+        await show_all_countries(update, context, page=page, refresh=False)
+        return
+    if data.startswith("menu_all_country_"):
+        rid = data.removeprefix("menu_all_country_")
+        info = next((row for row in context.user_data.get("all_country_rows", [])
+                     if row["rid"] == rid), None)
+        if info is None:
+            await show_all_countries(update, context)
+            return
+        await fast_allocate_number(query, context, rid, info["service"], rid + "XXX")
         return
 
     # SERVICE SELECTION
