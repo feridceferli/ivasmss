@@ -1,6 +1,9 @@
 import asyncio
 from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
+from range_collection import RangeCollector
+
+range_collector = RangeCollector()
 import io
 import re
 import json
@@ -3613,6 +3616,24 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await admin_fake_otp_menu(update, context)
             return
 
+    # Collect number-only TXT results for one custom range.
+    if context.user_data.get("mode") == "custom_range_collect":
+        context.user_data["mode"] = None
+        if is_user_banned(uid):
+            await update.effective_message.reply_text("🚫 Giriş məhdudlaşdırılıb.")
+            return
+        for channel in load_required_channels():
+            joined, _ = await check_user_joined(context.bot, uid, channel)
+            if not joined:
+                await update.effective_message.reply_text(
+                    t(get_user_language(uid), "membership_required"),
+                    parse_mode="HTML",
+                    reply_markup=membership_keyboard(load_required_channels(), get_user_language(uid)),
+                )
+                return
+        await range_collector.start(update, context, text, get_number_from_api, number_archive)
+        return
+
     # CUSTOM RANGE
     if context.user_data.get("mode") == "custom_range":
         context.user_data["mode"] = None
@@ -4327,6 +4348,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text(menu_hint, reply_markup=main_keyboard(uid))
         return
 
+    if data.startswith("range_collect_stop_"):
+        await range_collector.stop(query)
+        return
+
+    if data in ("back_services", "back_to_main") and context.user_data.get("mode") == "custom_range_collect":
+        context.user_data["mode"] = None
+
     if data == "verify_me":
         await verify_user(update, context)
         return
@@ -4500,16 +4528,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # CUSTOM RANGE
-    if data == "custom_range":
-        context.user_data["mode"] = "custom_range"
+    if data in ("custom_range", "custom_range_single"):
+        context.user_data["mode"] = ("custom_range" if data == "custom_range_single" else "custom_range_collect")
         await query.message.edit_text(
-            "⚙️ <b>CUSTOM RANGE</b>\n\n"
+            ("⚙️ <b>CUSTOM RANGE — TƏK NÖMRƏ</b>\n\n" if data == "custom_range_single" else
+             "📥 <b>CUSTOM RANGE — NÖMRƏLƏRİ TOPLA</b>\n"
+             "Maksimum 50 sorğu ilə unikal nömrələr TXT kimi veriləcək.\n\n") +
             '<blockquote>📶 Fərdi diapazonunuzu daxil edin.\n'
             'Nümunə: <code>234XXX</code> və ya <code>26134</code></blockquote>\n\n'
             '<blockquote>⌨️ Aşağıda diapazonu yazıb göndərin:</blockquote>',
             parse_mode="HTML",
             reply_markup=InlineKeyboardMarkup(
                 [
+                    [InlineKeyboardButton("📞 Tək nömrə al", callback_data="custom_range_single")],
                     [
                         InlineKeyboardButton(
                             "◀️ BACK", callback_data="back_services", style="danger"
@@ -5104,6 +5135,7 @@ async def run_combined_server():
     try:
         await asyncio.Event().wait()
     finally:
+        range_collector.stop_all()
         archive_task = app.bot_data.get("number_archive_task")
         if archive_task:
             archive_task.cancel()
