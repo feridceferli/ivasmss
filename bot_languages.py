@@ -6,6 +6,7 @@ SUPPORTED_LANGUAGES = {"az", "en", "tr"}
 
 TEXT = {
     "az": {
+        "choose_range": "Range seçin:",
         "all_countries": "🌍 Bütün ölkələr",
         "choose_country": "Ölkə seçin:",
         "no_countries": "Hazırda heç bir ölkə mövcud deyil.",
@@ -37,6 +38,7 @@ TEXT = {
         "mini_app": "🚀 MİNİ TƏTBİQ",
     },
     "tr": {
+        "choose_range": "Aralık seçin:",
         "all_countries": "🌍 Tüm ülkeler",
         "choose_country": "Ülke seçin:",
         "no_countries": "Şu anda kullanılabilir ülke yok.",
@@ -68,6 +70,7 @@ TEXT = {
         "mini_app": "🚀 MİNİ UYGULAMA",
     },
     "en": {
+        "choose_range": "Choose a range:",
         "all_countries": "🌍 All countries",
         "choose_country": "Choose a country:",
         "no_countries": "No countries are currently available.",

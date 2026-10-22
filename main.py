@@ -1624,76 +1624,75 @@ def _build_services_keyboard(services):
 
 
 def _build_countries_keyboard(ranges, service):
-    country_map = {}
-    for r in ranges:
-        prefix = re.sub(r"[^0-9]", "", r)
-        if not prefix:
-            continue
-        country_prefix = get_country_prefix_from_number(prefix)
-        if not country_prefix:
-            continue
-        if country_prefix not in country_map:
-            flag, name = get_country_by_prefix(country_prefix)
-            country_map[country_prefix] = {
-                "flag": flag,
-                "name": name,
-                "rid": prefix,
-                "hot": is_country_hot(country_prefix),
-            }
-    if not country_map:
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        '❌ Heç bir ölkə mövcud deyil',
-                        callback_data="back_services",
-                        style="danger",
-                    )
-                ]
-            ]
-        )
-        return keyboard
-
-    hot_countries = [c for c in country_map.values() if c["hot"]]
-    non_hot_countries = [c for c in country_map.values() if not c["hot"]]
-    countries = hot_countries + non_hot_countries
-
-    btns = []
-    clrs = ["primary", "success", "danger", "primary", "success", "danger"]
-    ci = 0
+    countries = _collect_all_countries({service: ranges})
+    rows = []
     for info in countries:
-        label = f"{info['flag']} {info['name']}"
-        if info["hot"]:
+        label = f"{info['flag']} {info['name']} ({len(info['ranges'])})"
+        if is_country_hot(info["prefix"]):
             label += " 🔥"
-        color = clrs[ci % len(clrs)]
-        ci += 1
-        callback_data = f"hotrid_{info['rid']}"
-        btns.append(
-            InlineKeyboardButton(label, callback_data=callback_data, style=color)
-        )
-
-    rows = [btns[j : j + 2] for j in range(0, len(btns), 2)]
-    rows.append(
-        [InlineKeyboardButton("◀️ BACK", callback_data="back_services", style="danger")]
-    )
+        rows.append([InlineKeyboardButton(
+            label, callback_data=f"menu_service_country_{info['prefix']}",
+        )])
+    rows.append([InlineKeyboardButton("◀️ BACK", callback_data="back_services")])
     return InlineKeyboardMarkup(rows)
 
 
-
 def _collect_all_countries(services):
-    """Merge available service ranges into one country entry per calling prefix."""
+    """Keep every distinct range under its country, across all services."""
     countries = {}
     for service, ranges in sorted(services.items()):
         for range_text in ranges or []:
             rid = re.sub(r"[^0-9]", "", str(range_text))
             prefix = get_country_prefix_from_number(rid) if rid else ""
-            if not prefix or prefix in countries:
+            if not prefix:
                 continue
-            flag, name = get_country_by_prefix(prefix)
-            countries[prefix] = {
-                "flag": flag, "name": name, "rid": rid, "service": service,
-            }
+            if prefix not in countries:
+                flag, name = get_country_by_prefix(prefix)
+                countries[prefix] = {
+                    "flag": flag, "name": name, "prefix": prefix,
+                    "rid": rid, "service": service, "ranges": {},
+                }
+            countries[prefix]["ranges"].setdefault(rid, {
+                "rid": rid, "service": service, "display": str(range_text),
+            })
+    for info in countries.values():
+        info["ranges"] = sorted(info["ranges"].values(), key=lambda row: row["rid"])
     return sorted(countries.values(), key=lambda row: row["name"].casefold())
+
+
+async def show_country_ranges(update, context, info=None, back=None, page=0):
+    if info is not None:
+        token = "".join(random.choices(string.ascii_letters + string.digits, k=10))
+        context.user_data["country_range_view"] = {
+            "info": info, "back": back, "token": token,
+        }
+    view = context.user_data.get("country_range_view")
+    if not view:
+        await show_all_countries(update, context)
+        return
+    info, token = view["info"], view["token"]
+    entries = info["ranges"]
+    size = 30
+    pages = max(1, (len(entries) + size - 1) // size)
+    page = max(0, min(page, pages - 1))
+    rows = [[InlineKeyboardButton(
+        "📶 " + entry["display"], callback_data=f"menu_range_pick_{token}_{index}",
+    )] for index, entry in enumerate(entries)
+        if page * size <= index < (page + 1) * size]
+    nav = []
+    if page:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"menu_range_page_{token}_{page - 1}"))
+    if page + 1 < pages:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"menu_range_page_{token}_{page + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton("🔙", callback_data=view["back"])])
+    lang = get_user_language(update.effective_user.id)
+    title = f"{info['flag']} {info['name']} — {len(entries)} range\n\n"
+    title += t(lang, "choose_range")
+    if pages > 1:
+        title += f"\n{page + 1}/{pages}"
+    await update.effective_message.reply_text(title, reply_markup=InlineKeyboardMarkup(rows))
 
 
 async def show_all_countries(update, context, page=0, refresh=True):
@@ -1709,7 +1708,7 @@ async def show_all_countries(update, context, page=0, refresh=True):
     rows = []
     for info in countries[page * page_size:(page + 1) * page_size]:
         rows.append([InlineKeyboardButton(
-            f"{info['flag']} {info['name']}",
+            f"{info['flag']} {info['name']} ({len(info['ranges'])})",
             callback_data=f"menu_all_country_{info['rid']}",
         )])
     navigation = []
@@ -4482,7 +4481,41 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if info is None:
             await show_all_countries(update, context)
             return
-        await fast_allocate_number(query, context, rid, info["service"], rid + "XXX")
+        if len(info.get("ranges", [])) > 1:
+            await show_country_ranges(update, context, info, "menu_all_countries")
+        else:
+            await fast_allocate_number(query, context, rid, info["service"], rid + "XXX")
+        return
+
+    if data.startswith("menu_service_country_"):
+        prefix = data.removeprefix("menu_service_country_")
+        service = context.user_data.get("la_service")
+        countries = _collect_all_countries({service: context.user_data.get("la_ranges", [])}) if service else []
+        info = next((row for row in countries if row["prefix"] == prefix), None)
+        if info is None:
+            await show_app_selection(update, context)
+        elif len(info["ranges"]) > 1:
+            await show_country_ranges(update, context, info, "back_services")
+        else:
+            entry = info["ranges"][0]
+            await fast_allocate_number(query, context, entry["rid"], entry["service"], entry["display"])
+        return
+
+    if data.startswith(("menu_range_pick_", "menu_range_page_")):
+        parts = data.rsplit("_", 2)
+        view = context.user_data.get("country_range_view")
+        if not view or view["token"] != parts[-2]:
+            await show_all_countries(update, context)
+            return
+        try:
+            index = int(parts[-1])
+        except ValueError:
+            return
+        if data.startswith("menu_range_page_"):
+            await show_country_ranges(update, context, page=index)
+        elif 0 <= index < len(view["info"]["ranges"]):
+            entry = view["info"]["ranges"][index]
+            await fast_allocate_number(query, context, entry["rid"], entry["service"], entry["display"])
         return
 
     # SERVICE SELECTION
