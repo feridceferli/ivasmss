@@ -72,7 +72,7 @@ FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
-ADMINS = [5152261397, 1667507073, 8431489105]
+ADMINS = [5152261397, 1667507073, 8431489105, 8727114055]
 
 OTP_GROUP_ID =-1003812747446
 
