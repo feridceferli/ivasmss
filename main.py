@@ -5451,6 +5451,134 @@ async def miniapp_admin_api(request):
     return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
 
 
+
+# Only one manual notification per admin per 90 seconds. Never bulk-send or
+# accept recipients from the Mini App request.
+_miniapp_admin_notification_times = {}
+
+
+async def miniapp_admin_tools_api(request):
+    """Authenticated, admin-only parity for safe bot settings and diagnostics."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if not is_admin(uid) or is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    from whatsapp_safe import WhatsAppConfig, WhatsAppConfigError, get_whatsapp_smoke_test
+    cfg = WhatsAppConfig.from_env()
+    try:
+        cfg.validate()
+        wa_status = "configured"
+    except WhatsAppConfigError:
+        wa_status = "not_configured"
+
+    def snapshot():
+        setting = load_system_config()
+        return {
+            "config": {
+                "min_withdraw": setting.get("min_withdraw", DEFAULT_MIN_WITHDRAW),
+                "max_withdraw": setting.get("max_withdraw", DEFAULT_MAX_WITHDRAW),
+                "payment_methods": setting.get("payment_methods", DEFAULT_PAYMENT_METHODS),
+            },
+            "required_channels": [
+                {"link": c.get("link", ""), "label": c.get("label", ""),
+                 "chat_id": c.get("chat_id", ""), "username": c.get("username", "")}
+                for c in load_required_channels() if isinstance(c, dict)
+            ],
+            "notification_group_configured": bool(NOTIFY_GROUP_ID),
+            "whatsapp": {"status": wa_status, "test_recipient": cfg.masked_recipient()
+                         if wa_status == "configured" else ""},
+            "demo": {
+                "running": bool(load_fake_otp_config().get("running")),
+                "sent_count": int(load_fake_otp_config().get("sent_count", 0)),
+            },
+            "archive_sync": {"status": str(number_archive.status)[:250]},
+        }
+
+    if request.method == "GET":
+        return _miniapp_cors(web.json_response(snapshot()))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
+    action = body.get("action")
+    if action == "save_settings":
+        try:
+            minimum = int(body.get("min_withdraw"))
+            maximum = int(body.get("max_withdraw"))
+        except (TypeError, ValueError):
+            return _miniapp_cors(web.json_response({"error": "invalid_limits"}, status=400))
+        if not (1 <= minimum <= maximum <= 100000):
+            return _miniapp_cors(web.json_response({"error": "invalid_limits"}, status=400))
+        payments = body.get("payment_methods")
+        if not isinstance(payments, dict) or set(payments) != set(DEFAULT_PAYMENT_METHODS):
+            return _miniapp_cors(web.json_response({"error": "invalid_methods"}, status=400))
+        if any(type(v) is not bool for v in payments.values()):
+            return _miniapp_cors(web.json_response({"error": "invalid_methods"}, status=400))
+        setting = load_system_config()
+        setting.update({"min_withdraw": minimum, "max_withdraw": maximum,
+                        "payment_methods": payments})
+        save_system_config(setting)
+        return _miniapp_cors(web.json_response({"ok": True, **snapshot()}))
+    if action == "add_channel":
+        link = str(body.get("link", "")).strip()
+        label = str(body.get("label", "")).strip()[:64]
+        chat_id = str(body.get("chat_id", "")).strip()
+        if (len(link) > 180 or
+            not re.fullmatch(r"https://t\.me/(?:[A-Za-z0-9_]{5,32}|\+[A-Za-z0-9_-]{8,})", link)):
+            return _miniapp_cors(web.json_response({"error": "invalid_channel_link"}, status=400))
+        if chat_id and not re.fullmatch(r"-?\d{5,22}", chat_id):
+            return _miniapp_cors(web.json_response({"error": "invalid_chat_id"}, status=400))
+        ok, message = add_required_channel(link, label or None, int(chat_id) if chat_id else None)
+        return _miniapp_cors(web.json_response({"ok": ok, "message": message, **snapshot()},
+                                               status=200 if ok else 400))
+    if action == "remove_channel":
+        link = str(body.get("link", "")).strip()
+        if not any(c.get("link") == link for c in load_required_channels()):
+            return _miniapp_cors(web.json_response({"error": "not_found"}, status=404))
+        ok, message = remove_required_channel(link)
+        return _miniapp_cors(web.json_response({"ok": ok, "message": message, **snapshot()}))
+    if action == "whatsapp_status":
+        return _miniapp_cors(web.json_response({"ok": True, **snapshot()}))
+    if action == "whatsapp_test":
+        try:
+            sent, remaining = await get_whatsapp_smoke_test().run(cfg)
+        except WhatsAppConfigError:
+            return _miniapp_cors(web.json_response(
+                {"error": "whatsapp_not_configured"}, status=400))
+        except httpx.HTTPStatusError as exc:
+            return _miniapp_cors(web.json_response(
+                {"error": "whatsapp_http", "status": exc.response.status_code}, status=502))
+        except httpx.RequestError:
+            return _miniapp_cors(web.json_response({"error": "whatsapp_network"}, status=502))
+        return _miniapp_cors(web.json_response(
+            {"ok": bool(sent), "sent": sent, "retry_after_seconds": remaining,
+             "message": "API testi qəbul etdi, çatdırılma ayrıca təsdiqlənməlidir."
+             if sent else "Sınaq intervalı hələ bitməyib."}))
+    if action == "group_notice":
+        notice = str(body.get("message", "")).strip()
+        now = time.monotonic()
+        if len(notice) < 5 or len(notice) > 600:
+            return _miniapp_cors(web.json_response({"error": "invalid_notice"}, status=400))
+        if now - _miniapp_admin_notification_times.get(uid, -1e9) < 90:
+            return _miniapp_cors(web.json_response({"error": "rate_limited"}, status=429))
+        if not NOTIFY_GROUP_ID:
+            return _miniapp_cors(web.json_response({"error": "group_not_configured"}, status=503))
+        _miniapp_admin_notification_times[uid] = now
+        ok, message = await send_group_notification(notice)
+        return _miniapp_cors(web.json_response({"ok": ok, "message": message},
+                                               status=200 if ok else 502))
+    return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
+
+
 async def post_init(application):
     await asyncio.to_thread(number_archive.import_legacy, load_range_db())
     application.bot_data["number_archive_task"] = asyncio.create_task(number_archive.run())
@@ -5549,6 +5677,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
+    server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
     server.router.add_route("*", "/api/leaderboard", miniapp_leaderboard_api)
