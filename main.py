@@ -4255,6 +4255,28 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"User profile save error: {e}")
 
+    # Count verified /start invite links before membership prompts so joining
+    # required channels and repeating /start never loses the referral credit.
+    if context.args:
+        param = context.args[0]
+        referrer_id = resolve_referrer(param, uid, existing_data.keys(), is_new_user)
+        if referrer_id is not None:
+            try:
+                new_count = get_referral_count(referrer_id) + 1
+                update_referral_count(referrer_id, new_count)
+                await update_db_balance(referrer_id, REFERRAL_PRICE)
+                log_global_activity(referrer_id, "REFERRAL_JOINED", {"referred_user": uid})
+                try:
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎉 Yeni dəvət! Dostunuz bota qoşuldu. Ümumi dəvət: {new_count}",
+                    )
+                except TelegramError:
+                    pass
+            except Exception as exc:
+                print(f"Referral processing error: {type(exc).__name__}")
+
+
     channels = load_required_channels()
     if channels:
         missing = []
@@ -4273,26 +4295,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if args:
         param = args[0]
-        # Deep links use ref_ID, and older numeric invitation links remain valid.
-        # Check referrals BEFORE numeric range requests, otherwise a referral ID
-        # would be mistaken for a phone range and never credited.
-        referrer_id = resolve_referrer(param, uid, existing_data.keys(), is_new_user)
-        if referrer_id is not None:
-            try:
-                new_count = get_referral_count(referrer_id) + 1
-                update_referral_count(referrer_id, new_count)
-                await update_db_balance(referrer_id, REFERRAL_PRICE)
-                log_global_activity(referrer_id, "REFERRAL_JOINED", {"referred_user": uid})
-                try:
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text=f"🎉 Yeni dəvət! Dostunuz bota qoşuldu. Ümumi dəvət: {new_count}",
-                    )
-                except TelegramError:
-                    pass
-            except Exception as exc:
-                print(f"Referral processing error: {type(exc).__name__}")
-        elif not param.startswith("ref_") and is_range_request(param) and not (param.isdigit() and param in existing_data):
+        if not param.startswith("ref_") and is_range_request(param) and not (param.isdigit() and param in existing_data):
             await request_queue.put({
                 "type": "auto_number",
                 "update": update,
@@ -4300,10 +4303,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "range_text": param,
             })
             return
-    if not is_admin(uid) and get_referral_count(uid) < 1:
-        await send_referral_gate_message(update.effective_message, context.bot, uid)
-        return
-
     context.user_data.clear()
     if not get_user_language(uid) or "language" not in load_data(USER_DATA_FILE).get(uid_str, {}):
         await update.effective_message.reply_text(
