@@ -56,7 +56,7 @@
             const az = [...present].sort();
             panel.replaceChildren();
             panel.appendChild(node("p",
-                "API bağlantısı: HTTP 200 · " + services + " xidmət · " +
+                "Mini App kataloq sorğusu: HTTP 200 · " + services + " xidmət · " +
                 az.length + " fərqli +994 range qeyd edilib.",
                 "notice-mini"));
             panel.appendChild(node("p",
