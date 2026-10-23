@@ -41,7 +41,7 @@ assert.equal(vm.runInNewContext(pureFunction + '\nserviceCountryGroups("tg");', 
 
 assert.match(html, /id="service-detail"/, "Service picker must have a real HTML container");
 assert.match(html, /id="country-az-pricing"/);
-assert.match(html, /href="https:\/\/t\.me\/lacin_0041"/);
+assert.match(html, /href="https:\/\/t\.me\/lacin_0411"/);
 assert.match(html, /10 AZN/);
 assert.match(js, /addRangeButton\(listing, "📞 \+" \+ rid \+ " — Nömrə al"/);
 assert.match(js, /body: \{ service, country, range, country_iso: countryIso \}/);
