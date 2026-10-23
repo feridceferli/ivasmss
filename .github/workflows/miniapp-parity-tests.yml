@@ -13,6 +13,8 @@ on:
       - test_miniapp_service_picker.cjs
       - test_miniapp_newest_copy.cjs
       - test_az_provider_diagnostics.cjs
+      - test_world_provider_diagnostics.cjs
+      - docs/world-provider-diagnostics.js
       - docs/az-provider-diagnostics.js
       - world_country_codes.py
       - .github/workflows/miniapp-parity-tests.yml
@@ -28,6 +30,8 @@ on:
       - test_miniapp_service_picker.cjs
       - test_miniapp_newest_copy.cjs
       - test_az_provider_diagnostics.cjs
+      - test_world_provider_diagnostics.cjs
+      - docs/world-provider-diagnostics.js
       - docs/az-provider-diagnostics.js
       - world_country_codes.py
       - .github/workflows/miniapp-parity-tests.yml
@@ -45,9 +49,11 @@ jobs:
         with:
           node-version: "22"
       - name: Check JavaScript syntax
-        run: node --check docs/app.js && node --check docs/az-provider-diagnostics.js
+        run: node --check docs/app.js && node --check docs/az-provider-diagnostics.js && node --check docs/world-provider-diagnostics.js
       - name: Test read-only Azerbaijan range diagnostics
         run: node test_az_provider_diagnostics.cjs
+      - name: Test all-country range and own active-number diagnostics
+        run: node test_world_provider_diagnostics.cjs
       - name: Test service country picker and +994 price display
         run: node test_miniapp_service_picker.cjs
       - name: Test latest number ordering and automatic copy
