@@ -830,6 +830,60 @@ def az_range_allowed(user_id):
 AZ_ACCESS_DENIED = "🔒 Azərbaycan (+994) nömrələri üçün admin təsdiqi lazımdır. /az_request yazın."
 _az_request_times = {}
 
+# Operator/prefix pairs requested by the administrator.
+# 210/211 are subrange selectors, not verified API service identifiers.
+AZ_OPERATOR_PREFIXES = (
+    ("bakcell", "Bakcell", ("99455", "99499")),
+    ("azercell", "Azercell", ("99450", "99451", "99410")),
+    ("nar", "Nar", ("99470", "99477")),
+    ("naxtell", "Naxtell", ("99460",)),
+    ("other", "Digər (+99440)", ("99440",)),
+)
+AZ_RANGE_SUFFIXES = ("210", "211")
+
+
+def az_range_catalog(services=None):
+    """Configured subranges and whether each is explicitly listed by the API."""
+    listed = {
+        re.sub(r"[^0-9]", "", str(raw))
+        for ranges in (services or {}).values()
+        for raw in (ranges or [])
+    }
+    return [
+        {
+            "id": key,
+            "name": name,
+            "prefixes": [
+                {
+                    "prefix": prefix,
+                    "ranges": [
+                        {
+                            "rid": prefix + suffix,
+                            "suffix": suffix,
+                            "listed_in_api": prefix + suffix in listed,
+                        }
+                        for suffix in AZ_RANGE_SUFFIXES
+                    ],
+                }
+                for prefix in prefixes
+            ],
+        }
+        for key, name, prefixes in AZ_OPERATOR_PREFIXES
+    ]
+
+
+def az_catalog_lookup(operator_id=None, prefix=None, rid=None):
+    for key, name, prefixes in AZ_OPERATOR_PREFIXES:
+        if operator_id == key or (prefix is not None and prefix in prefixes):
+            return {"id": key, "name": name, "prefixes": prefixes}
+        if rid is not None and any(
+            rid == item + suffix for item in prefixes for suffix in AZ_RANGE_SUFFIXES
+        ):
+            return {"id": key, "name": name, "prefixes": prefixes}
+    return None
+
+
+
 
 # ==================== WITHDRAW DATA FUNCTIONS ====================
 def load_withdraw_requests():
@@ -1617,12 +1671,12 @@ def _build_services_keyboard(services):
     return InlineKeyboardMarkup(rows)
 
 
-def _build_countries_keyboard(ranges, service):
+def _build_countries_keyboard(ranges, service, uid):
     countries = _collect_all_countries({service: ranges})
     rows = []
     for info in countries:
         label = f"{info['flag']} {info['name']} ({len(info['ranges'])})"
-        if info["prefix"] == "994" and not az_range_allowed(update.effective_user.id):
+        if info["prefix"] == "994" and not az_range_allowed(uid):
             label += " 🔒"
         if is_country_hot(info["prefix"]):
             label += " 🔥"
@@ -1690,6 +1744,66 @@ async def show_country_ranges(update, context, info=None, back=None, page=0):
         title += f"\n{page + 1}/{pages}"
     await update.effective_message.reply_text(title, reply_markup=InlineKeyboardMarkup(rows))
 
+
+
+async def show_az_operator_menu(query, uid):
+    rows = [
+        [InlineKeyboardButton(
+            f"🇦🇿 {name}" + ("" if az_range_allowed(uid) else " 🔒"),
+            callback_data=f"az_operator_{key}",
+        )]
+        for key, name, prefixes in AZ_OPERATOR_PREFIXES
+    ]
+    rows.append([InlineKeyboardButton("🔙 Geri", callback_data="menu_all_countries")])
+    await query.message.reply_text(
+        "🇦🇿 AZƏRBAYCAN OPERATORLARI\n"
+        "Hər prefiks üzrə 210 və 211 alt-range-ləri göstərilir.\n"
+        "Range-in menyuda görünməsi nömrə mövcudluğunu təsdiqləmir.\n"
+        + ("" if az_range_allowed(uid) else "\n" + AZ_ACCESS_DENIED),
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def show_az_prefix_menu(query, operator_id):
+    operator = az_catalog_lookup(operator_id=operator_id)
+    if not operator:
+        await query.message.reply_text("❌ Operator tapılmadı.")
+        return
+    rows = [
+        [InlineKeyboardButton("📱 +" + prefix, callback_data=f"az_prefix_{prefix}")]
+        for prefix in operator["prefixes"]
+    ]
+    rows.append([InlineKeyboardButton("◀️ Operatorlar", callback_data="menu_az_ranges")])
+    await query.message.reply_text(
+        f"🇦🇿 {operator['name']} — prefiks seçin:",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
+
+
+async def show_az_suffix_menu(query, uid, prefix):
+    operator = az_catalog_lookup(prefix=prefix)
+    if not operator:
+        await query.message.reply_text("❌ Prefiks tapılmadı.")
+        return
+    services = await fetch_services_cached()
+    group = next(row for row in az_range_catalog(services) if row["id"] == operator["id"])
+    rows_for_prefix = next(row for row in group["prefixes"] if row["prefix"] == prefix)
+    rows = []
+    for entry in rows_for_prefix["ranges"]:
+        status = "📡 API siyahısında" if entry["listed_in_api"] else "❔ Təsdiqlənməyib"
+        lock = "" if az_range_allowed(uid) else " 🔒"
+        rows.append([InlineKeyboardButton(
+            f"{entry['rid']} · {status}{lock}",
+            callback_data=f"az_pick_{entry['rid']}",
+        )])
+    rows.append([InlineKeyboardButton(
+        "◀️ Prefikslər", callback_data=f"az_operator_{operator['id']}"
+    )])
+    await query.message.reply_text(
+        f"🇦🇿 {operator['name']} / +{prefix}\n"
+        "210 və 211 alt-range-ləri. API siyahısında olması aktiv nömrəyə zəmanət vermir.",
+        reply_markup=InlineKeyboardMarkup(rows),
+    )
 
 async def show_all_countries(update, context, page=0, refresh=True):
     uid = update.effective_user.id
@@ -4491,20 +4605,22 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "menu_az_ranges":
-        services = await fetch_services_cached()
-        info = next((entry for entry in _collect_all_countries(services or {}) if entry["prefix"] == "994"), None)
-        if info is None:
-            await query.message.reply_text("🇦🇿 Hazırda API-də Azərbaycan üçün aktiv range tapılmadı.")
+        await show_az_operator_menu(query, uid)
+        return
+    if data.startswith("az_operator_"):
+        await show_az_prefix_menu(query, data.removeprefix("az_operator_"))
+        return
+    if data.startswith("az_prefix_"):
+        await show_az_suffix_menu(query, uid, data.removeprefix("az_prefix_"))
+        return
+    if data.startswith("az_pick_"):
+        rid = data.removeprefix("az_pick_")
+        if not az_catalog_lookup(rid=rid):
+            await query.message.reply_text("❌ Bu alt-range siyahıda yoxdur.")
         elif not az_range_allowed(uid):
-            # Display availability without allocating numbers.
-            preview = "\\n".join("• " + html.escape(e["display"]) for e in info["ranges"][:12])
-            await query.message.reply_text(
-                f"🇦🇿 <b>Azərbaycan: {len(info['ranges'])} range</b>\\n"
-                f"{preview}\\n\\n{AZ_ACCESS_DENIED}",
-                parse_mode="HTML",
-            )
+            await query.message.reply_text(AZ_ACCESS_DENIED)
         else:
-            await show_country_ranges(update, context, info, "menu_all_countries")
+            await fast_allocate_number(query, context, rid, "AZ", rid + "XXX")
         return
 
     if data == "menu_all_countries":
@@ -4582,7 +4698,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
         context.user_data["la_service"] = service
         context.user_data["la_ranges"] = ranges
-        keyboard = _build_countries_keyboard(ranges, service)
+        keyboard = _build_countries_keyboard(ranges, service, uid)
         await query.message.edit_text(
             f"📡✨ {service.upper()} - AVAILABLE COUNTRIES ✨📡\n\n"
             f"<blockquote>📱 Service: <b>{html.escape(service)}</b></blockquote>\n"
