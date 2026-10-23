@@ -3,17 +3,21 @@ on:
   push:
     paths:
       - 'whatsapp_safe.py'
+      - 'admin_test_tools.py'
       - 'integrate_into_ivasmss.py'
       - 'main.py'
       - 'tests/test_whatsapp_safe.py'
+      - 'tests/test_admin_test_tools.py'
       - 'tests/test_integrate.py'
       - '.github/workflows/whatsapp-safe-tests.yml'
   pull_request:
     paths:
       - 'whatsapp_safe.py'
+      - 'admin_test_tools.py'
       - 'integrate_into_ivasmss.py'
       - 'main.py'
       - 'tests/test_whatsapp_safe.py'
+      - 'tests/test_admin_test_tools.py'
       - 'tests/test_integrate.py'
       - '.github/workflows/whatsapp-safe-tests.yml'
 permissions:
@@ -28,4 +32,4 @@ jobs:
           python-version: '3.11'
       - run: python -m pip install -r requirements.txt
       - run: python -m unittest discover -s tests -v
-      - run: python -m py_compile main.py whatsapp_safe.py integrate_into_ivasmss.py
+      - run: python -m py_compile main.py whatsapp_safe.py admin_test_tools.py integrate_into_ivasmss.py

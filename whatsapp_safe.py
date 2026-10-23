@@ -96,11 +96,19 @@ class WhatsAppSmokeTest:
         return True, 0
 
 
+_SHARED_SMOKE_TEST = WhatsAppSmokeTest()
+
+
+def get_whatsapp_smoke_test():
+    """All admin entrypoints share a single process-wide cooldown."""
+    return _SHARED_SMOKE_TEST
+
+
 def register_whatsapp_handlers(app, is_admin):
     """Register two admin-only Telegram commands on an existing Application."""
     from telegram.ext import CommandHandler
 
-    smoke_test = WhatsAppSmokeTest()
+    smoke_test = get_whatsapp_smoke_test()
 
     async def wa_status(update, context):
         if not update.effective_user or not is_admin(update.effective_user.id):

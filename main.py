@@ -45,6 +45,7 @@ from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons
                         disable_premium_icons, is_premium_emoji_error)
 
 from whatsapp_safe import register_whatsapp_handlers
+from admin_test_tools import register_admin_test_tools
 
 # ==================== CONFIG SECTION ====================
 
@@ -1093,6 +1094,7 @@ def admin_main_keyboard():
         [KeyboardButton("👥 İSTİFADƏÇİ İDARƏETMƏSİ"), KeyboardButton("⚙️ SİSTEM KONFİQURASİYASI")],
         [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR"), KeyboardButton("⚡ FAKE OTP")],
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
+        [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -5194,6 +5196,7 @@ async def post_init(application):
 
 def register_handlers(app):
     register_whatsapp_handlers(app, is_admin)
+    register_admin_test_tools(app, is_admin, admin_main_keyboard)
     # Group -1 executes ahead of normal commands, callbacks and Web App actions.
     app.add_handler(CallbackQueryHandler(referral_gate_handler), group=-1)
     app.add_handler(MessageHandler(filters.ALL, referral_gate_handler), group=-1)

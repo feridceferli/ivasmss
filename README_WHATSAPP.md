@@ -36,3 +36,9 @@ python -m unittest discover -s tests -v
 ```
 
 İnteqrasiya skripti `main.py`-yə yalnız import və iki admin komandasını qeydiyyata alan bir sətr əlavə edir. Mövcud `main.py` faylını `main.py.before_whatsapp_safe.bak` adı ilə ehtiyatlayır. Bir neçə dəfə işə salındıqda eyni dəyişiklikləri təkrarlamır. WhatsApp parametrlərini Render > Environment bölməsində yazın və yenidən deploy edin.
+
+## Admin-only Test Alətləri
+
+İnzibatçı panelində **🧪 TEST ALƏTLƏRİ** düyməsi görünür. Yalnız `main.py`-dəki `ADMINS` siyahısındakı istifadəçilər özəl söhbətdə `/test_tools` və həmin paneldən istifadə edə bilər. Adi istifadəçilərə düymə göstərilmir, icazə server tərəfində ayrıca yoxlanır.
+
+Burada yalnız API konfiqurasiyası barədə təhlükəsiz status, yaxud əvvəlcədən razılaşdırılmış `WA_TEST_RECIPIENT` nömrəsinə tək WhatsApp test mesajı mövcuddur. WhatsApp slash komandası və admin paneli eyni 5 dəqiqəlik məhdudiyyətdən istifadə edir. Kütləvi SMS, qeydiyyat kodu və üçüncü tərəf xidmətlərə sorğu seli yoxdur.
