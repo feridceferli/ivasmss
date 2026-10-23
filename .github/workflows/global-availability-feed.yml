@@ -1,0 +1,29 @@
+name: Global availability feed safety tests
+
+on:
+  push:
+    paths:
+      - main.py
+      - global_availability_feed.py
+      - test_global_availability_feed.py
+      - .github/workflows/global-availability-feed.yml
+  pull_request:
+    paths:
+      - main.py
+      - global_availability_feed.py
+      - test_global_availability_feed.py
+      - .github/workflows/global-availability-feed.yml
+  workflow_dispatch:
+
+jobs:
+  global-feed:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Check Python syntax
+        run: python -m py_compile main.py global_availability_feed.py
+      - name: Verify group digests, privacy, cooldown and deduplication
+        run: python -m unittest -v test_global_availability_feed
