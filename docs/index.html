@@ -246,6 +246,7 @@
             <button class="tab-btn" onclick="switchTab('twofa')">🔐 2FA</button>
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
+            <button class="tab-btn" onclick="switchTab('withdrawals')">💸 Çıxarışlar</button>
             <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
         </div>
 
@@ -376,6 +377,16 @@
             </div>
         </div>
 
+        <div id="tab-withdrawals" class="tab-content">
+            <div class="card">
+                <h4 style="margin:0 0 8px">💸 Çıxarış sorğularım</h4>
+                <p class="notice-mini">Burada mövcud sorğularınızın vəziyyəti görünür. Yeni çıxarış sorğuları və təsdiqlər hələ botun yoxlanılmış maliyyə axınında aparılır.</p>
+                <button class="action-small" onclick="fetchWithdrawals()">🔄 Sorğuları yenilə</button>
+                <div id="withdrawals-list" class="catalog-scroll" style="margin-top:12px"></div>
+                <p class="notice-mini">Yeni sorğu üçün botun şəxsi çatında /menu ilə ehtiyat menyunu açın.</p>
+            </div>
+        </div>
+
         <div id="tab-admin" class="tab-content" hidden>
             <div class="card">
                 <h4 style="margin:0 0 8px">⚙️ Admin idarəetməsi</h4>
@@ -391,6 +402,8 @@
                 <p id="admin-result" class="notice-mini"></p>
                 <button class="action-small" onclick="fetchAdminUsers()">🔄 İstifadəçiləri yenilə</button>
                 <div id="admin-system-status" class="notice-mini" style="margin-top:12px"></div>
+                <h4 style="margin:16px 0 8px">💸 Çıxarış sorğuları (yalnız metadata)</h4>
+                <div id="admin-withdrawals-list" class="catalog-scroll"></div>
                 <div id="admin-users-list" class="catalog-scroll" style="margin-top:12px"></div>
                 <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 8px">⚙️ Sistem konfiqurasiyası</h4>
@@ -442,6 +455,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261023-all-tools"></script>
+    <script src="app.js?v=20261023-final-admin"></script>
 </body>
 </html>
