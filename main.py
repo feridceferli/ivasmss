@@ -12,8 +12,7 @@ import os  # Operating system utilities
 import hmac
 import hashlib
 import time
-from urllib.parse import parse_qsl, quote
-from miniapp_referral import resolve_referrer, build_referral_link
+from urllib.parse import parse_qsl
 import httpx
 import pyotp
 import random
@@ -35,7 +34,6 @@ from telegram.ext import (
     ContextTypes,
     filters,
     CallbackQueryHandler,
-    ApplicationHandlerStop,
 )
 from telegram.error import TelegramError
 from aiohttp import web
@@ -62,7 +60,6 @@ if API_KEY:
 USER_DATA_FILE = data_path("users.json")
 PAID_SMS_FILE = data_path("paid_sms.json")
 STATS_FILE = data_path("user_stats.json")
-REFERRAL_DATA_FILE = data_path("referral_data.json")
 BANNED_USERS_FILE = data_path("banned_users.json")
 WITHDRAW_DATA_FILE = data_path("withdraw_requests.json")
 ACTIVITY_LOGS_FILE = data_path("activity_logs.json")
@@ -96,8 +93,7 @@ WELCOME_MESSAGE = """🇦🇿💎 AZE SMS PANEL 💎🇦🇿
 # ==================== OTP RATE CONFIGURATION ====================
 DEFAULT_OTP_RATE = 0.20
 
-# ==================== REFERRAL / WITHDRAW CONFIGURATION ====================
-REFERRAL_PRICE = 0
+# ==================== WITHDRAW CONFIGURATION ====================
 DEFAULT_MIN_WITHDRAW = 50
 DEFAULT_MAX_WITHDRAW = 10000
 DEFAULT_PAYMENT_METHODS = {
@@ -872,39 +868,6 @@ def unban_user(uid):
     return False
 
 
-# ==================== REFERRAL DATA ====================
-def load_referral_data():
-    if not os.path.exists(REFERRAL_DATA_FILE):
-        with open(REFERRAL_DATA_FILE, "w") as f:
-            json.dump({}, f)
-        return {}
-    try:
-        with open(REFERRAL_DATA_FILE, "r") as f:
-            return json.load(f)
-    except:
-        return {}
-
-
-def save_referral_data(data):
-    with open(REFERRAL_DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
-
-
-def update_referral_count(uid, count):
-    referral_data = load_referral_data()
-    uid_str = str(uid)
-    if uid_str not in referral_data:
-        referral_data[uid_str] = {"referral_count": 0}
-    referral_data[uid_str]["referral_count"] = count
-    save_referral_data(referral_data)
-
-
-def get_referral_count(uid):
-    referral_data = load_referral_data()
-    uid_str = str(uid)
-    return referral_data.get(uid_str, {}).get("referral_count", 0)
-
-
 # ==================== DATA RANGE FILE ====================
 def load_range_db():
     if not os.path.exists(DATA_RANGE_FILE):
@@ -1037,12 +1000,9 @@ def main_keyboard(user_id):
                                   callback_data="menu_profile"),
         ],
         [
-            premium_inline_button(labels["refer"], "refer",
-                                  callback_data="menu_refer"),
             premium_inline_button(labels["leaderboard"], "leaderboard",
                                   callback_data="menu_leaderboard"),
         ],
-        [InlineKeyboardButton("🔄 DƏVƏT STATUSU", callback_data="menu_check_referral")],
         [premium_inline_button(labels["support"], "support",
                                callback_data="menu_support")],
         [
@@ -1232,10 +1192,6 @@ def is_range_request(param):
     return "X" in param.upper() or param.replace("X", "").replace("x", "").isdigit()
 
 
-def is_referral_request(param):
-    return param.isdigit()
-
-
 # ==================== DATABASE ====================
 def load_data(filename=USER_DATA_FILE):
     if not os.path.exists(filename):
@@ -1261,7 +1217,6 @@ def get_user(uid):
             "user_id": uid,
             "balance": 0.0,
             "total_numbers": 0,
-            "referral_count": 0,
             "verified": False,
         }
         save_data(data)
@@ -2400,41 +2355,6 @@ async def perform_otp_search(update, context, target_num):
         await update.effective_message.reply_text(
             "🔙 Returning to Main Menu...", reply_markup=main_keyboard(int(uid))
         )
-
-
-# ==================== REFER AND EARN ====================
-async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if is_user_banned(uid):
-        await update.effective_message.reply_text(
-            "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(uid)
-        )
-        return
-    user_data = get_user(uid)
-    bot_info = await context.bot.get_me()
-    referral_link = build_referral_link(bot_info.username, uid)
-    successful_refers = get_referral_count(uid)
-    total_reward = float(successful_refers) * REFERRAL_PRICE
-    refer_msg = (
-        f"🎁 <b>REFER AND EARN SYSTEM</b> 🎁\n\n"
-        f"<blockquote>🚀 INVITE FRIENDS &amp; EARN {int(REFERRAL_PRICE)} AZN EACH! 💸</blockquote>\n\n"
-        f"<b>🔗 YOUR REFERRAL LINK:</b>\n"
-        f"<blockquote><code>{referral_link}</code></blockquote>\n\n"
-        f"<b>📊 YOUR STATS:</b>\n"
-        f"<blockquote>👥 TOTAL REFERS: {successful_refers}\n"
-        f"💰 TOTAL EARNED: {format_balance(total_reward)} AZN</blockquote>\n\n"
-        f"✨ <b>SHARE LINK &amp; EARN MONEY!</b> ✨"
-    )
-    await update.effective_message.reply_text(
-        refer_msg,
-        parse_mode="HTML",
-        disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 DOSTUNU DƏVƏT ET",
-                                  url="https://t.me/share/url?url=" + quote(referral_link, safe=""))],
-            [InlineKeyboardButton("🔄 DƏVƏT STATUSU", callback_data="menu_check_referral")],
-        ]),
-    )
 
 
 # ==================== WITHDRAW FUNCTIONS ====================
@@ -3716,10 +3636,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if text == "REFER AND EARN":
-        await refer_command(update, context)
-        return
-
     if text == "🔍 SEARCH OTP":
         context.user_data["mode"] = "search_otp"
         await update.effective_message.reply_text(
@@ -4212,16 +4128,6 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.effective_message.reply_text(profile_text, parse_mode="Markdown")
 
 
-async def refer_command_slash(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if is_user_banned(uid):
-        await update.effective_message.reply_text(
-            "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(uid)
-        )
-        return
-    await refer_command(update, context)
-
-
 async def leaderboard_command_slash(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if is_user_banned(uid):
@@ -4259,28 +4165,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     except Exception as e:
         print(f"User profile save error: {e}")
 
-    # Count verified /start invite links before membership prompts so joining
-    # required channels and repeating /start never loses the referral credit.
-    if context.args:
-        param = context.args[0]
-        referrer_id = resolve_referrer(param, uid, existing_data.keys(), is_new_user)
-        if referrer_id is not None:
-            try:
-                new_count = get_referral_count(referrer_id) + 1
-                update_referral_count(referrer_id, new_count)
-                await update_db_balance(referrer_id, REFERRAL_PRICE)
-                log_global_activity(referrer_id, "REFERRAL_JOINED", {"referred_user": uid})
-                try:
-                    await context.bot.send_message(
-                        chat_id=referrer_id,
-                        text=f"🎉 Yeni dəvət! Dostunuz bota qoşuldu. Ümumi dəvət: {new_count}",
-                    )
-                except TelegramError:
-                    pass
-            except Exception as exc:
-                print(f"Referral processing error: {type(exc).__name__}")
-
-
     channels = load_required_channels()
     if channels:
         missing = []
@@ -4299,7 +4183,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if args:
         param = args[0]
-        if not param.startswith("ref_") and is_range_request(param) and not (param.isdigit() and param in existing_data):
+        if is_range_request(param) and not (param.isdigit() and param in existing_data):
             await request_queue.put({
                 "type": "auto_number",
                 "update": update,
@@ -4324,54 +4208,6 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
              "🔹 Aşağıdaki düğmeleri kullanın:" if lang == "tr" else
              "🔹 PLEASE USE THE BUTTONS BELOW:"),
         reply_markup=main_keyboard(uid),
-    )
-
-
-async def referral_gate_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Block gated private actions before the regular handlers run."""
-    user = update.effective_user
-    chat = update.effective_chat
-    if not user or not chat or chat.type != "private":
-        return
-    uid = user.id
-    if is_admin(uid) or get_referral_count(uid) >= 1:
-        return
-
-    if update.callback_query:
-        query = update.callback_query
-        allowed = {"menu_check_referral", "menu_refer", "verify_me",
-                   "lang_az", "lang_en", "lang_tr"}
-        if query.data in allowed:
-            return
-        await query.answer("🔒 Panel üçün 1 dost dəvət edin.", show_alert=True)
-        raise ApplicationHandlerStop()
-
-    message = update.effective_message
-    if not message:
-        return
-    value = (getattr(message, "text", "") or "").strip()
-    # /start must process ref_ID before the invitation requirement is evaluated.
-    if value.startswith(("/start", "/refer", "/help")):
-        return
-    await send_referral_gate_message(message, context.bot, uid)
-    raise ApplicationHandlerStop()
-
-
-async def send_referral_gate_message(message, bot, uid):
-    info = await bot.get_me()
-    link = build_referral_link(info.username, uid)
-    share = "https://t.me/share/url?url=" + quote(link, safe="")
-    await message.reply_text(
-        "🔒 <b>DƏVƏT TƏLƏBİ</b>\n\n"
-        "Botun funksiyalarını açmaq üçün 1 dostunuzu dəvət edin.\n"
-        f"📊 Cari dəvət: {get_referral_count(uid)}/1\n"
-        f"🔗 <code>{html.escape(link)}</code>",
-        parse_mode="HTML",
-        reply_markup=InlineKeyboardMarkup([
-            [InlineKeyboardButton("🔗 Dostunu dəvət et", url=share)],
-            [InlineKeyboardButton("🔄 Vəziyyəti yoxla",
-                                  callback_data="menu_check_referral")],
-        ]),
     )
 
 
@@ -4410,24 +4246,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_admin(uid) and is_user_banned(uid):
         await query.edit_message_text("🚫 YOU ARE BANNED 🚫")
-        return
-
-    if data == "menu_check_referral":
-        count = max(0, int(get_referral_count(uid)))
-        bot_info = await context.bot.get_me()
-        invite_link = build_referral_link(bot_info.username, uid)
-        share_url = "https://t.me/share/url?url=" + quote(invite_link, safe="")
-        state = "✅ Dəvət şərti ödənilib." if count >= 1 else "🔒 Hələ 1 dəvət tamamlanmayıb."
-        await query.message.reply_text(
-            f"👥 <b>DƏVƏT STATUSU</b>\n\n{state}\n\n"
-            f"📊 Dəvət sayı: <b>{count}/1</b>\n"
-            f"🔗 <code>{html.escape(invite_link)}</code>",
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup([
-                [InlineKeyboardButton("🔗 Dostunu dəvət et", url=share_url)],
-                [InlineKeyboardButton("🚀 Mini App", web_app=WebAppInfo(url=WEBAPP_URL))]
-            ]),
-        )
         return
 
     # Enforce required channel/group membership for user-facing actions.
@@ -4511,9 +4329,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🌐 ALL — 📱 {stats['total_numbers']} | 🔑 {stats['total_otps']}</blockquote>"
         )
         await query.message.reply_text(profile_text, parse_mode="HTML", reply_markup=main_keyboard(uid))
-        return
-    if data == "menu_refer":
-        await refer_command(update, context)
         return
     if data == "menu_leaderboard":
         await leaderboard_command(update, context)
@@ -4828,35 +4643,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    if data.startswith("my_ref_"):
-        target_uid = data.replace("my_ref_", "")
-        all_logs = load_data(ACTIVITY_LOGS_FILE)
-        my_referrals = [
-            log
-            for log in all_logs
-            if str(log.get("uid")) == str(target_uid)
-            and log.get("action") == "REFERRAL_JOINED"
-        ]
-        content = f"👥 REFERRAL REPORT — {target_uid}\n━━━━━━━━━━━━\nTOTAL: {len(my_referrals)}\n\n"
-        for i, log in enumerate(my_referrals, 1):
-            try:
-                dt_obj = datetime.fromisoformat(log["timestamp"])
-                ref_id = log.get("details", {}).get("referred_user", "N/A")
-                content += (
-                    f"{i}. ID: {ref_id} | {dt_obj.strftime('%d/%m/%Y %I:%M %p')}\n"
-                )
-            except:
-                continue
-        f = io.BytesIO(content.encode())
-        f.name = f"REF_{target_uid}.txt"
-        await context.bot.send_document(
-            chat_id=uid,
-            document=f,
-            caption="✅ **REFERRAL DATA**",
-            parse_mode="Markdown",
-        )
-        return
-
     if data.startswith("full_logs_"):
         target_uid = data.replace("full_logs_", "")
         stats = get_user_stats(target_uid)
@@ -5026,42 +4812,6 @@ def _miniapp_cors(resp):
     return resp
 
 
-@web.middleware
-async def miniapp_referral_access(request, handler):
-    if (request.path.startswith("/api/")
-            and request.path != "/api/referrals"
-            and request.method != "OPTIONS"):
-        tg_user, _err = _miniapp_auth(request)
-        if tg_user:
-            uid = int(tg_user["id"])
-            if not is_admin(uid) and get_referral_count(uid) < 1:
-                return _miniapp_cors(web.json_response({
-                    "error": "referral_required",
-                    "required": 1,
-                }, status=403))
-    return await handler(request)
-
-
-async def miniapp_referrals_api(request):
-    """Authenticated referral count and share link for the existing Mini App."""
-    if request.method == "OPTIONS":
-        return _miniapp_cors(web.Response(status=204))
-    tg_user, err = _miniapp_auth(request)
-    if not tg_user:
-        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
-    uid = int(tg_user["id"])
-    if is_user_banned(uid):
-        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    username = request.app["bot_username"]
-    count = max(0, int(get_referral_count(uid)))
-    return _miniapp_cors(web.json_response({
-        "invited_count": count,
-        "required": 1,
-        "unlocked": is_admin(uid) or count >= 1,
-        "ref_link": build_referral_link(username, uid),
-    }))
-
-
 async def miniapp_dashboard(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
@@ -5107,7 +4857,6 @@ async def miniapp_dashboard(request):
             "last24h_numbers": stats.get("last24h_numbers", 0),
             "last7d_numbers": stats.get("last7d_numbers", 0),
         },
-        "referrals": {"count": get_referral_count(uid), "reward": REFERRAL_PRICE},
         "support_url": SUPPORT_LINK,
         "orders": orders,
     }))
@@ -5197,9 +4946,6 @@ async def post_init(application):
 def register_handlers(app):
     register_whatsapp_handlers(app, is_admin)
     register_admin_test_tools(app, is_admin, admin_main_keyboard)
-    # Group -1 executes ahead of normal commands, callbacks and Web App actions.
-    app.add_handler(CallbackQueryHandler(referral_gate_handler), group=-1)
-    app.add_handler(MessageHandler(filters.ALL, referral_gate_handler), group=-1)
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
@@ -5209,7 +4955,6 @@ def register_handlers(app):
     app.add_handler(CommandHandler("searchotp", searchotp_command))
     app.add_handler(CommandHandler("balance", balance_command))
     app.add_handler(CommandHandler("profile", profile_command))
-    app.add_handler(CommandHandler("refer", refer_command_slash))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
@@ -5272,10 +5017,9 @@ async def run_combined_server():
             "provider_configured": bool(API_KEY),
         })
 
-    server = web.Application(client_max_size=1024 * 1024, middlewares=[miniapp_referral_access])
+    server = web.Application(client_max_size=1024 * 1024)
     server.router.add_post("/webhook", telegram_webhook)
     server.router.add_route("*", "/api/get-number", miniapp_get_number_api)
-    server.router.add_route("*", "/api/referrals", miniapp_referrals_api)
     server.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
