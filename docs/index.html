@@ -243,6 +243,7 @@
             <button class="tab-btn" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
             <button class="tab-btn" onclick="switchTab('active')">📱 Aktivlər</button>
             <button class="tab-btn" onclick="switchTab('history')">📜 Tarixçə</button>
+            <button class="tab-btn" onclick="switchTab('twofa')">🔐 2FA</button>
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
             <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
@@ -324,6 +325,24 @@
             </div>
         </div>
 
+        <div id="tab-twofa" class="tab-content">
+            <div class="card">
+                <h4 style="margin:0 0 8px">🔐 2FA kod generatoru</h4>
+                <p class="notice-mini">Yalnız öz hesabınızın TOTP açarından istifadə edin. Açar serverə göndərilmir və saxlanmır.</p>
+                <label for="totp-secret" class="notice-mini">Base32 2FA açarı</label>
+                <div class="catalog-tools">
+                    <input class="admin-input" id="totp-secret" type="password" autocomplete="off" spellcheck="false"
+                        autocapitalize="off" placeholder="JBSWY3DPEHPK3PXP">
+                </div>
+                <div class="quick-actions">
+                    <button class="action-small" onclick="createLocal2faCode()">🔑 Kodu yarat</button>
+                    <button class="action-small" onclick="copyLocal2faCode()">📋 Kopyala</button>
+                </div>
+                <p id="totp-output" class="full-phone-number">— — — — — —</p>
+                <p class="notice-mini">TOTP: 6 rəqəm, 30 saniyə. Açar səhifədən ayrıldığınızda saxlanılmır.</p>
+            </div>
+        </div>
+
         <div id="tab-leaderboard" class="tab-content">
             <div class="card">
                 <h4 style="margin:0 0 10px">🏆 Gündəlik liderlər</h4>
@@ -387,6 +406,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261023-miniapp-main"></script>
+    <script src="app.js?v=20261023-miniapp-main2"></script>
 </body>
 </html>
