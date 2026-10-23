@@ -87,6 +87,7 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 - **Azərbaycan** bölməsində Bakcell, Azercell, Nar, Naxtell, Catel və CDMA, 210/211 alt-range-ləri və API-nin elan etdiyi digər range-lər ayrıca göstərilir.
 - **Admin icazəsi**: istifadəçi Mini App-də `/api/az-access` vasitəsilə icazə sorğusu verə bilər; bot adminləri Mini App-in **Admin** bölməsində `/api/admin` vasitəsilə +994 icazəsini verib ləğv edə bilərlər. Səlahiyyət yoxlaması hər dəfə serverdə, Telegram imzalı `initData` ilə edilir.
 - **Dəvət məcburiyyəti yoxdur**. Mini App arxivdəki bütün dünya nömrələrini kütləvi əldə etmir, boş API range-lərini mövcud kimi göstərmir. Mini App yalnız Telegram botundan açıldıqda etibarlı `initData` alır.
+- **Aktivlər → 📋 Kopyala:** Telegram imzalı `initData` ilə təsdiqlənmiş istifadəçiyə yalnız özünə aid və vaxtı bitməmiş aktiv nömrələrin tam `+` formatı göstərilir. Təkrar nömrələr birləşdirilir və kopyalama düyməsi əlavə olunur. Başqa hesaba aid, ləğv edilmiş və demo sifarişlərinin gizlədilmiş məlumatı açılmır.
 - `test_miniapp_parity.py` və `.github/workflows/miniapp-parity-tests.yml` Mini App menyu/API uyğunluğunu, təhlükəsiz yazı çıxışını və sintaksisi yoxlayır.
 
 ## 🌍 Bütün ölkələr — beynəlxalq telefon kodları
