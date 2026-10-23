@@ -139,7 +139,7 @@ function updatePermissionStatus() {
     if (!status || !button) return;
     status.textContent = state.azApproved
         ? "✅ +994 icazəniz var. Qiymət: 10 AZN. API-də nömrə mövcudluğu ayrıca yoxlanır."
-        : "🔒 +994 range qiyməti 10 AZN-dir. Nömrə almaq üçün admin təsdiqi lazımdır. Admin: @lacin_0041.";
+        : "🔒 +994 range qiyməti 10 AZN-dir. Nömrə almaq üçün admin təsdiqi lazımdır. Admin: @lacin_0411.";
     button.hidden = state.azApproved;
 }
 
@@ -162,7 +162,7 @@ function addRangeButton(container, label, options) {
     if (locked) button.title = "10 AZN · +994 üçün admin təsdiqi tələb olunur";
     button.addEventListener("click", () => {
         if (locked) {
-            alertUser("🔒 +994 range qiyməti: 10 AZN. İstifadə üçün admin icazəsi alın: @lacin_0041.");
+            alertUser("🔒 +994 range qiyməti: 10 AZN. İstifadə üçün admin icazəsi alın: @lacin_0411.");
             switchTab("azerbaijan");
             return;
         }
@@ -294,8 +294,8 @@ async function showServiceRanges(service) {
             pricing.appendChild(node("p",
                 "🇦🇿 +994 range qiyməti: 10 AZN. İstifadə üçün admin icazəsi lazımdır. " +
                 "Bu panel avtomatik balans çıxmır.", "az-price-note"));
-            const link = node("a", "💬 Adminlə əlaqə — @lacin_0041", "support-cta");
-            link.href = "https://t.me/lacin_0041";
+            const link = node("a", "💬 Adminlə əlaqə — @lacin_0411", "support-cta");
+            link.href = "https://t.me/lacin_0411";
             link.target = "_blank";
             link.rel = "noopener noreferrer";
             pricing.appendChild(link);
@@ -430,7 +430,7 @@ async function selectService(service, country = null, range = null, countryIso =
     }
     if (String(range).startsWith("994")) {
         if (!state.azApproved) {
-            alertUser("+994 nömrəsi üçün admin icazəsi lazımdır. Qiymət: 10 AZN. Admin: @lacin_0041.");
+            alertUser("+994 nömrəsi üçün admin icazəsi lazımdır. Qiymət: 10 AZN. Admin: @lacin_0411.");
             switchTab("azerbaijan");
             return;
         }
