@@ -49,32 +49,69 @@ async function fetchDashboard() {
     }
 }
 
-// API-dən avtomatik gələn xidmətləri (Facebook, TikTok və s.) oxumaq
+// Show actual provider ranges by service. +994 is visible, but requires approval.
 async function fetchServices() {
+    const container = document.getElementById('services-grid-container');
     try {
-        const res = await fetch(`${API_BASE}/api/services`, { headers: getAuthHeaders() });
-        const data = await res.json();
-        const container = document.getElementById('services-grid-container');
-        
-        if (!data.services || Object.keys(data.services).length === 0) {
-            container.innerHTML = '<p class="hint">Hazırda aktiv xidmət yoxdur.</p>';
+        const response = await fetch(`${API_BASE}/api/services`, { headers: getAuthHeaders() });
+        if (!response.ok) throw new Error("services_unavailable");
+        const data = await response.json();
+        container.replaceChildren();
+        const services = Object.entries(data.services || {});
+        if (!services.length) {
+            container.textContent = 'Hazırda aktiv xidmət yoxdur.';
             return;
         }
-
-        container.innerHTML = Object.keys(data.services).map(svc => `
-            <div class="service-card" onclick="selectService('${svc}')">
-                <span style="font-size: 18px;">📡</span>
-                <div style="font-size: 13px; font-weight: 600; text-transform: uppercase; overflow: hidden; text-overflow: ellipsis;">${svc}</div>
-            </div>
-        `).join('');
-    } catch (e) {
-        document.getElementById('services-grid-container').innerHTML = '<p class="hint">Xidmətləri yükləmək olmadı.</p>';
+        const addService = (service, country, locked) => {
+            const tile = document.createElement('div');
+            tile.className = 'service-card';
+            tile.style.cursor = 'pointer';
+            tile.textContent = country === '994'
+                ? `🇦🇿 ${service.toUpperCase()} — Azərbaycan ${locked ? '🔒' : '✅'}`
+                : `📡 ${service.toUpperCase()}`;
+            tile.addEventListener('click', () => {
+                if (locked) {
+                    tg.showAlert?.('🔒 +994 nömrələrindən istifadə üçün admin icazəsi lazımdır. Bota /az_request yazın.');
+                    return;
+                }
+                selectService(service, country);
+            });
+            container.appendChild(tile);
+        };
+        for (const [service, ranges] of services) {
+            addService(service, null, false);
+            const azPresent = Array.isArray(ranges) && ranges.some(
+                rid => String(rid).replace(/\\D/g, '').startsWith('994')
+            );
+            if (azPresent) addService(service, '994', !data.az_approved);
+        }
+    } catch (error) {
+        container.textContent = 'Xidmətləri yükləmək olmadı.';
     }
 }
 
-// Xidmət seçildikdə bota məlumat göndərmək
-function selectService(serviceName) {
-    tg.sendData(JSON.stringify({ action: "select_service", service: serviceName }));
+// Server allocates only ranges declared by the API and checks +994 permissions.
+async function selectService(serviceName, country = null) {
+    const container = document.getElementById('active-orders-container');
+    switchTab('active');
+    container.textContent = '📡 Nömrə axtarılır...';
+    try {
+        const response = await fetch(`${API_BASE}/api/get-number`, {
+            method: 'POST',
+            headers: getAuthHeaders(),
+            body: JSON.stringify({ service: serviceName, country })
+        });
+        const data = await response.json();
+        if (!response.ok || !data.success) {
+            tg.showAlert?.(data.message || 'Bu xidmət üçün hazırda uyğun nömrə yoxdur.');
+        } else {
+            tg.showAlert?.('✅ Nömrə ayrıldı: ' + data.number);
+        }
+    } catch (error) {
+        tg.showAlert?.('Bağlantı xətası. Yenidən yoxlayın.');
+    }
+    await fetchOrders();
+    await fetchDashboard();
 }
 
 // Aktiv sifarişlər
