@@ -1,0 +1,78 @@
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: var(--tg-theme-bg-color, #18222d);
+    color: var(--tg-theme-text-color, #ffffff);
+    margin: 0;
+    padding: 16px;
+}
+.container {
+    max-width: 480px;
+    margin: 0 auto;
+}
+header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+header h2 {
+    margin: 0 0 5px 0;
+}
+.card {
+    background-color: var(--tg-theme-secondary-bg-color, #232e3c);
+    border-radius: 12px;
+    padding: 16px;
+    margin-bottom: 16px;
+    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+}
+h3 {
+    margin-top: 0;
+    font-size: 16px;
+    color: var(--tg-theme-hint-color, #a8b2bc);
+}
+.ref-box input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid #4a5768;
+    background: #111923;
+    color: #fff;
+    margin: 8px 0;
+    box-sizing: border-box;
+}
+button {
+    background-color: var(--tg-theme-button-color, #2481cc);
+    color: var(--tg-theme-button-text-color, #ffffff);
+    border: none;
+    padding: 10px 16px;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    width: 100%;
+    font-weight: bold;
+}
+button:active {
+    opacity: 0.8;
+}
+.message-item {
+    background: #111923;
+    padding: 10px;
+    border-radius: 8px;
+    margin-bottom: 8px;
+    border-left: 4px solid var(--tg-theme-button-color, #2481cc);
+}
+.message-item p {
+    margin: 4px 0;
+    font-size: 14px;
+}
+.locked-banner {
+    background-color: #d13f3f22;
+    border: 1px solid #d13f3f;
+    padding: 12px;
+    border-radius: 8px;
+    text-align: center;
+    display: none;
+}
+.empty {
+    color: var(--tg-theme-hint-color, #a8b2bc);
+    text-align: center;
+    font-style: italic;
+}
