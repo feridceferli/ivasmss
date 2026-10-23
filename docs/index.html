@@ -211,6 +211,10 @@
         .admin-user-line span { overflow-wrap:anywhere; min-width:0; font-size:12px; }
         .full-phone-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; letter-spacing: .3px; user-select: all; overflow-wrap: anywhere; }
         .copy-phone-button { margin-top: 4px; font-weight: 700; }
+        .az-price-note { font-size:13px; line-height:1.55; padding:10px 12px; background:rgba(245,158,11,.09); border:1px solid rgba(245,158,11,.28); border-radius:10px; margin:10px 0; }
+        .service-filter-row { display:flex; gap:8px; margin:10px 0; flex-wrap:wrap; }
+        .service-filter-row select, .service-filter-row input { background:var(--card-bg); color:var(--text-color); border-radius:9px; border:1px solid rgba(255,255,255,.18); padding:10px; min-width:0; flex:1; }
+        .service-range-list { max-height:360px; overflow-y:auto; }
         .quick-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
         .support-cta { display:block; padding:12px; border-radius:10px; background:rgba(59,130,246,.13);
             margin:12px 0; text-decoration:none; color:var(--text-color); text-align:center; font-weight:700; }
@@ -264,9 +268,15 @@
             </div>
             <div class="card">
                 <h4 style="margin: 0 0 10px 0;">🌍 Mövcud Xidmətlər və Ölkələr</h4>
+                <p class="notice-mini">Xidməti seçin → ölkə kodunu və range-i seçin → həmin range-dən nömrə almağa cəhd edin. Nömrə mövcudluğu API-dən asılıdır.</p>
                 <div class="services-grid" id="services-grid-container">
                     <p class="hint">Xidmətlər yüklənir...</p>
                 </div>
+            </div>
+            <div class="card" id="service-detail" hidden aria-live="polite"></div>
+            <div class="card">
+                <p class="notice-mini">🇦🇿 <strong>+994 Azərbaycan range qiyməti: 10 AZN.</strong> Nömrə almaq üçün admin təsdiqi tələb olunur. Ödəniş Mini App tərəfindən avtomatik tutulmur.</p>
+                <a class="support-cta" href="https://t.me/lacin_0041" target="_blank" rel="noopener noreferrer">💬 +994 üçün adminlə əlaqə — @lacin_0041</a>
             </div>
         </div>
 
@@ -289,6 +299,10 @@
                 <h4 id="country-detail-heading" style="margin:0 0 8px"></h4>
                 <p id="country-detail-hint" class="notice-mini"></p>
                 <div id="country-range-list" class="catalog-scroll"></div>
+                <div id="country-az-pricing" hidden>
+                    <p class="az-price-note">🇦🇿 +994 range qiyməti: <strong>10 AZN</strong>. Nömrə almaq üçün admin icazəsi lazımdır. Mini App balansdan avtomatik çıxmır.</p>
+                    <a class="support-cta" href="https://t.me/lacin_0041" target="_blank" rel="noopener noreferrer">💬 Adminlə əlaqə — @lacin_0041</a>
+                </div>
                 <button class="action-small" onclick="closeCountryDetails()">◀️ Ölkələrə qayıt</button>
             </div>
         </div>
@@ -298,6 +312,8 @@
             <div class="card">
                 <h4 style="margin:0 0 8px">🇦🇿 Azərbaycan operatorları</h4>
                 <p id="permission-status" class="notice-mini">İcazə yoxlanılır...</p>
+                <p class="az-price-note">💰 <strong>Azərbaycan (+994) range qiyməti: 10 AZN</strong> · Ödəniş məlumatı üçün adminlə əlaqə saxlayın; avtomatik balans tutulmur.</p>
+                <a class="support-cta" href="https://t.me/lacin_0041" target="_blank" rel="noopener noreferrer">💬 Adminlə əlaqə — @lacin_0041</a>
                 <button class="btn" id="request-az-access" onclick="requestAzPermission()" hidden>
                     🔒 Admin icazəsi istə
                 </button>
@@ -455,6 +471,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261023-final-admin"></script>
+    <script src="app.js?v=20261023-services-az10"></script>
 </body>
 </html>
