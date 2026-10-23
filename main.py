@@ -44,6 +44,8 @@ from bot_languages import t, language_keyboard, menu_labels, normalize_language,
 from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons_enabled,
                         disable_premium_icons, is_premium_emoji_error)
 
+from whatsapp_safe import register_whatsapp_handlers
+
 # ==================== CONFIG SECTION ====================
 
 BOT_TOKEN = (os.environ.get("BOT_TOKEN") or "").strip()
@@ -5191,6 +5193,7 @@ async def post_init(application):
 
 
 def register_handlers(app):
+    register_whatsapp_handlers(app, is_admin)
     # Group -1 executes ahead of normal commands, callbacks and Web App actions.
     app.add_handler(CallbackQueryHandler(referral_gate_handler), group=-1)
     app.add_handler(MessageHandler(filters.ALL, referral_gate_handler), group=-1)
