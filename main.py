@@ -1007,6 +1007,8 @@ def main_keyboard(user_id):
     ])
     rows.append([InlineKeyboardButton(t(lang, "all_countries"),
                                       callback_data="menu_all_countries", style="primary")])
+    rows.append([InlineKeyboardButton("🇦🇿 Azərbaycan +994" + ("" if az_range_allowed(user_id) else " 🔒"),
+                                      callback_data="menu_az_ranges")])
     rows += [
         [
             premium_inline_button(labels["get_number"], "get_number",
@@ -1619,6 +1621,8 @@ def _build_countries_keyboard(ranges, service):
     rows = []
     for info in countries:
         label = f"{info['flag']} {info['name']} ({len(info['ranges'])})"
+        if info["prefix"] == "994" and not az_range_allowed(update.effective_user.id):
+            label += " 🔒"
         if is_country_hot(info["prefix"]):
             label += " 🔥"
         rows.append([InlineKeyboardButton(
@@ -1698,10 +1702,10 @@ async def show_all_countries(update, context, page=0, refresh=True):
     page = max(0, min(page, pages - 1))
     rows = []
     for info in countries[page * page_size:(page + 1) * page_size]:
-        rows.append([InlineKeyboardButton(
-            f"{info['flag']} {info['name']} ({len(info['ranges'])})",
-            callback_data=f"menu_all_country_{info['rid']}",
-        )])
+        label = f"{info['flag']} {info['name']} ({len(info['ranges'])})"
+        if info["prefix"] == "994" and not az_range_allowed(uid):
+            label += " 🔒"
+        rows.append([InlineKeyboardButton(label, callback_data=f"menu_all_country_{info['rid']}")])
     navigation = []
     if page:
         navigation.append(InlineKeyboardButton("◀️", callback_data=f"menu_countries_page_{page - 1}"))
@@ -2312,6 +2316,9 @@ async def perform_otp_search(update, context, target_num):
         await update.effective_message.reply_text(
             "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(int(uid))
         )
+        return
+    if is_az_range(target_num) and not az_range_allowed(uid):
+        await update.effective_message.reply_text(AZ_ACCESS_DENIED)
         return
     status_msg = await update.effective_message.reply_text("🔍 SEARCHING IN SERVER...")
     try:
@@ -4112,6 +4119,78 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+
+# ==================== AZERBAIJAN RANGE PERMISSIONS ====================
+async def az_access_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    await update.effective_message.reply_text(
+        "🇦🇿 +994 giriş: " + ("✅ Təsdiqlənib" if az_range_allowed(uid) else "🔒 Admin təsdiqi tələb olunur.")
+    )
+
+
+async def az_request_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not update.effective_chat or update.effective_chat.type != "private":
+        return
+    uid = update.effective_user.id
+    if is_user_banned(uid):
+        await update.effective_message.reply_text("🚫 Giriş məhdudlaşdırılıb.")
+        return
+    if az_range_allowed(uid):
+        await update.effective_message.reply_text("✅ +994 nömrələrinə girişiniz var.")
+        return
+    # Only request authorization; never send an SMS or allocate a number.
+    notices = 0
+    for admin_id in ADMINS:
+        try:
+            await context.bot.send_message(
+                chat_id=admin_id,
+                text=f"🇦🇿 +994 icazə sorğusu: Telegram ID {uid}\\n"
+                     f"İcazə: /az_approve {uid}\\nİmtina/ləğv: /az_revoke {uid}",
+            )
+            notices += 1
+        except TelegramError:
+            continue
+    await update.effective_message.reply_text(
+        "📨 İcazə sorğunuz adminə göndərildi." if notices else
+        "⚠️ Adminə çatdırılmadı. Adminlə əlaqə saxlayın."
+    )
+
+
+async def az_approve_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id) or update.effective_chat.type != "private":
+        await update.effective_message.reply_text("⛔ Yalnız admin.")
+        return
+    if len(context.args) != 1 or not context.args[0].isdigit():
+        await update.effective_message.reply_text("İstifadə: /az_approve TELEGRAM_ID")
+        return
+    target = context.args[0]
+    if not user_exists(target):
+        await update.effective_message.reply_text("Bu ID botda qeydiyyatda deyil.")
+        return
+    access = load_data(AZ_ACCESS_FILE)
+    access[target] = True
+    save_data(access, AZ_ACCESS_FILE)
+    await update.effective_message.reply_text(f"✅ +994 icazəsi verildi: {target}")
+    try:
+        await context.bot.send_message(int(target), "✅ Azərbaycan (+994) nömrələrindən istifadə icazəniz təsdiqləndi.")
+    except TelegramError:
+        pass
+
+
+async def az_revoke_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    if not is_admin(update.effective_user.id) or update.effective_chat.type != "private":
+        await update.effective_message.reply_text("⛔ Yalnız admin.")
+        return
+    if len(context.args) != 1 or not context.args[0].isdigit():
+        await update.effective_message.reply_text("İstifadə: /az_revoke TELEGRAM_ID")
+        return
+    target = context.args[0]
+    access = load_data(AZ_ACCESS_FILE)
+    access.pop(target, None)
+    save_data(access, AZ_ACCESS_FILE)
+    await update.effective_message.reply_text(f"🔒 +994 icazəsi ləğv edildi: {target}")
+
+
 # ==================== COMMAND HANDLERS ====================
 async def get1number_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
@@ -4393,6 +4472,23 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await query.message.reply_text("⌬━━━━━━━━━━━━━━━━━━━━⌬\n   WELCOME ADMIN PANEL\n⌬━━━━━━━━━━━━━━━━━━━━⌬", reply_markup=admin_main_keyboard())
         return
 
+    if data == "menu_az_ranges":
+        services = await fetch_services_cached()
+        info = next((entry for entry in _collect_all_countries(services or {}) if entry["prefix"] == "994"), None)
+        if info is None:
+            await query.message.reply_text("🇦🇿 Hazırda API-də Azərbaycan üçün aktiv range tapılmadı.")
+        elif not az_range_allowed(uid):
+            # Display availability without allocating numbers.
+            preview = "\\n".join("• " + html.escape(e["display"]) for e in info["ranges"][:12])
+            await query.message.reply_text(
+                f"🇦🇿 <b>Azərbaycan: {len(info['ranges'])} range</b>\\n"
+                f"{preview}\\n\\n{AZ_ACCESS_DENIED}",
+                parse_mode="HTML",
+            )
+        else:
+            await show_country_ranges(update, context, info, "menu_all_countries")
+        return
+
     if data == "menu_all_countries":
         await show_all_countries(update, context)
         return
@@ -4537,6 +4633,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("Invalid same range data.", show_alert=True)
             return
         rid = parts[2]
+        if is_az_range(rid) and not az_range_allowed(uid):
+            await query.message.reply_text(AZ_ACCESS_DENIED)
+            return
         service = parts[3] if len(parts) > 3 else "CUSTOM"
         try:
             await query.message.edit_reply_markup(reply_markup=None)
@@ -4996,6 +5095,10 @@ def register_handlers(app):
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("az_access", az_access_command))
+    app.add_handler(CommandHandler("az_request", az_request_command))
+    app.add_handler(CommandHandler("az_approve", az_approve_command))
+    app.add_handler(CommandHandler("az_revoke", az_revoke_command))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
     app.add_handler(CommandHandler("get1number", get1number_command))
     app.add_handler(CommandHandler("searchotp", searchotp_command))
