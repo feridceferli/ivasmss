@@ -3,6 +3,7 @@ from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
 from range_collection import RangeCollector
 from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
+from global_availability_feed import publish_global_availability_feed
 
 range_collector = RangeCollector()
 import io
@@ -110,6 +111,9 @@ DEFAULT_PAYMENT_METHODS = {
 SUPPORT_LINK = "https://t.me/betrunaz"
 DEVELOPER_LINK = "https://t.me/betrunaz"
 NOTIFY_GROUP_ID = os.environ.get("NOTIFY_GROUP_ID", "").strip()
+# Keep global status summaries in the existing OTP group unless overridden.
+# The digest excludes OTP codes, SMS content and individual phone numbers.
+GLOBAL_FEED_GROUP_ID = os.environ.get("GLOBAL_FEED_GROUP_ID", "").strip() or str(OTP_GROUP_ID)
 NOTIFY_BOT_TOKEN = os.environ.get("NOTIFY_BOT_TOKEN", "").strip() or BOT_TOKEN
 
 request_queue = asyncio.Queue()
@@ -787,6 +791,17 @@ async def country_availability_loop(app):
             _known_service_countries = current_keys
             _known_service_types = current_services
             _service_country_watch_initialized = True
+            # Public provider range metadata only. Unlike /success-otp, this feed
+            # does not reveal phone numbers or authentication messages.
+            feed_status = await publish_global_availability_feed(
+                services=services,
+                bot=app.bot,
+                group_id=GLOBAL_FEED_GROUP_ID,
+                country_prefix_lookup=get_country_prefix_from_number,
+                country_name_lookup=get_country_by_prefix,
+            )
+            if feed_status in ("sent", "send_failed"):
+                print(f"[global-feed] status={feed_status}", flush=True)
         except Exception as exc:
             print(f"[service-country-watch] {type(exc).__name__}: {exc}")
         await asyncio.sleep(30)
