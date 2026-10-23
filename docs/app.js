@@ -126,6 +126,21 @@ async function fetchIncomingSms() {
 }
 
 
+function setReferralGate(unlocked) {
+    const tabs = document.querySelectorAll('.tab-btn');
+    tabs.forEach((button, index) => {
+        if (index < 3) {
+            button.disabled = !unlocked;
+            button.setAttribute('aria-disabled', String(!unlocked));
+            button.style.opacity = unlocked ? '' : '0.45';
+            button.title = unlocked ? '' : 'Əvvəlcə 1 dostunuzu dəvət edin';
+        }
+    });
+    if (!unlocked && !document.getElementById('tab-referrals').classList.contains('active')) {
+        switchTab('referrals');
+    }
+}
+
 function referralStatusMessage(message, ready = null) {
     const node = document.getElementById('referral-status');
     node.textContent = message;
@@ -140,6 +155,7 @@ async function fetchReferrals() {
         box.hidden = true;
         locked.hidden = true;
         referralStatusMessage('⚠️ Bu bölməni Telegram botunun içindən açın.');
+        setReferralGate(false);
         return;
     }
     referralStatusMessage('Dəvət statusu yenilənir...');
@@ -162,10 +178,13 @@ async function fetchReferrals() {
         document.getElementById('referral-link-input').value = data.ref_link;
         box.hidden = false;
         locked.hidden = unlocked;
+        setReferralGate(unlocked);
+        if (unlocked) { fetchDashboard(); fetchServices(); }
     } catch (err) {
         box.hidden = true;
         locked.hidden = true;
         referralStatusMessage('❌ Dəvət statusunu yükləmək olmadı. Yenidən cəhd edin.');
+        setReferralGate(false);
     }
 }
 
@@ -202,14 +221,17 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('referral-share-btn').addEventListener('click', shareReferralLink);
     document.getElementById('referral-refresh-btn').addEventListener('click', fetchReferrals);
 
-    fetchDashboard();
-    fetchServices();
     fetchReferrals();
     
     // Real-time yenilənmə üçün interval
     setInterval(() => {
-        fetchDashboard();
-        fetchIncomingSms();
-    }, 4000);
+        if (!document.hidden) {
+            fetchReferrals();
+            if (!document.querySelector('.tab-btn:disabled')) {
+                fetchDashboard();
+                fetchIncomingSms();
+            }
+        }
+    }, 30000);
 });
 
