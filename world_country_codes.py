@@ -1269,11 +1269,12 @@ def build_all_country_rows(services):
             match = next((cc for cc in known_codes if rid.startswith(cc)), None)
             if not match:
                 continue
-            seen.setdefault(match, {})[rid] = {
+            seen.setdefault(match, {})[(str(service), rid)] = {
                 "rid": rid, "display": str(raw), "service": str(service),
             }
     for code, group in by_code.items():
-        matches = sorted(seen.get(code, {}).values(), key=lambda row: row["rid"])
+        matches = sorted(seen.get(code, {}).values(),
+                         key=lambda row: (row["rid"], row["service"]))
         for country in group:
             country["ranges"] = matches
     return sorted(countries, key=lambda c: (c["name"].casefold(), c["iso"]))
