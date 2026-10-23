@@ -79,10 +79,12 @@ async function fetchServices() {
             container.appendChild(tile);
         };
         for (const [service, ranges] of services) {
-            addService(service, null, false);
-            const azPresent = Array.isArray(ranges) && ranges.some(
-                rid => String(rid).replace(/\D/g, '').startsWith('994')
-            );
+            const prefixes = Array.isArray(ranges)
+                ? ranges.map(rid => String(rid).replace(/\D/g, ''))
+                : [];
+            const azPresent = prefixes.some(rid => rid.startsWith('994'));
+            const otherPresent = prefixes.some(rid => rid && !rid.startsWith('994'));
+            if (otherPresent) addService(service, null, false);
             if (azPresent) addService(service, '994', !data.az_approved);
         }
     } catch (error) {
