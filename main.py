@@ -5172,6 +5172,105 @@ def _miniapp_cors(resp):
     return resp
 
 
+async def miniapp_profile_api(request):
+    """User-scoped profile, language preference and support contacts."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    if request.method == "POST":
+        try:
+            payload = await request.json()
+            lang = payload.get("language") if isinstance(payload, dict) else None
+        except (ValueError, TypeError):
+            lang = None
+        if lang not in ("az", "en", "tr"):
+            return _miniapp_cors(web.json_response({"error": "invalid_language"}, status=400))
+        db = load_data(USER_DATA_FILE)
+        record = db.get(str(uid), {"user_id": str(uid), "balance": 0.0})
+        record["language"] = lang
+        db[str(uid)] = record
+        save_data(db, USER_DATA_FILE)
+    elif request.method != "GET":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    user = get_user(uid)
+    return _miniapp_cors(web.json_response({
+        "user": {
+            "id": uid, "first_name": tg_user.get("first_name", ""),
+            "last_name": tg_user.get("last_name", ""), "username": tg_user.get("username", ""),
+            "is_admin": is_admin(uid),
+        },
+        "language": get_user_language(uid),
+        "balance": format_balance(user.get("balance", 0)),
+        "stats": get_user_stats(uid),
+        "support_url": SUPPORT_LINK,
+        "developer_url": DEVELOPER_LINK,
+        "az_approved": az_range_allowed(uid),
+    }))
+
+
+async def miniapp_leaderboard_api(request):
+    """Read-only, aggregate number-usage leaderboard; no OTP or phone contents."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    today = get_date_reset_time()
+    stat_map = load_stats()
+    user_map = load_data(USER_DATA_FILE)
+    rows = []
+    for identifier, stats in stat_map.items():
+        if not isinstance(stats, dict):
+            continue
+        try:
+            amount = sum(
+                datetime.fromisoformat(ts) >= today
+                for ts in stats.get("numbers_taken", [])
+                if isinstance(ts, str)
+            )
+        except (ValueError, TypeError):
+            continue
+        if amount <= 0:
+            continue
+        profile = user_map.get(str(identifier), {})
+        name = (str(profile.get("first_name") or profile.get("username") or "İstifadəçi")
+                .strip()[:48])
+        rows.append({"name": name, "count": amount})
+    rows.sort(key=lambda item: item["count"], reverse=True)
+    return _miniapp_cors(web.json_response({"metric": "today_numbers", "leaders": rows[:10]}))
+
+
+async def miniapp_my_numbers_api(request):
+    """Download only the Telegram-authenticated user's own previously taken numbers."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    archive_text = await asyncio.to_thread(number_archive.text, uid)
+    if not archive_text:
+        return _miniapp_cors(web.json_response({"error": "archive_empty", "message": "Saxlanmış nömrə yoxdur."}, status=404))
+    content = archive_text.encode("utf-8")
+    if len(content) > 2_000_000:
+        return _miniapp_cors(web.json_response({"error": "archive_too_large", "message": "Arxiv böyükdür; TXT faylını botdan yükləyin."}, status=413))
+    return _miniapp_cors(web.Response(
+        body=content, content_type="text/plain", charset="utf-8",
+        headers={"Content-Disposition": 'attachment; filename="my_numbers.txt"',
+                 "Cache-Control": "private, no-store"},
+    ))
+
+
 async def miniapp_dashboard(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
@@ -5436,6 +5535,10 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
+    server.router.add_route("*", "/api/profile", miniapp_profile_api)
+    server.router.add_route("*", "/api/leaderboard", miniapp_leaderboard_api)
+    server.router.add_route("GET", "/api/my-numbers", miniapp_my_numbers_api)
+    server.router.add_route("OPTIONS", "/api/my-numbers", miniapp_my_numbers_api)
     server.router.add_route("*", "/api/countries", miniapp_countries_api)
     server.router.add_route("*", "/api/az-access", miniapp_az_access_api)
     server.router.add_route("*", "/api/incoming-sms", miniapp_incoming_sms_api)
