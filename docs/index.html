@@ -322,8 +322,8 @@
                 <div id="az-operators-list"><p class="hint">Operatorlar yüklənir...</p></div>
                 <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 8px">🩺 +994 API range diaqnostikası</h4>
-                    <p class="notice-mini">Bakcell, Azercell, Nar, Naxtell, Catel və CDMA üçün 210/211 range-lərinin API xidmət siyahısında olub-olmadığını yoxlayın. Heç bir SMS və OTP kodu burada oxunmur.</p>
-                    <button id="az-provider-refresh" class="action-small" onclick="refreshAzProviderDiagnostics()">🔄 API range-lərini yoxla</button>
+                    <p class="notice-mini">Bakcell, Azercell, Nar, Naxtell, Catel və CDMA üzrə API-də elan olunan bütün +994 range-lərinə və yalnız özünüzə ayrılmış aktiv nömrələrə baxın. Bu siyahı satışda nömrə ehtiyatını və SMS çatdırılmasını təsdiqləmir; OTP kodları oxunmur.</p>
+                    <button id="az-provider-refresh" class="action-small" onclick="refreshAzProviderDiagnostics()">🔄 Bütün +994 operatorlarını yoxla</button>
                     <div id="az-provider-diagnostics" style="margin-top:10px" role="status" aria-live="polite"></div>
                 </div>
             </div>
@@ -479,6 +479,6 @@
     </div>
 
     <script src="app.js?v=20261023-newest-autocopy"></script>
-    <script src="az-provider-diagnostics.js?v=20261023-check"></script>
+    <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
 </body>
 </html>
