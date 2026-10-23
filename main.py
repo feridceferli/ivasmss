@@ -27,6 +27,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     WebAppInfo,
+    MenuButtonWebApp,
 )
 from telegram.ext import (
     ApplicationBuilder,
@@ -4503,22 +4504,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             })
             return
     context.user_data.clear()
-    if not get_user_language(uid) or "language" not in load_data(USER_DATA_FILE).get(uid_str, {}):
+    lang = get_user_language(uid)
+    if update.effective_chat and update.effective_chat.type == "private" and WEBAPP_URL.startswith("https://"):
+        # Telegram Mini Apps require a user tap. /start cannot open a WebView automatically.
         await update.effective_message.reply_text(
-            "🌐 Dili seçin / Choose language",
-            reply_markup=language_keyboard(),
+            "🇦🇿 <b>AZE SMS PANEL</b>\n\n"
+            "🚀 Bütün əsas xidmətlər Mini App-dədir: dünya ölkələri və range-lər, "
+            "Azərbaycan operatorları, aktiv nömrələr, profil, balans və admin panel.\n\n"
+            "👇 <b>Mini App-i açmaq üçün düyməyə toxunun.</b>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("🚀 MINI APP-İ AÇ", web_app=WebAppInfo(url=WEBAPP_URL))
+            ]]),
         )
         return
-    lang = get_user_language(uid)
     await update.effective_message.reply_text(
-        WELCOME_MESSAGE.replace("💎", premium_html_emoji("💎", "balance"), 1),
-        parse_mode="HTML", reply_markup=ReplyKeyboardRemove(),
-    )
-    await update.effective_message.reply_text(
-        ("🔹 Aşağıdakı düymələrdən istifadə edin:" if lang == "az" else
-             "🔹 Aşağıdaki düğmeleri kullanın:" if lang == "tr" else
-             "🔹 PLEASE USE THE BUTTONS BELOW:"),
+        "📲 Mini App-ə daxil olmaq üçün botun şəxsi çatına keçin.",
         reply_markup=main_keyboard(uid),
+    )
+
+
+async def legacy_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Optional Telegram fallback; the Mini App is the primary entry point."""
+    if not update.effective_user or is_user_banned(update.effective_user.id):
+        return
+    await update.effective_message.reply_text(
+        "⚙️ Telegram botunun ehtiyat menyusu:",
+        reply_markup=main_keyboard(update.effective_user.id),
     )
 
 
@@ -5342,6 +5354,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("menu", legacy_menu_command))
     app.add_handler(CommandHandler("az_access", az_access_command))
     app.add_handler(CommandHandler("az_request", az_request_command))
     app.add_handler(CommandHandler("az_approve", az_approve_command))
@@ -5432,6 +5445,17 @@ async def run_combined_server():
     await app.initialize()
     server["bot_username"] = (await app.bot.get_me()).username
     await app.start()
+    # Open Mini App from the persistent Telegram chat menu for every user.
+    if WEBAPP_URL.startswith("https://"):
+        try:
+            await app.bot.set_chat_menu_button(
+                menu_button=MenuButtonWebApp(
+                    text="🚀 Mini App", web_app=WebAppInfo(url=WEBAPP_URL)
+                )
+            )
+            print("[miniapp] Global chat menu opens Mini App", flush=True)
+        except TelegramError as exc:
+            print(f"[miniapp] Could not configure chat menu: {type(exc).__name__}", flush=True)
     await post_init(app)
     polling_started = False
     try:
