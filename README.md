@@ -62,12 +62,22 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 
 - **Ana səhifə:** balans, aktiv sifariş sayı, bugünkü və ümumi statistika, sürətli bölmə keçidləri.
 - **Sifarişlər:** hesabın aktiv sifarişlərinə baxış; ayrıca Sandbox bölməsində sınaq sifarişi yaratmaq, ləğv etmək və nümunə SMS-ə baxmaq.
-- **Profil:** Telegram hesabı, balans, son 24 saat və 7 gün üzrə statistika, dəvət sayı və mükafat məlumatı.
+- **Profil:** Telegram hesabı, balans, son 24 saat və 7 gün üzrə statistika. Dəvət sistemi və 1 nəfər dəvət şərti ləğv edilib.
 - **Admin:** yalnız icazəli adminlər üçün istifadəçi siyahısı, banı idarə etmək və balansı dəyişmək.
 - **Yeniləmə və dəstək:** panel məlumatları əl ilə yenilənir, açıq olduqda təxminən hər 30 saniyədə avtomatik yenilənir; dəstək linki paneldən açılır.
 
 > [!NOTE]
 > Mini App-dəki “Test sifarişi” və “Test SMS” Sandbox nümunələridir; onlar real nömrə ayırmır və real OTP/SMS məzmunu təqdim etmir. Sandbox sifarişləri yaddaşda saxlanılır və server restartı/deploy zamanı sıfırlana bilər. Sifariş və admin dəyişiklikləri üçün API CORS `GET, POST, OPTIONS` metodlarına icazə verir.
+
+## 🇦🇿 Azərbaycan nömrələrinə admin icazəsi
+
+- Azərbaycan (+994) range-ləri yalnız provayderin mövcud xidmət/range siyahısında varsa göstərilir. Kod süni +994 nömrəsi yaratmır.
+- Botun əsas menyusunda **🇦🇿 Azərbaycan +994** bölməsi var. İcazəsi olmayan istifadəçi mövcud range-ləri görə bilir, amma nömrə ayıra bilmir.
+- İstifadəçi botun şəxsi çatında `/az_request` göndərərək icazə istəyir və `/az_access` ilə statusu yoxlayır.
+- Admin botun şəxsi çatında `/az_approve 123456789` ilə həmin ID-yə icazə verir, `/az_revoke 123456789` ilə ləğv edir.
+- Telegram botu və Mini App hər ikisi serverdə icazə yoxlayır; Mini App yalnız API-də olan range-lərdən istifadə edir.
+- İcazələr `DB_FOLDER/az_range_permissions.json` faylında saxlanır. Render-də qalıcı disk yoxdursa, redeploy və restart zamanı təsdiqlər itə bilər. Qalıcı disk və ya davamlı məlumat bazası tələb olunur.
+- Dəvət/referral sistemi söndürülüb. İstifadəçi girişində bir dost dəvət etmək şərti yoxdur.
 
 ## Xidmətlər və mövcudluq bildirişləri
 
