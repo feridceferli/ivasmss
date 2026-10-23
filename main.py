@@ -5172,6 +5172,47 @@ def _miniapp_cors(resp):
     return resp
 
 
+async def miniapp_withdrawals_api(request):
+    """Read-only withdrawal status for the owner; admin sees request metadata.
+
+    No payout instructions, payment numbers or arbitrary account lookups are
+    exposed in the Mini App. Approval and financial reconciliation remain
+    with the existing reviewed Telegram admin workflow.
+    """
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    if request.method != "GET":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    scope = str(request.query.get("scope", "mine"))
+    if scope not in ("mine", "admin"):
+        return _miniapp_cors(web.json_response({"error": "invalid_scope"}, status=400))
+    if scope == "admin" and not is_admin(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    records = load_withdraw_requests()
+    values = []
+    for request_id, record in records.items():
+        if not isinstance(record, dict):
+            continue
+        if scope == "mine" and str(record.get("user_id")) != str(uid):
+            continue
+        values.append({
+            "id": str(request_id)[:30],
+            "user_id": str(record.get("user_id", "")) if scope == "admin" else "",
+            "method": str(record.get("method", ""))[:32],
+            "amount": format_balance(record.get("amount", 0)),
+            "status": str(record.get("status", "pending"))[:32],
+            "time": str(record.get("timestamp", ""))[:32],
+        })
+    values.sort(key=lambda item: item["time"], reverse=True)
+    return _miniapp_cors(web.json_response({"withdrawals": values[:100], "scope": scope}))
+
+
 async def miniapp_profile_api(request):
     """User-scoped profile, language preference and support contacts."""
     if request.method == "OPTIONS":
@@ -5680,6 +5721,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
+    server.router.add_route("*", "/api/withdrawals", miniapp_withdrawals_api)
     server.router.add_route("*", "/api/leaderboard", miniapp_leaderboard_api)
     server.router.add_route("GET", "/api/my-numbers", miniapp_my_numbers_api)
     server.router.add_route("OPTIONS", "/api/my-numbers", miniapp_my_numbers_api)
