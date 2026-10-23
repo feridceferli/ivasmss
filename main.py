@@ -5394,7 +5394,14 @@ async def miniapp_admin_api(request):
         for user_id,data in list(users.items())[-100:]:
             rows.append({"id":user_id,"name":data.get("full_name") or data.get("username") or "İstifadəçi","balance":format_balance(data.get("balance",0)),"banned":is_user_banned(user_id),"az_approved":az_range_allowed(user_id)})
         cfg=load_system_config()
-        return _miniapp_cors(web.json_response({"user_count":len(users),"users":rows,"config":{"min_withdraw":cfg.get("min_withdraw"),"max_withdraw":cfg.get("max_withdraw"),"payment_methods":cfg.get("payment_methods",{})}}))
+        return _miniapp_cors(web.json_response({
+            "user_count": len(users), "users": rows,
+            "config": {"min_withdraw": cfg.get("min_withdraw"),
+                       "max_withdraw": cfg.get("max_withdraw"),
+                       "payment_methods": cfg.get("payment_methods", {})},
+            "monitor": {key: monitor_diagnostics.get(key) for key in
+                        ("state", "last_check", "last_success", "http_status", "upstream_code", "items_seen", "last_error")},
+        }))
     try:
         body = await request.json()
         if not isinstance(body, dict):
@@ -5425,14 +5432,22 @@ async def miniapp_admin_api(request):
         return _miniapp_cors(web.json_response({
             "ok": True, "user_id": target, "approved": action == "az_approve",
         }))
-    if action in ("ban","unban") and target:
-        (ban_user if action=="ban" else unban_user)(target)
-        return _miniapp_cors(web.json_response({"ok":True}))
-    if action=="balance" and target:
-        try: amount=float(body.get("amount",0))
-        except: return _miniapp_cors(web.json_response({"error":"invalid_amount"},status=400))
-        new_balance=await update_db_balance(target,amount)
-        return _miniapp_cors(web.json_response({"ok":True,"balance":format_balance(new_balance)}))
+    if action in ("ban", "unban", "balance"):
+        if not target.isdecimal() or len(target) > 20 or not user_exists(target):
+            return _miniapp_cors(web.json_response({"error": "invalid_user_id"}, status=400))
+        if action in ("ban", "unban"):
+            if is_admin(int(target)):
+                return _miniapp_cors(web.json_response({"error": "admin_target_forbidden"}, status=403))
+            (ban_user if action == "ban" else unban_user)(target)
+            return _miniapp_cors(web.json_response({"ok": True}))
+        try:
+            amount = float(body.get("amount"))
+        except (TypeError, ValueError):
+            return _miniapp_cors(web.json_response({"error": "invalid_amount"}, status=400))
+        if not (-10000 <= amount <= 10000) or amount == 0:
+            return _miniapp_cors(web.json_response({"error": "invalid_amount"}, status=400))
+        new_balance = await update_db_balance(target, amount)
+        return _miniapp_cors(web.json_response({"ok": True, "balance": format_balance(new_balance)}))
     return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
 
 
