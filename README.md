@@ -71,11 +71,12 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 
 ## 🇦🇿 Azərbaycan nömrələrinə admin icazəsi
 
-- Azərbaycan (+994) range-ləri yalnız provayderin mövcud xidmət/range siyahısında varsa göstərilir. Kod süni +994 nömrəsi yaratmır.
+- Azərbaycan (+994) kataloqunda **Bakcell** (99455, 99499), **Azercell** (99450, 99451, 99410), **Nar** (99470, 99477), **Naxtell** (99460), **Catel** (99440) və **CDMA** (99444) var. Hər prefiks üçün 210/211 alt-range-ləri görünür; bunların mövcudluğu əvvəlcədən təsdiqlənmir.
+- Provayderin `/liveaccess` xidmət/range siyahısından gələn **digər uyğun +994 range prefiksləri** də operatorlara görə dinamik əlavə edilir. Tam telefon nömrələri kataloqa yığılmır, bütün nömrələrin avtomatik toplanması edilmir. API siyahısında göstərilən range-dən nömrə alınacağına zəmanət yoxdur.
 - Botun əsas menyusunda **🇦🇿 Azərbaycan +994** bölməsi var. İcazəsi olmayan istifadəçi mövcud range-ləri görə bilir, amma nömrə ayıra bilmir.
 - İstifadəçi botun şəxsi çatında `/az_request` göndərərək icazə istəyir və `/az_access` ilə statusu yoxlayır.
 - Admin botun şəxsi çatında `/az_approve 123456789` ilə həmin ID-yə icazə verir, `/az_revoke 123456789` ilə ləğv edir.
-- Telegram botu və Mini App hər ikisi serverdə icazə yoxlayır; Mini App yalnız API-də olan range-lərdən istifadə edir.
+- Telegram botu və Mini App serverdə admin təsdiqini yoxlayır. Konfiqurasiya olunmuş 210/211 seçimləri API-də görünməsə də sınaq üçün seçilə bilər; digər range-lər yalnız cari API siyahısında varsa seçilə bilər. Nömrə alma bir sorğudur və uğuru provayder cavabından asılıdır.
 - İcazələr `DB_FOLDER/az_range_permissions.json` faylında saxlanır. Render-də qalıcı disk yoxdursa, redeploy və restart zamanı təsdiqlər itə bilər. Qalıcı disk və ya davamlı məlumat bazası tələb olunur.
 - Dəvət/referral sistemi söndürülüb. İstifadəçi girişində bir dost dəvət etmək şərti yoxdur.
 
