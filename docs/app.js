@@ -82,10 +82,57 @@ async function fetchServices() {
             const prefixes = Array.isArray(ranges)
                 ? ranges.map(rid => String(rid).replace(/\D/g, ''))
                 : [];
-            const azPresent = prefixes.some(rid => rid.startsWith('994'));
-            const otherPresent = prefixes.some(rid => rid && !rid.startsWith('994'));
-            if (otherPresent) addService(service, null, false);
-            if (azPresent) addService(service, '994', !data.az_approved);
+            if (prefixes.some(rid => rid && !rid.startsWith('994'))) {
+                addService(service, null, false);
+            }
+        }
+
+        // Fixed operator order; two clearly labelled subranges per prefix.
+        for (const operator of (data.az_catalog || [])) {
+            const heading = document.createElement('div');
+            heading.style.gridColumn = '1 / -1';
+            heading.style.marginTop = '12px';
+            heading.style.fontWeight = '700';
+            heading.textContent = '🇦🇿 ' + operator.name;
+            container.appendChild(heading);
+
+            for (const prefix of (operator.prefixes || [])) {
+                const tile = document.createElement('div');
+                tile.className = 'service-card';
+                tile.style.display = 'block';
+                tile.style.cursor = 'default';
+                const label = document.createElement('div');
+                label.style.fontWeight = '700';
+                label.style.marginBottom = '8px';
+                label.textContent = '+' + prefix.prefix;
+                tile.appendChild(label);
+
+                for (const item of (prefix.ranges || [])) {
+                    const button = document.createElement('button');
+                    button.type = 'button';
+                    button.style.display = 'block';
+                    button.style.width = '100%';
+                    button.style.marginTop = '6px';
+                    button.style.padding = '8px';
+                    button.style.borderRadius = '8px';
+                    button.style.border = '1px solid #ffffff33';
+                    button.style.color = 'var(--text-color)';
+                    button.style.background = 'var(--card-bg)';
+                    button.textContent = item.rid + (data.az_approved ? '' : ' 🔒');
+                    button.title = item.listed_in_api
+                        ? 'API siyahısında qeyd olunub; nömrə mövcudluğu zəmanətli deyil'
+                        : 'API siyahısında təsdiqlənməyib';
+                    button.addEventListener('click', () => {
+                        if (!data.az_approved) {
+                            tg.showAlert?.('🔒 +994 üçün admin təsdiqi lazımdır: /az_request');
+                            return;
+                        }
+                        selectService('az', '994', item.rid);
+                    });
+                    tile.appendChild(button);
+                }
+                container.appendChild(tile);
+            }
         }
     } catch (error) {
         container.textContent = 'Xidmətləri yükləmək olmadı.';
@@ -93,7 +140,7 @@ async function fetchServices() {
 }
 
 // Server allocates only ranges declared by the API and checks +994 permissions.
-async function selectService(serviceName, country = null) {
+async function selectService(serviceName, country = null, range = null) {
     const container = document.getElementById('active-orders-container');
     switchTab('active');
     container.textContent = '📡 Nömrə axtarılır...';
@@ -101,7 +148,7 @@ async function selectService(serviceName, country = null) {
         const response = await fetch(`${API_BASE}/api/get-number`, {
             method: 'POST',
             headers: getAuthHeaders(),
-            body: JSON.stringify({ service: serviceName, country })
+            body: JSON.stringify({ service: serviceName, country, range })
         });
         const data = await response.json();
         if (!response.ok || !data.success) {
