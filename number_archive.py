@@ -14,6 +14,21 @@ import httpx
 
 log = logging.getLogger(__name__)
 
+class ArchiveGitHubError(RuntimeError):
+    """A GitHub API failure identified without exposing credentials or data."""
+
+    def __init__(self, stage, status):
+        self.stage = stage
+        self.http_status = status
+        super().__init__(f"GitHub {stage} HTTP {status}")
+
+
+def checked_github_response(response, stage):
+    if response.status_code in (401, 403, 404):
+        raise ArchiveGitHubError(stage, response.status_code)
+    response.raise_for_status()
+
+
 
 def normalize_phone(value):
     # Accept phone formatting only, never arbitrary API/SMS content.
@@ -119,7 +134,7 @@ class NumberArchive:
                 raise ValueError("Invalid archive TXT path")
             root = "https://api.github.com/repos/" + repository
             repo = await client.get(root)
-            repo.raise_for_status()
+            checked_github_response(repo, "repository")
             metadata = repo.json()
             if metadata.get("private") is not True:
                 raise ValueError("Number archive destination must be a private repository")
@@ -130,7 +145,7 @@ class NumberArchive:
                 sha = None
                 remote = ""
                 if response.status_code != 404:
-                    response.raise_for_status()
+                    checked_github_response(response, "read_file")
                     entry = response.json()
                     if not isinstance(entry, dict) or entry.get("type") != "file":
                         raise ValueError("Archive destination is not a regular file")
@@ -139,7 +154,7 @@ class NumberArchive:
                         raise ValueError("Archive exceeds 40 MB; storage migration required")
                     if entry.get("encoding") != "base64":
                         blob = await client.get(root + "/git/blobs/" + quote(sha, safe=""))
-                        blob.raise_for_status()
+                        checked_github_response(blob, "read_blob")
                         entry = blob.json()
                     if entry.get("encoding") != "base64":
                         raise ValueError("Unsupported GitHub content encoding")
@@ -160,7 +175,7 @@ class NumberArchive:
                 if result.status_code in (409, 422):
                     # Refetch and merge so another writer's additions are retained.
                     continue
-                result.raise_for_status()
+                checked_github_response(result, "write_file")
                 self.status = "GitHub arxivi yeniləndi."
                 return
             raise RuntimeError("GitHub archive conflict; will retry next cycle")
@@ -190,7 +205,9 @@ class NumberArchive:
                     raise
                 except Exception as exc:
                     # Do not log tokens, phone numbers, URLs or upstream response bodies.
-                    code = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else type(exc).__name__
+                    code = (f"{exc.stage}: HTTP {exc.http_status}" if isinstance(exc, ArchiveGitHubError)
+                            else exc.response.status_code if isinstance(exc, httpx.HTTPStatusError)
+                            else type(exc).__name__)
                     self.status = f"GitHub sinxronizasiya xətası ({code}); yenidən sınanacaq."
                     log.warning("Number archive sync failed (%s); will retry", code)
                 await asyncio.sleep(interval)
