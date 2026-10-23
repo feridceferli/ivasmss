@@ -13,21 +13,18 @@ function getAuthHeaders() {
 
 // Tab dəyişdirmə məntiqi
 function switchTab(tabName) {
+    const tabs = ['services', 'active', 'history', 'referrals'];
+    const index = tabs.indexOf(tabName);
+    if (index < 0) return;
     document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(el => el.classList.remove('active'));
-    
-    if (tabName === 'services') {
-        document.getElementById('tab-services').classList.add('active');
-        event.currentTarget.classList.add('active');
-    } else if (tabName === 'active') {
-        document.getElementById('tab-active').classList.add('active');
-        event.currentTarget.classList.add('active');
-        fetchOrders();
-    } else if (tabName === 'history') {
-        document.getElementById('tab-history').classList.add('active');
-        event.currentTarget.classList.add('active');
-        fetchIncomingSms();
-    }
+    document.getElementById('tab-' + tabName).classList.add('active');
+    const tabButton = document.querySelectorAll('.tab-btn')[index];
+    if (tabButton) tabButton.classList.add('active');
+
+    if (tabName === 'active') fetchOrders();
+    if (tabName === 'history') fetchIncomingSms();
+    if (tabName === 'referrals') fetchReferrals();
 }
 
 // Dashboard və Profil Məlumatları
@@ -128,10 +125,86 @@ async function fetchIncomingSms() {
     } catch (e) {}
 }
 
+
+function referralStatusMessage(message, ready = null) {
+    const node = document.getElementById('referral-status');
+    node.textContent = message;
+    node.classList.toggle('is-ready', ready === true);
+    node.classList.toggle('is-locked', ready === false);
+}
+
+async function fetchReferrals() {
+    const box = document.getElementById('referral-link-box');
+    const locked = document.getElementById('referral-locked');
+    if (!tg.initData) {
+        box.hidden = true;
+        locked.hidden = true;
+        referralStatusMessage('⚠️ Bu bölməni Telegram botunun içindən açın.');
+        return;
+    }
+    referralStatusMessage('Dəvət statusu yenilənir...');
+    try {
+        const response = await fetch(`${API_BASE}/api/referrals`, { headers: getAuthHeaders() });
+        if (!response.ok) throw new Error('HTTP ' + response.status);
+        const data = await response.json();
+        if (typeof data.ref_link !== 'string' || !data.ref_link.startsWith('https://t.me/')) {
+            throw new Error('Invalid referral link');
+        }
+        const invited = Math.max(0, Number(data.invited_count) || 0);
+        const needed = Math.max(1, Number(data.required) || 1);
+        const unlocked = Boolean(data.unlocked);
+        referralStatusMessage(
+            unlocked
+                ? `✅ Dəvət sayı: ${invited}/${needed} — Şərt ödənildi!`
+                : `🔒 Dəvət sayı: ${invited}/${needed} — Hələ dost dəvəti gözlənilir.`,
+            unlocked
+        );
+        document.getElementById('referral-link-input').value = data.ref_link;
+        box.hidden = false;
+        locked.hidden = unlocked;
+    } catch (err) {
+        box.hidden = true;
+        locked.hidden = true;
+        referralStatusMessage('❌ Dəvət statusunu yükləmək olmadı. Yenidən cəhd edin.');
+    }
+}
+
+async function copyReferralLink() {
+    const value = document.getElementById('referral-link-input').value;
+    if (!value) return;
+    try {
+        if (navigator.clipboard && window.isSecureContext) {
+            await navigator.clipboard.writeText(value);
+        } else {
+            const field = document.getElementById('referral-link-input');
+            field.focus();
+            field.select();
+            if (!document.execCommand('copy')) throw new Error('Copy failed');
+        }
+        if (tg.showAlert) tg.showAlert('🔗 Dəvət linki kopyalandı!');
+    } catch (err) {
+        if (tg.showAlert) tg.showAlert('Linki seçib əl ilə kopyalayın.');
+    }
+}
+
+function shareReferralLink() {
+    const invite = document.getElementById('referral-link-input').value;
+    if (!invite) return;
+    const url = 'https://t.me/share/url?url=' + encodeURIComponent(invite)
+        + '&text=' + encodeURIComponent('Bu Telegram botuna qoşul!');
+    if (typeof tg.openTelegramLink === 'function') tg.openTelegramLink(url);
+    else window.open(url, '_blank', 'noopener,noreferrer');
+}
+
 // İşə salınma
 document.addEventListener('DOMContentLoaded', () => {
+    document.getElementById('referral-copy-btn').addEventListener('click', copyReferralLink);
+    document.getElementById('referral-share-btn').addEventListener('click', shareReferralLink);
+    document.getElementById('referral-refresh-btn').addEventListener('click', fetchReferrals);
+
     fetchDashboard();
     fetchServices();
+    fetchReferrals();
     
     // Real-time yenilənmə üçün interval
     setInterval(() => {
