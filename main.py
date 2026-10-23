@@ -837,7 +837,8 @@ AZ_OPERATOR_PREFIXES = (
     ("azercell", "Azercell", ("99450", "99451", "99410")),
     ("nar", "Nar", ("99470", "99477")),
     ("naxtell", "Naxtell", ("99460",)),
-    ("other", "Digər (+99440)", ("99440",)),
+    ("catel", "Catel", ("99440",)),
+    ("cdma", "CDMA", ("99444",)),
 )
 AZ_RANGE_SUFFIXES = ("210", "211")
 
