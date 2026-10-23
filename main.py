@@ -828,6 +828,7 @@ def az_range_allowed(user_id):
 
 
 AZ_ACCESS_DENIED = "🔒 Azərbaycan (+994) nömrələri üçün admin təsdiqi lazımdır. /az_request yazın."
+_az_request_times = {}
 
 
 # ==================== WITHDRAW DATA FUNCTIONS ====================
@@ -2317,9 +2318,18 @@ async def perform_otp_search(update, context, target_num):
             "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(int(uid))
         )
         return
-    if is_az_range(target_num) and not az_range_allowed(uid):
-        await update.effective_message.reply_text(AZ_ACCESS_DENIED)
-        return
+    if is_az_range(target_num):
+        if not az_range_allowed(uid):
+            await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+            return
+        # Approval to obtain an AZ number must not expose other users' codes.
+        if not is_admin(int(uid)):
+            assigned = active_numbers.get(normalize_number(target_num))
+            if not assigned or str(assigned.get("uid")) != uid:
+                await update.effective_message.reply_text(
+                    "🔒 Yalnız sizə ayrılmış Azərbaycan nömrəsinin mesajlarını yoxlaya bilərsiniz."
+                )
+                return
     status_msg = await update.effective_message.reply_text("🔍 SEARCHING IN SERVER...")
     try:
         r = await client_async.get(f"{BASE_URL}/success-otp")
@@ -4138,6 +4148,12 @@ async def az_request_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
     if az_range_allowed(uid):
         await update.effective_message.reply_text("✅ +994 nömrələrinə girişiniz var.")
         return
+    now = time.monotonic()
+    if now - _az_request_times.get(uid, 0) < 300:
+        await update.effective_message.reply_text(
+            "⏳ İcazə sorğusu artıq göndərilib. Təkrar sorğu üçün 5 dəqiqə gözləyin."
+        )
+        return
     # Only request authorization; never send an SMS or allocate a number.
     notices = 0
     for admin_id in ADMINS:
@@ -4150,6 +4166,8 @@ async def az_request_command(update: Update, context: ContextTypes.DEFAULT_TYPE)
             notices += 1
         except TelegramError:
             continue
+    if notices:
+        _az_request_times[uid] = now
     await update.effective_message.reply_text(
         "📨 İcazə sorğunuz adminə göndərildi." if notices else
         "⚠️ Adminə çatdırılmadı. Adminlə əlaqə saxlayın."
