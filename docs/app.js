@@ -449,40 +449,64 @@ async function selectService(service, country = null, range = null, countryIso =
             alertUser(data.message || "Hazırda bu range üzrə nömrə yoxdur.");
             return;
         }
-        alertUser("✅ Nömrə ayrıldı: " + data.number);
+        // The API may return bare digits or a +country-code number.
+        // Only a successfully allocated number is eligible for copying.
+        const digits = String(data.number || "").replace(/\D/g, "");
+        const fullNumber = "+" + digits;
+        const copied = /^\+\d{4,15}$/.test(fullNumber)
+            ? await copyPhoneNumber(fullNumber, false)
+            : false;
+        // Keep the number visible even when Telegram's WebView blocks clipboard access.
         switchTab("active");
         await fetchOrders();
         await fetchDashboard();
+        alertUser(copied
+            ? "✅ Nömrə alındı və avtomatik kopyalandı: " + fullNumber
+            : "✅ Nömrə alındı: " + (digits ? fullNumber : String(data.number || "")) +
+              "\n📋 Avtomatik kopyalama mümkün olmadı. Aktivlər bölməsində Kopyala düyməsinə toxunun.");
     } catch (err) {
         alertUser(err.message);
     }
 }
 
-async function copyPhoneNumber(number) {
+async function copyPhoneNumber(number, showFeedback = true) {
     if (!/^\+\d{4,15}$/.test(number)) {
-        alertUser("Bu sifariş üçün tam nömrə mövcud deyil.");
-        return;
+        if (showFeedback) alertUser("Bu sifariş üçün tam nömrə mövcud deyil.");
+        return false;
     }
+    let copied = false;
     try {
-        if (!navigator.clipboard?.writeText) throw new Error("clipboard_not_supported");
-        await navigator.clipboard.writeText(number);
+        if (navigator.clipboard?.writeText) {
+            await navigator.clipboard.writeText(number);
+            copied = true;
+        }
     } catch (_) {
-        // Telegram's embedded browser may not expose the Clipboard API.
+        // Telegram's embedded browser may deny Clipboard API access.
+    }
+    if (!copied) {
+        // Compatibility fallback; can also be denied after an asynchronous request.
         const temp = document.createElement("textarea");
         temp.value = number;
         temp.readOnly = true;
         temp.style.position = "fixed";
         temp.style.opacity = "0";
         document.body.appendChild(temp);
-        temp.select();
-        const copied = document.execCommand("copy");
-        temp.remove();
-        if (!copied) {
-            alertUser("Kopyalama mümkün olmadı. Nömrənin üzərinə toxunaraq əl ilə kopyalayın.");
-            return;
+        try {
+            temp.focus();
+            temp.select();
+            copied = Boolean(document.execCommand("copy"));
+        } catch (_) {
+            copied = false;
+        } finally {
+            temp.remove();
         }
     }
-    alertUser("📋 Nömrə kopyalandı!");
+    if (showFeedback) {
+        alertUser(copied
+            ? "📋 Nömrə kopyalandı!"
+            : "Kopyalama mümkün olmadı. Nömrəni seçərək əl ilə kopyalaya bilərsiniz.");
+    }
+    return copied;
 }
 
 async function fetchOrders() {
@@ -493,7 +517,21 @@ async function fetchOrders() {
         ]);
         const orders = Array.isArray(ordersRes.orders) ? ordersRes.orders : [];
         const botOrders = Array.isArray(dashboard.orders) ? dashboard.orders : [];
-        const combined = [...orders, ...botOrders];
+        // Both APIs supply Unix-second created_at timestamps. Sort across
+        // both sources before removing duplicates so newest allocations lead.
+        const createdAt = order => {
+            const raw = order.created_at;
+            if (typeof raw === "number" && Number.isFinite(raw)) return raw;
+            if (typeof raw === "string") {
+                const numeric = Number(raw);
+                if (Number.isFinite(numeric) && raw.trim() !== "") return numeric;
+                const parsed = Date.parse(raw);
+                if (Number.isFinite(parsed)) return parsed / 1000;
+            }
+            return 0;
+        };
+        const combined = [...orders, ...botOrders]
+            .sort((a, b) => createdAt(b) - createdAt(a));
         const seen = new Set();
         container.replaceChildren();
         if (!combined.length) {
