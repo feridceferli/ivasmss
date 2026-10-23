@@ -2,7 +2,7 @@ import asyncio
 from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
 from range_collection import RangeCollector
-from world_country_codes import build_all_country_rows
+from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
 
 range_collector = RangeCollector()
 import io
@@ -341,6 +341,12 @@ COUNTRY_PREFIX_MAP = {
     "53": ("🇨🇺", "Cuba"),
     "592": ("🇬🇾", "Guyana"),
 }
+
+# Supplement the legacy map with global country calling codes, so a
+# successfully allocated range from any listed country has a matching flag
+# and country label. Preserve the legacy more-specific prefix overrides.
+for _iso, _name, _calling_code in WORLD_COUNTRIES:
+    COUNTRY_PREFIX_MAP.setdefault(_calling_code, (region_flag(_iso), _name))
 
 
 def get_country_by_prefix(prefix: str):
