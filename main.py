@@ -64,6 +64,7 @@ BANNED_USERS_FILE = data_path("banned_users.json")
 WITHDRAW_DATA_FILE = data_path("withdraw_requests.json")
 ACTIVITY_LOGS_FILE = data_path("activity_logs.json")
 DATA_RANGE_FILE = data_path("datarange.json")
+AZ_ACCESS_FILE = data_path("az_range_permissions.json")
 SYSTEM_CONFIG_FILE = data_path("system_config.json")
 USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
@@ -783,24 +784,50 @@ async def country_availability_loop(app):
         await asyncio.sleep(30)
 
 
-async def get_number_from_api(rid: str):
+async def get_number_from_api(rid: str, requester_id=None):
+    """Never allocate a +994 range without an explicit server-side permission."""
+    digits = re.sub(r"[^0-9]", "", str(rid or ""))
+    if not digits or (is_az_range(digits) and not az_range_allowed(requester_id)):
+        return None, None
     try:
-        payload = {"rid": str(rid)}
-        r = await client_async.post(f"{BASE_URL}/getnum", json=payload)
+        r = await client_async.post(f"{BASE_URL}/getnum", json={"rid": digits})
         result = r.json()
         if result.get("meta", {}).get("code") == 200:
-            data = result["data"]
-            await asyncio.to_thread(number_archive.record, data.get("full_number"))
-            return data.get("full_number"), data.get("country")
+            data = result.get("data") or {}
+            number = data.get("full_number")
+            normalized = re.sub(r"[^0-9]", "", str(number or ""))
+            if not normalized.startswith(digits) or (is_az_range(normalized) and not az_range_allowed(requester_id)):
+                print("[number-api] Unexpected or restricted provider range")
+                return None, None
+            await asyncio.to_thread(number_archive.record, number)
+            return number, data.get("country")
         return None, None
     except Exception as e:
-        print(f"get_number error: {e}")
+        print(f"get_number error: {type(e).__name__}")
         return None, None
 
 
 # ==================== CHECK IF USER IS ADMIN ====================
 def is_admin(user_id):
     return user_id in ADMINS
+
+
+def is_az_range(value):
+    return re.sub(r"[^0-9]", "", str(value or "")).startswith("994")
+
+
+def az_range_allowed(user_id):
+    """Only admins and approved users can use Azerbaijan ranges."""
+    if user_id is None:
+        return False
+    try:
+        uid = int(user_id)
+    except (TypeError, ValueError):
+        return False
+    return is_admin(uid) or bool(load_data(AZ_ACCESS_FILE).get(str(uid)))
+
+
+AZ_ACCESS_DENIED = "🔒 Azərbaycan (+994) nömrələri üçün admin təsdiqi lazımdır. /az_request yazın."
 
 
 # ==================== WITHDRAW DATA FUNCTIONS ====================
@@ -2050,11 +2077,14 @@ async def show_active_numbers(update, context):
 # ==================== WORKER & API ====================
 async def fast_allocate_number(query, context, rid, service, range_display):
     uid = query.from_user.id
+    if is_az_range(rid) and not az_range_allowed(uid):
+        await query.message.reply_text(AZ_ACCESS_DENIED)
+        return
     if is_user_banned(uid):
         await query.message.edit_text("🚫 YOU ARE BANNED 🚫")
         return
     try:
-        num, country = await get_number_from_api(rid)
+        num, country = await get_number_from_api(rid, requester_id=uid)
     except Exception as e:
         await query.message.edit_text(f"❌ Server error: {str(e)[:100]}")
         return
@@ -2144,6 +2174,9 @@ async def worker():
 
 async def process_auto_number(update, context, range_text):
     uid = update.effective_user.id
+    if is_az_range(range_text) and not az_range_allowed(uid):
+        await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+        return
     chat_id = update.effective_chat.id
     if is_user_banned(uid):
         await context.bot.send_message(
@@ -2158,7 +2191,7 @@ async def process_auto_number(update, context, range_text):
         await status_msg.edit_text("❌ INVALID RANGE! Send numbers only.")
         return
     try:
-        num, country = await get_number_from_api(rid)
+        num, country = await get_number_from_api(rid, requester_id=uid)
         if not num:
             await status_msg.edit_text("❌ NO NUMBERS FOUND. TRY A VALID RANGE.")
             return
@@ -2216,6 +2249,9 @@ async def process_numbers(update_or_query, context, range_text, count, service="
             reply_markup=main_keyboard(uid),
         )
         return
+    if is_az_range(range_text) and not az_range_allowed(uid):
+        await context.bot.send_message(chat_id=chat_id, text=AZ_ACCESS_DENIED)
+        return
     status_msg = await context.bot.send_message(
         chat_id=chat_id, text="🔍 SEARCHING . . ."
     )
@@ -2226,7 +2262,7 @@ async def process_numbers(update_or_query, context, range_text, count, service="
     try:
         add_number_taken(uid, count)
         last_range[uid] = rid
-        num, country = await get_number_from_api(rid)
+        num, country = await get_number_from_api(rid, requester_id=uid)
         if not num:
             await status_msg.edit_text("❌ NO NUMBERS FOUND. TRY A VALID RANGE.")
             return
@@ -3553,13 +3589,23 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     reply_markup=membership_keyboard(load_required_channels(), get_user_language(uid)),
                 )
                 return
-        await range_collector.start(update, context, text, get_number_from_api, number_archive)
+        if is_az_range(text) and not az_range_allowed(uid):
+            await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+            return
+        await range_collector.start(
+            update, context, text,
+            lambda rid: get_number_from_api(rid, requester_id=uid),
+            number_archive,
+        )
         return
 
     # CUSTOM RANGE
     if context.user_data.get("mode") == "custom_range":
         context.user_data["mode"] = None
         range_text = text.strip().upper()
+        if is_az_range(range_text) and not az_range_allowed(uid):
+            await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+            return
         if not re.search(r"\d", range_text):
             await update.effective_message.reply_text(
                 "❌ <b>INVALID RANGE!</b>\n\n"
@@ -4497,7 +4543,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except:
             pass
         try:
-            num, country = await get_number_from_api(rid)
+            num, country = await get_number_from_api(rid, requester_id=uid)
         except Exception as e:
             await query.message.reply_text(
                 f"❌ Server error: {str(e)[:100]}", reply_markup=main_keyboard(uid)
@@ -5127,7 +5173,7 @@ async def miniapp_get_number_api(request):
         rid = "99450"
 
     # API'den numara çekiyoruz
-    num, country = await get_number_from_api(rid)
+    num, country = await get_number_from_api(rid, requester_id=uid)
     if not num:
         return _miniapp_cors(web.json_response({"success": False, "message": "Şu anda bu serviste uygun numara bulunamadı."}, status=400))
 
