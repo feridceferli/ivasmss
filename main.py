@@ -5250,7 +5250,7 @@ async def miniapp_orders_api(request):
     if action=="create_test":
         oid=f"T{int(time.time()*1000)}"
         # Clearly synthetic number; never allocated from a real SMS provider.
-        order={"id":oid,"label":"Test sifarişi","number_masked":"+994 50 *** ** 67","range":"Sandbox","status":"Aktiv","created_at":time.time()}
+        order={"id":oid,"label":"Test sifarişi","number_masked":"Test sifarişi (real nömrə deyil)","range":"Sandbox","status":"Aktiv","created_at":time.time()}
         miniapp_orders.setdefault(uid,[]).append(order)
         return _miniapp_cors(web.json_response({"ok":True,"order":_safe_order(uid,order)}))
     if action=="cancel":
