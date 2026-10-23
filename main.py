@@ -12,7 +12,8 @@ import os  # Operating system utilities
 import hmac
 import hashlib
 import time
-from urllib.parse import parse_qsl
+from urllib.parse import parse_qsl, quote
+from miniapp_referral import resolve_referrer, build_referral_link
 import httpx
 import pyotp
 import random
@@ -1037,6 +1038,7 @@ def main_keyboard(user_id):
             premium_inline_button(labels["leaderboard"], "leaderboard",
                                   callback_data="menu_leaderboard"),
         ],
+        [InlineKeyboardButton("🔄 DƏVƏT STATUSU", callback_data="menu_check_referral")],
         [premium_inline_button(labels["support"], "support",
                                callback_data="menu_support")],
         [
@@ -2405,7 +2407,7 @@ async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     user_data = get_user(uid)
     bot_info = await context.bot.get_me()
-    referral_link = f"https://t.me/{bot_info.username}?start={uid}"
+    referral_link = build_referral_link(bot_info.username, uid)
     successful_refers = get_referral_count(uid)
     total_reward = float(successful_refers) * REFERRAL_PRICE
     refer_msg = (
@@ -2422,17 +2424,11 @@ async def refer_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         refer_msg,
         parse_mode="HTML",
         disable_web_page_preview=True,
-        reply_markup=InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "👥 YOUR REFERRAL",
-                        callback_data=f"my_ref_{uid}",
-                        style="primary",
-                    )
-                ]
-            ]
-        ),
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 DOSTUNU DƏVƏT ET",
+                                  url="https://t.me/share/url?url=" + quote(referral_link, safe=""))],
+            [InlineKeyboardButton("🔄 DƏVƏT STATUSU", callback_data="menu_check_referral")],
+        ]),
     )
 
 
@@ -4276,37 +4272,33 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     args = context.args
     if args:
         param = args[0]
-        if is_range_request(param):
-            await request_queue.put(
-                {
-                    "type": "auto_number",
-                    "update": update,
-                    "context": context,
-                    "range_text": param,
-                }
-            )
-            return
-        elif is_referral_request(param) and is_new_user:
+        # Deep links use ref_ID, and older numeric invitation links remain valid.
+        # Check referrals BEFORE numeric range requests, otherwise a referral ID
+        # would be mistaken for a phone range and never credited.
+        referrer_id = resolve_referrer(param, uid, existing_data.keys(), is_new_user)
+        if referrer_id is not None:
             try:
-                referrer_id = int(param)
-                if referrer_id != uid and str(referrer_id) in existing_data:
-                    current_count = get_referral_count(referrer_id)
-                    new_count = current_count + 1
-                    update_referral_count(referrer_id, new_count)
-                    await update_db_balance(referrer_id, REFERRAL_PRICE)
-                    log_global_activity(
-                        referrer_id, "REFERRAL_JOINED", {"referred_user": uid}
+                new_count = get_referral_count(referrer_id) + 1
+                update_referral_count(referrer_id, new_count)
+                await update_db_balance(referrer_id, REFERRAL_PRICE)
+                log_global_activity(referrer_id, "REFERRAL_JOINED", {"referred_user": uid})
+                try:
+                    await context.bot.send_message(
+                        chat_id=referrer_id,
+                        text=f"🎉 Yeni dəvət! Dostunuz bota qoşuldu. Ümumi dəvət: {new_count}",
                     )
-                    try:
-                        await context.bot.send_message(
-                            referrer_id,
-                            f"🎉 <b>NEW REFERRAL!</b>\n\n<blockquote>🗝️ ID: <code>{uid}</code>\n💰 REWARD: {format_balance(REFERRAL_PRICE)} AZN\n👥 TOTAL REFERS: {new_count}</blockquote>",
-                            parse_mode="HTML",
-                        )
-                    except:
-                        pass
-            except Exception as e:
-                print(f"Referral error: {e}")
+                except TelegramError:
+                    pass
+            except Exception as exc:
+                print(f"Referral processing error: {type(exc).__name__}")
+        elif is_range_request(param):
+            await request_queue.put({
+                "type": "auto_number",
+                "update": update,
+                "context": context,
+                "range_text": param,
+            })
+            return
     context.user_data.clear()
     if not get_user_language(uid) or "language" not in load_data(USER_DATA_FILE).get(uid_str, {}):
         await update.effective_message.reply_text(
@@ -4362,6 +4354,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if not is_admin(uid) and is_user_banned(uid):
         await query.edit_message_text("🚫 YOU ARE BANNED 🚫")
+        return
+
+    if data == "menu_check_referral":
+        count = max(0, int(get_referral_count(uid)))
+        bot_info = await context.bot.get_me()
+        invite_link = build_referral_link(bot_info.username, uid)
+        share_url = "https://t.me/share/url?url=" + quote(invite_link, safe="")
+        state = "✅ Dəvət şərti ödənilib." if count >= 1 else "🔒 Hələ 1 dəvət tamamlanmayıb."
+        await query.message.reply_text(
+            f"👥 <b>DƏVƏT STATUSU</b>\n\n{state}\n\n"
+            f"📊 Dəvət sayı: <b>{count}/1</b>\n"
+            f"🔗 <code>{html.escape(invite_link)}</code>",
+            parse_mode="HTML",
+            reply_markup=InlineKeyboardMarkup([
+                [InlineKeyboardButton("🔗 Dostunu dəvət et", url=share_url)],
+                [InlineKeyboardButton("🚀 Mini App", web_app=WebAppInfo(url=WEBAPP_URL))]
+            ]),
+        )
         return
 
     # Enforce required channel/group membership for user-facing actions.
@@ -4960,6 +4970,26 @@ def _miniapp_cors(resp):
     return resp
 
 
+async def miniapp_referrals_api(request):
+    """Authenticated referral count and share link for the existing Mini App."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    username = request.app["bot_username"]
+    count = max(0, int(get_referral_count(uid)))
+    return _miniapp_cors(web.json_response({
+        "invited_count": count,
+        "required": 1,
+        "unlocked": count >= 1,
+        "ref_link": build_referral_link(username, uid),
+    }))
+
+
 async def miniapp_dashboard(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
@@ -5168,6 +5198,7 @@ async def run_combined_server():
     server = web.Application(client_max_size=1024 * 1024)
     server.router.add_post("/webhook", telegram_webhook)
     server.router.add_route("*", "/api/get-number", miniapp_get_number_api)
+    server.router.add_route("*", "/api/referrals", miniapp_referrals_api)
     server.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
@@ -5179,6 +5210,7 @@ async def run_combined_server():
 
     runner = web.AppRunner(server)
     await app.initialize()
+    server["bot_username"] = (await app.bot.get_me()).username
     await app.start()
     await post_init(app)
     polling_started = False
