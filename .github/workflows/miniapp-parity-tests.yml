@@ -1,0 +1,38 @@
+name: Mini App parity and security tests
+
+on:
+  push:
+    paths:
+      - main.py
+      - docs/index.html
+      - docs/app.js
+      - test_miniapp_parity.py
+      - world_country_codes.py
+      - .github/workflows/miniapp-parity-tests.yml
+  pull_request:
+    paths:
+      - main.py
+      - docs/index.html
+      - docs/app.js
+      - test_miniapp_parity.py
+      - world_country_codes.py
+      - .github/workflows/miniapp-parity-tests.yml
+  workflow_dispatch:
+
+jobs:
+  miniapp-parity:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Check JavaScript syntax
+        run: node --check docs/app.js
+      - name: Check Python syntax
+        run: python -m py_compile main.py world_country_codes.py
+      - name: Test Mini App parity, safe rendering and +994 permissions
+        run: python -m unittest -v test_miniapp_parity test_world_country_codes test_az_permissions
