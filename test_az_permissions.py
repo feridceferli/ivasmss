@@ -85,7 +85,7 @@ class AzerbaijanCatalogTests(unittest.TestCase):
         groups = self.catalog()
         self.assertEqual(
             [item["name"] for item in groups],
-            ["Bakcell", "Azercell", "Nar", "Naxtell", "Digər (+99440)"],
+            ["Bakcell", "Azercell", "Nar", "Naxtell", "Catel", "CDMA"],
         )
         pairs = [
             (item["prefix"], entry["rid"])
@@ -103,9 +103,10 @@ class AzerbaijanCatalogTests(unittest.TestCase):
             ("99477", "99477210"), ("99477", "99477211"),
             ("99460", "99460210"), ("99460", "99460211"),
             ("99440", "99440210"), ("99440", "99440211"),
+            ("99444", "99444210"), ("99444", "99444211"),
         ]
         self.assertEqual(pairs, expected)
-        self.assertEqual(len(pairs), 18)
+        self.assertEqual(len(pairs), 20)
 
     def test_availability_only_when_exactly_listed(self):
         groups = self.catalog({"svc": ["99450211", "99455XXX", "99460210"]})
@@ -123,8 +124,30 @@ class AzerbaijanCatalogTests(unittest.TestCase):
     def test_lookup_rejects_unknown_range(self):
         self.assertEqual(self.lookup(rid="99450211")["name"], "Azercell")
         self.assertEqual(self.lookup(prefix="99499")["name"], "Bakcell")
+        self.assertEqual(self.lookup(prefix="99440")["name"], "Catel")
+        self.assertEqual(self.lookup(rid="99444211")["name"], "CDMA")
         self.assertIsNone(self.lookup(rid="99450333"))
         self.assertIsNone(self.lookup(prefix="99412"))
+
+    def test_extra_api_ranges_are_sorted_and_owned_by_operator(self):
+        services = {"wa": ["99450300", "99450212", "99444333", "99455077"],
+                    "tg": ["99450300", "994501234567"]}
+        groups = self.catalog(services)
+        azercell = next(row for row in groups if row["id"] == "azercell")
+        az50 = next(row for row in azercell["prefixes"] if row["prefix"] == "99450")
+        self.assertEqual(
+            [row["rid"] for row in az50["ranges"]],
+            ["99450210", "99450211", "99450212", "99450300"],
+        )
+        self.assertFalse(az50["ranges"][0]["listed_in_api"])
+        self.assertTrue(az50["ranges"][2]["listed_in_api"])
+        self.assertEqual(az50["ranges"][2]["source"], "api")
+        self.assertIsNotNone(self.lookup(rid="99444333", services=services))
+        self.assertIsNone(self.lookup(rid="99444333"))
+        self.assertIsNone(self.lookup(rid="994501234567", services=services))
+        self.assertEqual(
+            len(self.catalog(services)[0]["prefixes"][0]["ranges"]), 3
+        )
 
 
 class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
