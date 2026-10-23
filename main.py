@@ -5184,7 +5184,8 @@ async def miniapp_dashboard(request):
             continue
         orders.append({
             "label": "Aktiv sifariş",
-            "number_masked": "+" + mask_number(normalize_number(number)),
+            "number": "+" + normalize_number(number),
+            "number_masked": "+" + normalize_number(number),
             "range": str(info.get("range", "—")),
             "status": "SMS gözlənilir",
             "remaining_seconds": max(0, 3600 - age),
@@ -5219,8 +5220,21 @@ def _miniapp_auth(request):
     return validate_telegram_init_data(request.headers.get("X-Telegram-Init-Data", ""))
 
 def _safe_order(uid, order):
+    """Reveal the full number only while it is assigned to this authenticated user."""
     age = max(0, int(time.time() - order["created_at"]))
-    return {"id": order["id"], "label": order["label"], "number_masked": order["number_masked"], "range": order["range"], "status": order["status"], "remaining_seconds": max(0, 3600-age), "created_at": order["created_at"]}
+    result = {
+        "id": order["id"], "label": order["label"],
+        "number_masked": order["number_masked"], "range": order["range"],
+        "status": order["status"], "remaining_seconds": max(0, 3600 - age),
+        "created_at": order["created_at"],
+    }
+    digits = normalize_number(order.get("full_number") or "")
+    if digits and order.get("status") == "Aktiv" and age < 3600:
+        assigned = active_numbers.get(digits)
+        if assigned and int(assigned.get("uid", 0)) == int(uid):
+            result["number"] = "+" + digits
+            result["number_masked"] = result["number"]
+    return result
 
 async def miniapp_orders_api(request):
     if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
