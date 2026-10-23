@@ -99,6 +99,7 @@ function switchTab(tab) {
         fetchProfile();
     } else if (tab === "admin") {
         fetchAdminUsers();
+        loadAdminTools();
     }
 }
 
@@ -678,6 +679,131 @@ async function fetchAdminUsers() {
             container.appendChild(row);
         });
     } catch (err) { clearAndText(container, err.message); }
+}
+
+
+let adminTools = null;
+
+async function loadAdminTools() {
+    if (!state.isAdmin) return;
+    const status = document.getElementById("admin-test-status");
+    try {
+        adminTools = await api("/api/admin-tools");
+        const cfg = adminTools.config || {};
+        document.getElementById("cfg-min-withdraw").value = cfg.min_withdraw ?? "";
+        document.getElementById("cfg-max-withdraw").value = cfg.max_withdraw ?? "";
+        const payment = document.getElementById("cfg-payment-methods");
+        payment.replaceChildren();
+        for (const [method, enabled] of Object.entries(cfg.payment_methods || {})) {
+            const label = node("label", null, "notice-mini");
+            const checkbox = document.createElement("input");
+            checkbox.type = "checkbox";
+            checkbox.checked = !!enabled;
+            checkbox.dataset.method = method;
+            label.appendChild(checkbox);
+            label.appendChild(document.createTextNode(" " + method));
+            payment.appendChild(label);
+        }
+        const channels = document.getElementById("admin-channels-list");
+        channels.replaceChildren();
+        if (!(adminTools.required_channels || []).length) {
+            clearAndText(channels, "Tələb olunan kanal yoxdur.");
+        }
+        for (const channel of (adminTools.required_channels || [])) {
+            const row = node("div", null, "admin-user-line");
+            row.appendChild(node("span", (channel.label || "Kanal") + " · " + channel.link));
+            const remove = node("button", "❌ Sil", "action-small");
+            remove.addEventListener("click", () => adminRemoveChannel(channel.link));
+            row.appendChild(remove);
+            channels.appendChild(row);
+        }
+        const wa = adminTools.whatsapp || {};
+        const archive = adminTools.archive_sync || {};
+        status.textContent = "📡 WhatsApp: " + (wa.status === "configured" ? "✅ Ayarlanıb" : "⚠️ Ayarlanmayıb") +
+            (wa.test_recipient ? " · " + wa.test_recipient : "") +
+            " · 📥 Arxiv: " + (archive.status || "naməlum") +
+            " · 📨 Bildiriş qrupu: " +
+            (adminTools.notification_group_configured ? "✅" : "⚠️ Ayarlanmayıb");
+    } catch (err) {
+        status.textContent = "⚠️ Admin alətləri: " + err.message;
+    }
+}
+
+async function sendAdminToolAction(action, details = {}) {
+    if (!state.isAdmin) return null;
+    return api("/api/admin-tools", {method: "POST", body: {action, ...details}});
+}
+
+async function saveAdminSettings() {
+    if (!state.isAdmin) return;
+    const min = Number(document.getElementById("cfg-min-withdraw").value);
+    const max = Number(document.getElementById("cfg-max-withdraw").value);
+    if (!Number.isInteger(min) || !Number.isInteger(max) || min < 1 || min > max || max > 100000) {
+        alertUser("Minimum və maksimum üçün düzgün rəqəmlər seçin.");
+        return;
+    }
+    const methods = {};
+    document.querySelectorAll("#cfg-payment-methods input[data-method]").forEach(checkbox => {
+        methods[checkbox.dataset.method] = !!checkbox.checked;
+    });
+    try {
+        await sendAdminToolAction("save_settings",
+            {min_withdraw: min, max_withdraw: max, payment_methods: methods});
+        alertUser("✅ Ödəniş parametrləri yeniləndi.");
+        await loadAdminTools();
+    } catch (err) { alertUser(err.message); }
+}
+
+async function adminAddChannel() {
+    if (!state.isAdmin) return;
+    const link = document.getElementById("admin-channel-link").value.trim();
+    const label = document.getElementById("admin-channel-label").value.trim();
+    const chatId = document.getElementById("admin-channel-chat-id").value.trim();
+    if (!/^https:\/\/t\.me\//.test(link)) {
+        alertUser("Etibarlı t.me kanal keçidi daxil edin.");
+        return;
+    }
+    try {
+        await sendAdminToolAction("add_channel", {link, label, chat_id: chatId});
+        alertUser("✅ Kanal əlavə edildi.");
+        await loadAdminTools();
+    } catch (err) { alertUser(err.message); }
+}
+
+async function adminRemoveChannel(link) {
+    if (!state.isAdmin) return;
+    if (!window.confirm("Bu kanalı siyahıdan silmək istəyirsiniz?")) return;
+    try {
+        await sendAdminToolAction("remove_channel", {link});
+        alertUser("✅ Kanal silindi.");
+        await loadAdminTools();
+    } catch (err) { alertUser(err.message); }
+}
+
+async function adminSendGroupNotice() {
+    if (!state.isAdmin) return;
+    const field = document.getElementById("admin-group-notice");
+    const message = field.value.trim();
+    if (message.length < 5 || message.length > 600) {
+        alertUser("5–600 simvol uzunluğunda məlumat yazın.");
+        return;
+    }
+    if (!window.confirm("Bu mətni konfiqurasiya edilmiş məlumat qrupunda paylaşmaq istəyirsiniz?")) return;
+    try {
+        const result = await sendAdminToolAction("group_notice", {message});
+        if (!result.ok) throw new Error(result.message || "Göndərilmədi.");
+        field.value = "";
+        alertUser("✅ " + (result.message || "Bildiriş göndərildi."));
+    } catch (err) { alertUser(err.message); }
+}
+
+async function adminWhatsAppTest() {
+    if (!state.isAdmin) return;
+    if (!window.confirm("Yalnız əvvəlcədən razılaşdırılmış WhatsApp sınaq alıcısına 1 sabit test mesajı göndərilsin?")) return;
+    try {
+        const result = await sendAdminToolAction("whatsapp_test");
+        alertUser(result.message || "WhatsApp testi tamamlandı.");
+    } catch (err) { alertUser(err.message); }
 }
 
 async function adminAzPermission(approve, directId = null) {
