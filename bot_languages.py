@@ -31,7 +31,6 @@ TEXT = {
         "get_2fa": "⚡ 2FA AL",
         "balance": "💰 BALANS",
         "profile": "👤 PROFİL",
-        "refer": "👥 DƏVƏT ET VƏ QAZAN",
         "leaderboard": "🏆 LİDERLƏR",
         "support": "💬 DƏSTƏK",
         "admin": "⚙️ ADMİN PANEL",
@@ -63,7 +62,6 @@ TEXT = {
         "get_2fa": "⚡ 2FA AL",
         "balance": "💰 BAKİYE",
         "profile": "👤 PROFİL",
-        "refer": "👥 DAVET ET VE KAZAN",
         "leaderboard": "🏆 LİDERLER",
         "support": "💬 DESTEK",
         "admin": "⚙️ ADMİN PANELİ",
@@ -95,7 +93,6 @@ TEXT = {
         "get_2fa": "⚡ GET 2FA",
         "balance": "💰 BALANCE",
         "profile": "👤 PROFILE",
-        "refer": "👥 REFER AND EARN",
         "leaderboard": "🏆 LEADERBOARD",
         "support": "💬 SUPPORT",
         "admin": "⚙️ ADMIN PANEL",
@@ -133,7 +130,7 @@ def menu_labels(language):
     language = normalize_language(language)
     return {key: t(language, key) for key in (
         "get_number", "active_numbers", "search_otp", "get_2fa",
-        "balance", "profile", "refer", "leaderboard", "support",
+        "balance", "profile", "leaderboard", "support",
         "admin", "mini_app",
     )}
 
