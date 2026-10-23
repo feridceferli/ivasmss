@@ -3,6 +3,7 @@ from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
 from range_collection import RangeCollector
 from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
+from release_announcement import send_release_notice_once
 
 range_collector = RangeCollector()
 import io
@@ -5385,6 +5386,7 @@ async def run_combined_server():
     await app.initialize()
     server["bot_username"] = (await app.bot.get_me()).username
     await app.start()
+    await send_release_notice_once(app.bot, OTP_GROUP_ID)
     await post_init(app)
     polling_started = False
     try:
