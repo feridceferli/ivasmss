@@ -90,20 +90,20 @@ class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_approved_allocation_checks_returned_prefix(self):
         self.approved["200"] = True
-        self.post.return_value.json.return_value = {
+        self.post.return_value = SimpleNamespace(json=lambda: {
             "meta": {"code": 200},
             "data": {"full_number": "+994502111234", "country": "Azerbaijan"},
-        }
+        })
         num, country = await self.get_number("99450211", requester_id=200)
         self.assertEqual(num, "+994502111234")
         self.assertEqual(country, "Azerbaijan")
         self.assertEqual(self.archive_calls, [num])
 
     async def test_wrong_country_is_rejected(self):
-        self.post.return_value.json.return_value = {
+        self.post.return_value = SimpleNamespace(json=lambda: {
             "meta": {"code": 200},
             "data": {"full_number": "+994502111234", "country": "Azerbaijan"},
-        }
+        })
         self.assertEqual((None, None), await self.get_number("234", requester_id=200))
         self.assertEqual(self.archive_calls, [])
 
