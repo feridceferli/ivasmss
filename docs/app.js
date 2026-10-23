@@ -356,6 +356,33 @@ async function selectService(service, country = null, range = null, countryIso =
     }
 }
 
+async function copyPhoneNumber(number) {
+    if (!/^\+\d{4,15}$/.test(number)) {
+        alertUser("Bu sifariş üçün tam nömrə mövcud deyil.");
+        return;
+    }
+    try {
+        if (!navigator.clipboard?.writeText) throw new Error("clipboard_not_supported");
+        await navigator.clipboard.writeText(number);
+    } catch (_) {
+        // Telegram's embedded browser may not expose the Clipboard API.
+        const temp = document.createElement("textarea");
+        temp.value = number;
+        temp.readOnly = true;
+        temp.style.position = "fixed";
+        temp.style.opacity = "0";
+        document.body.appendChild(temp);
+        temp.select();
+        const copied = document.execCommand("copy");
+        temp.remove();
+        if (!copied) {
+            alertUser("Kopyalama mümkün olmadı. Nömrənin üzərinə toxunaraq əl ilə kopyalayın.");
+            return;
+        }
+    }
+    alertUser("📋 Nömrə kopyalandı!");
+}
+
 async function fetchOrders() {
     const container = document.getElementById("active-orders-container");
     try {
@@ -365,19 +392,42 @@ async function fetchOrders() {
         const orders = Array.isArray(ordersRes.orders) ? ordersRes.orders : [];
         const botOrders = Array.isArray(dashboard.orders) ? dashboard.orders : [];
         const combined = [...orders, ...botOrders];
+        const seen = new Set();
         container.replaceChildren();
         if (!combined.length) {
             clearAndText(container, "Hazırda aktiv sifariş yoxdur.");
             return;
         }
         combined.forEach(order => {
+            const fullNumber = String(order.number || "");
+            const validNumber = /^\+\d{4,15}$/.test(fullNumber);
+            // The same number can appear in /api/orders and /api/dashboard.
+            const key = validNumber ? fullNumber : String(order.id || "");
+            if (key && seen.has(key)) return;
+            if (key) seen.add(key);
+
             const card = node("div", null, "sms-item");
-            card.appendChild(node("strong", order.number_masked || "Sifariş"));
+            const display = validNumber
+                ? fullNumber
+                : (String(order.number_masked || "Sifariş"));
+            const numberText = node("strong", display, "full-phone-number");
+            card.appendChild(numberText);
             card.appendChild(node("p", "Range: " + (order.range || "—") +
                 " · " + (order.status || "Aktiv"), "notice-mini"));
+            if (validNumber) {
+                const button = node("button", "📋 Kopyala", "action-small copy-phone-button");
+                button.type = "button";
+                button.setAttribute("aria-label", display + " nömrəsini kopyala");
+                button.addEventListener("click", () => copyPhoneNumber(fullNumber));
+                card.appendChild(button);
+            } else {
+                card.appendChild(node("p", "Tam nömrə bu sifarişdə mövcud deyil.", "notice-mini"));
+            }
             container.appendChild(card);
         });
-    } catch (err) { clearAndText(container, err.message); }
+    } catch (err) {
+        clearAndText(container, "Aktiv nömrələr yüklənmədi. " + err.message);
+    }
 }
 
 async function fetchIncomingSms() {
