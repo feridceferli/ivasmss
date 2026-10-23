@@ -83,6 +83,7 @@ class PremiumEmojiTests(unittest.TestCase):
                 "InlineKeyboardButton": InlineKeyboardButton,
                 "t": t,
                 "is_admin": lambda uid: uid == 42,
+                "az_range_allowed": lambda uid: uid == 42,
             }
             exec(code, namespace)
             markup = namespace["main_keyboard"](42)
@@ -94,12 +95,13 @@ class PremiumEmojiTests(unittest.TestCase):
             expected = (
                 "menu_ivas_web_panel", "menu_get_number", "menu_active_numbers",
                 "menu_search_otp", "menu_get_2fa", "menu_balance", "menu_profile",
-                "menu_refer", "menu_leaderboard", "menu_support", "menu_language",
+                "menu_az_ranges", "menu_leaderboard", "menu_support", "menu_language",
                 "menu_admin",
             )
             for action in expected:
                 self.assertIn(action, ids)
-                self.assertIsNotNone(ids[action].icon_custom_emoji_id)
+                if action != "menu_az_ranges":
+                    self.assertIsNotNone(ids[action].icon_custom_emoji_id)
             self.assertIsNotNone(markup.inline_keyboard[0][0].web_app)
             self.assertEqual(ids["menu_get_number"].style, "success")
             self.assertEqual(ids["menu_admin"].style, "danger")
