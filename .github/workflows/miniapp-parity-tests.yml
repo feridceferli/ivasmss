@@ -7,6 +7,7 @@ on:
       - docs/index.html
       - docs/app.js
       - test_miniapp_parity.py
+      - test_miniapp_active_numbers.py
       - world_country_codes.py
       - .github/workflows/miniapp-parity-tests.yml
   pull_request:
@@ -15,6 +16,7 @@ on:
       - docs/index.html
       - docs/app.js
       - test_miniapp_parity.py
+      - test_miniapp_active_numbers.py
       - world_country_codes.py
       - .github/workflows/miniapp-parity-tests.yml
   workflow_dispatch:
@@ -35,4 +37,4 @@ jobs:
       - name: Check Python syntax
         run: python -m py_compile main.py world_country_codes.py
       - name: Test Mini App parity, safe rendering and +994 permissions
-        run: python -m unittest -v test_miniapp_parity test_world_country_codes test_az_permissions
+        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_world_country_codes test_az_permissions
