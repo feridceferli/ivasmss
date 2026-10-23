@@ -211,6 +211,10 @@
         .admin-user-line span { overflow-wrap:anywhere; min-width:0; font-size:12px; }
         .full-phone-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; letter-spacing: .3px; user-select: all; overflow-wrap: anywhere; }
         .copy-phone-button { margin-top: 4px; font-weight: 700; }
+        .quick-actions { display:flex; flex-wrap:wrap; gap:8px; margin:12px 0; }
+        .support-cta { display:block; padding:12px; border-radius:10px; background:rgba(59,130,246,.13);
+            margin:12px 0; text-decoration:none; color:var(--text-color); text-align:center; font-weight:700; }
+        .profile-fields p { margin:8px 0; overflow-wrap:anywhere; }
         @media(max-width:390px){ .tab-btn{font-size:11px;padding:8px 6px}.catalog-row{font-size:12px} }
     </style>
 </head>
@@ -239,11 +243,23 @@
             <button class="tab-btn" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
             <button class="tab-btn" onclick="switchTab('active')">📱 Aktivlər</button>
             <button class="tab-btn" onclick="switchTab('history')">📜 Tarixçə</button>
+            <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
+            <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
             <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
         </div>
 
         <!-- 1. Xidmətlər Tabı -->
         <div id="tab-services" class="tab-content active">
+            <div class="card">
+                <h3 style="margin:0 0 6px">🚀 AZE SMS PANEL</h3>
+                <p class="notice-mini">Botun əsas funksiyaları buradadır. İstədiyiniz bölməni açın və hesabınıza aid məlumatları idarə edin.</p>
+                <div class="quick-actions">
+                    <button class="action-small" onclick="switchTab('countries')">🌍 Ölkələr</button>
+                    <button class="action-small" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
+                    <button class="action-small" onclick="switchTab('active')">📱 Aktivlər</button>
+                    <button class="action-small" onclick="switchTab('profile')">💰 Profil</button>
+                </div>
+            </div>
             <div class="card">
                 <h4 style="margin: 0 0 10px 0;">🌍 Mövcud Xidmətlər və Ölkələr</h4>
                 <div class="services-grid" id="services-grid-container">
@@ -308,6 +324,39 @@
             </div>
         </div>
 
+        <div id="tab-leaderboard" class="tab-content">
+            <div class="card">
+                <h4 style="margin:0 0 10px">🏆 Gündəlik liderlər</h4>
+                <p class="notice-mini">Gün ərzində alınan nömrələrin ümumi sayına əsaslanan statistikadır. Şəxsi nömrələr və kodlar göstərilmir.</p>
+                <button class="action-small" onclick="fetchLeaderboard()">🔄 Yenilə</button>
+                <div id="leaderboard-list" class="catalog-scroll" style="margin-top:12px"></div>
+            </div>
+        </div>
+
+        <div id="tab-profile" class="tab-content">
+            <div class="card">
+                <h4 style="margin:0 0 12px">👤 Profil və hesabım</h4>
+                <div class="profile-fields">
+                    <p id="profile-name" class="notice-mini">Hesab yüklənir...</p>
+                    <p id="profile-stats" class="notice-mini">Statistika yüklənir...</p>
+                </div>
+                <div class="catalog-tools">
+                    <select id="profile-language" class="admin-input" aria-label="Dil seç">
+                        <option value="az">🇦🇿 Azərbaycan dili</option>
+                        <option value="tr">🇹🇷 Türkçe</option>
+                        <option value="en">🇬🇧 English</option>
+                    </select>
+                    <button class="action-small" onclick="saveProfileLanguage()">💾 Yadda saxla</button>
+                </div>
+                <div class="quick-actions">
+                    <button class="action-small" onclick="downloadOwnNumbers()">📥 Nömrələrim — TXT</button>
+                    <button class="action-small" onclick="fetchProfile()">🔄 Yenilə</button>
+                </div>
+                <a id="support-link" class="support-cta" href="https://t.me/betrunaz" target="_blank" rel="noopener noreferrer">💬 Dəstəyə yaz</a>
+                <p class="notice-mini">Tam nömrələr yalnız sizin aktiv sifarişlərinizdə görünür. Ödəniş və hesab əməliyyatları serverdə yoxlanılır.</p>
+            </div>
+        </div>
+
         <div id="tab-admin" class="tab-content" hidden>
             <div class="card">
                 <h4 style="margin:0 0 8px">⚙️ Admin idarəetməsi</h4>
@@ -322,11 +371,22 @@
                 </div>
                 <p id="admin-result" class="notice-mini"></p>
                 <button class="action-small" onclick="fetchAdminUsers()">🔄 İstifadəçiləri yenilə</button>
+                <div id="admin-system-status" class="notice-mini" style="margin-top:12px"></div>
                 <div id="admin-users-list" class="catalog-scroll" style="margin-top:12px"></div>
+                <div class="card" style="margin-top:12px">
+                    <h4 style="margin:0 0 6px">💰 İstifadəçi balansını dəyiş</h4>
+                    <p class="notice-mini">Yalnız qeydiyyatlı istifadəçinin ID-si və məbləğ (AZN).</p>
+                    <div class="catalog-tools">
+                        <input id="admin-balance-id" class="admin-input" inputmode="numeric" placeholder="Telegram ID" aria-label="Balans istifadəçi ID">
+                        <input id="admin-balance-amount" class="admin-input" inputmode="decimal" placeholder="± AZN" aria-label="Balans dəyişiklik məbləği">
+                    </div>
+                    <button class="action-small" onclick="adminBalanceChange()">💰 Balansı yenilə</button>
+                    <p id="admin-balance-result" class="notice-mini"></p>
+                </div>
             </div>
         </div>
     </div>
 
-    <script src="app.js?v=20261023-copy"></script>
+    <script src="app.js?v=20261023-miniapp-main"></script>
 </body>
 </html>
