@@ -80,13 +80,13 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         self.assertIn('if age >= 3600:', code)
 
     def test_miniapp_copy_action_only_for_full_numbers(self):
-        self.assertIn('async function copyPhoneNumber(number)', JS)
+        self.assertIn('async function copyPhoneNumber(number, showFeedback = true)', JS)
         self.assertIn('navigator.clipboard.writeText(number)', JS)
         self.assertIn('document.execCommand("copy")', JS)
         self.assertIn('if (validNumber)', JS)
         self.assertIn('copyPhoneNumber(fullNumber)', JS)
         self.assertIn('order.number || ""', JS)
-        self.assertIn('app.js?v=20261023-admin0411', HTML)
+        self.assertIn('app.js?v=20261023-newest-autocopy', HTML)
         self.assertNotIn('.innerHTML', JS)
 
 
