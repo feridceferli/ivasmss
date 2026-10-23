@@ -2,7 +2,7 @@
 <html lang="az">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>IvaSMS Mini App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <link rel="stylesheet" href="style.css">
@@ -10,39 +10,32 @@
 <body>
     <div class="container">
         <header>
-            <div class="status-badge" id="online-badge">● Sistem Aktivdir</div>
             <h2>🛡️ IvaSMS Panel</h2>
-            <p id="user-greeting">İstifadəçi təyin olunur...</p>
+            <p id="user-greeting">Yüklənir...</p>
         </header>
 
-        <!-- Referans Kütləsi -->
+        <!-- Referans Seksiyası -->
         <div class="card" id="ref-card">
-            <h3>👥 Dəvət Vəziyyəti</h3>
-            <div id="status-indicator" class="status-box">Yoxlanılır...</div>
+            <h3>👥 Dəvət Sistemi</h3>
+            <p id="status-text">Yoxlanılır...</p>
             <div class="ref-box" id="ref-box" style="display: none;">
-                <label>Sizin Dəvət Linkiniz:</label>
-                <div class="input-group">
-                    <input type="text" id="ref-link-input" readonly>
-                    <button id="copy-btn">📋 Kopyala</button>
-                </div>
+                <p>Sənin dəvət linkin:</p>
+                <input type="text" id="ref-link-input" readonly>
+                <button id="copy-btn">🔗 Linki Kopyala</button>
             </div>
         </div>
 
-        <!-- Məzmun Kütləsi -->
+        <!-- OTP Mesajları Seksiyası -->
         <div class="card" id="content-card" style="display: none;">
-            <div class="card-header">
-                <h3>📥 Gələn OTP və SMS-lər</h3>
-                <button id="refresh-btn" class="refresh-btn">🔄 Yenilə</button>
-            </div>
+            <h3>📥 Gələn OTP və SMS-lər</h3>
             <div id="messages-list">
                 <p class="empty">Hələ ki mesaj yoxdur.</p>
             </div>
         </div>
 
-        <!-- Kilid Ekranı -->
+        <!-- Kilid Banneri -->
         <div class="locked-banner" id="locked-banner">
-            <div class="lock-icon">🔒</div>
-            <p>Panelin kilidini açmaq üçün <b>ən azı 1 dostunuzu</b> dəvət etməlisiniz.</p>
+            <p>❌ Botun funksiyalarından istifadə etmək üçün <b>ən azı 1 dostunu</b> dəvət etməlisən!</p>
         </div>
     </div>
 
