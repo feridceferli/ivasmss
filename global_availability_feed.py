@@ -136,10 +136,11 @@ async def publish_global_availability_feed(
     now=None,
     state_file=None,
 ):
-    """Send only when changed, and at most once per 5 minutes.
+    """Baseline without announcing on startup; send subsequent changes
+    no more than once per five minutes.
 
-    On send failure the fingerprint is not saved, allowing a later retry.
-    A persisted state prevents spamming when Render restarts.
+    The baseline avoids a duplicate status announcement after Render restarts
+    without persistent storage. On send failure the previous state is kept.
     """
     if not group_id:
         return "not_configured"
@@ -149,10 +150,23 @@ async def publish_global_availability_feed(
 
     location = state_file or data_path(_STATE_FILENAME)
     previous = _read_state(location)
+    timestamp = time.time() if now is None else float(now)
+
+    # Render may use ephemeral storage, causing its local snapshot to disappear
+    # between deployments. Baseline silently rather than reannounce the entire
+    # catalogue on every restart; changes during uptime still notify the group.
+    if not previous.get("fingerprint"):
+        atomic_save({
+            "fingerprint": current["fingerprint"],
+            "country_counts": current["country_counts"],
+            "last_sent": timestamp,
+        }, location)
+        print("[global-feed] Initial snapshot saved; no startup spam", flush=True)
+        return "initialized"
+
     if current["fingerprint"] == previous.get("fingerprint"):
         return "unchanged"
 
-    timestamp = time.time() if now is None else float(now)
     last_sent = float(previous.get("last_sent", 0) or 0)
     if timestamp - last_sent < _MIN_NOTIFICATION_INTERVAL:
         return "cooldown"
