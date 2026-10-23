@@ -88,7 +88,12 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 - **Admin icazəsi**: istifadəçi Mini App-də `/api/az-access` vasitəsilə icazə sorğusu verə bilər; bot adminləri Mini App-in **Admin** bölməsində `/api/admin` vasitəsilə +994 icazəsini verib ləğv edə bilərlər. Səlahiyyət yoxlaması hər dəfə serverdə, Telegram imzalı `initData` ilə edilir.
 - **Dəvət məcburiyyəti yoxdur**. Mini App arxivdəki bütün dünya nömrələrini kütləvi əldə etmir, boş API range-lərini mövcud kimi göstərmir. Mini App yalnız Telegram botundan açıldıqda etibarlı `initData` alır.
 - **Aktivlər → 📋 Kopyala:** Telegram imzalı `initData` ilə təsdiqlənmiş istifadəçiyə yalnız özünə aid və vaxtı bitməmiş aktiv nömrələrin tam `+` formatı göstərilir. Təkrar nömrələr birləşdirilir və kopyalama düyməsi əlavə olunur. Başqa hesaba aid, ləğv edilmiş və demo sifarişlərinin gizlədilmiş məlumatı açılmır.
-- `test_miniapp_parity.py` və `.github/workflows/miniapp-parity-tests.yml` Mini App menyu/API uyğunluğunu, təhlükəsiz yazı çıxışını və sintaksisi yoxlayır.
+- **/start və daimi Menyu:** Telegram botu Mini App-ə daxil olmaq üçün bir düymə göstərir. Telegram tətbiqi `/start` mesajından sonra veb tətbiqi istifadəçinin toxunuşu olmadan avtomatik aça bilmir; `/menu` ehtiyat bot interfeysini saxlayır.
+- **Profil, balans, dil, liderlər, 2FA, şəxsi TXT:** `/api/profile`, `/api/leaderboard` və `/api/my-numbers` serverdə hesab sahibinin Telegram imzalı sessiyasını yoxlayır; 2FA açarı brauzerdən serverə göndərilmir.
+- **Mini App admin alətləri:** `/api/admin-tools` yalnız qeydiyyatlı adminə açıqdır. Buradan minimum/maksimum çıxarış məbləği, ödəniş metodlarının vəziyyəti, tələb olunan kanallar, qrupda adi məlumat paylaşımı və yalnız əvvəlcədən razılıq verilmiş alıcıya sabit WhatsApp test mesajı idarə olunur. WhatsApp testinə 5 dəqiqə, əl ilə qrup bildirişinə 90 saniyə limit qoyulub.
+- **Çıxarış sorğuları:** `/api/withdrawals` istifadəçiyə yalnız öz statusunu, adminə isə sorğunun **məbləğ/status metadata**sını göstərir; ödəniş nömrələri buradan açılmır. Yeni maliyyə sorğularının yaradılması və təsdiqi təhlükəsiz yenidən işlənənə qədər mövcud Telegram bot axınında qalır.
+- **Təhlükəsizlik sərhədləri:** real üçüncü tərəf OTP-lərinin sərbəst axtarılması, başqalarının kodlarının qruplara paylaşılması, kütləvi təsdiq/SMS sorğuları və məhdudiyyətsiz mesaj göndərilməsi Mini App-ə köçürülməyib. Xüsusi Telegram admin komandaları üçün ehtiyat `/menu` mövcuddur.
+- `test_miniapp_parity.py`, `test_miniapp_admin_tools.py`, `test_miniapp_withdrawals.py` və `.github/workflows/miniapp-parity-tests.yml` Mini App menyusunu, API səlahiyyətlərini, məlumat məxfiliyini və sintaksisini yoxlayır.
 
 ## 🌍 Bütün ölkələr — beynəlxalq telefon kodları
 
