@@ -393,6 +393,42 @@
                 <div id="admin-system-status" class="notice-mini" style="margin-top:12px"></div>
                 <div id="admin-users-list" class="catalog-scroll" style="margin-top:12px"></div>
                 <div class="card" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">⚙️ Sistem konfiqurasiyası</h4>
+                    <div class="catalog-tools">
+                        <label class="notice-mini" for="cfg-min-withdraw">Minimum çıxarış</label>
+                        <input class="admin-input" type="number" inputmode="numeric" min="1" max="100000" id="cfg-min-withdraw" placeholder="Minimum">
+                        <label class="notice-mini" for="cfg-max-withdraw">Maksimum çıxarış</label>
+                        <input class="admin-input" type="number" inputmode="numeric" min="1" max="100000" id="cfg-max-withdraw" placeholder="Maksimum">
+                    </div>
+                    <div class="quick-actions" id="cfg-payment-methods"></div>
+                    <button class="action-small" onclick="saveAdminSettings()">💾 Parametrləri saxla</button>
+                </div>
+                <div class="card" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">🔗 Tələb olunan kanallar</h4>
+                    <div id="admin-channels-list" class="catalog-scroll"></div>
+                    <div class="catalog-tools">
+                        <input id="admin-channel-link" class="admin-input" type="url" placeholder="https://t.me/kanal" aria-label="Telegram kanal keçidi">
+                        <input id="admin-channel-label" class="admin-input" type="text" maxlength="64" placeholder="Kanalın adı">
+                    </div>
+                    <input id="admin-channel-chat-id" class="admin-input" type="text" inputmode="numeric" placeholder="Chat ID (özəl qruplar üçün)" aria-label="Kanalın Chat ID-si">
+                    <button class="action-small" onclick="adminAddChannel()" style="margin-top:8px">➕ Kanal əlavə et</button>
+                </div>
+                <div class="card" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">📢 QRUPA BİLDİRİŞ</h4>
+                    <p class="notice-mini">Yalnız konfiqurasiya edilmiş məlumat qrupuna. OTP, şəxsi nömrələr və şifrələri daxil etməyin. 90 saniyə limit var.</p>
+                    <textarea id="admin-group-notice" class="admin-input" rows="3" maxlength="600" placeholder="Qrup üçün yenilik və ya məlumat"></textarea>
+                    <button class="action-small" onclick="adminSendGroupNotice()">📨 Bildirişi göndər</button>
+                </div>
+                <div class="card" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">🧪 Təhlükəsiz test alətləri</h4>
+                    <p id="admin-test-status" class="notice-mini">WhatsApp bağlantısı və arxiv vəziyyəti yoxlanır...</p>
+                    <div class="quick-actions">
+                        <button class="action-small" onclick="loadAdminTools()">🔄 Statusu yenilə</button>
+                        <button class="action-small" onclick="adminWhatsAppTest()">📱 Razılıqlı test nömrəsinə WhatsApp testi</button>
+                    </div>
+                    <p class="notice-mini">WhatsApp testi yalnız Render-də əvvəlcədən təyin olunmuş test alıcısına bir sabit mesaj göndərir. Ən azı 5 dəqiqə interval var.</p>
+                </div>
+                <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 6px">💰 İstifadəçi balansını dəyiş</h4>
                     <p class="notice-mini">Yalnız qeydiyyatlı istifadəçinin ID-si və məbləğ (AZN).</p>
                     <div class="catalog-tools">
@@ -406,6 +442,6 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261023-miniapp-main2"></script>
+    <script src="app.js?v=20261023-all-tools"></script>
 </body>
 </html>
