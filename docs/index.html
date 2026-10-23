@@ -178,6 +178,38 @@
         .tabs { overflow-x: auto; scrollbar-width: none; }
         .tab-btn { flex: 0 0 auto; }
         [hidden] { display: none !important; }
+
+        /* Compact, mobile-first country and approval panels */
+        .catalog-tools { display:flex; gap:8px; align-items:center; margin:0 0 10px; }
+        .catalog-tools input, .admin-input { min-width:0; width:100%; border-radius:10px;
+            border:1px solid rgba(255,255,255,.15); padding:11px; background:rgba(0,0,0,.2);
+            color:var(--text-color); font:inherit; box-sizing:border-box; }
+        .catalog-row { display:flex; align-items:center; justify-content:space-between; width:100%;
+            gap:10px; padding:10px; margin:0 0 6px; border:1px solid rgba(255,255,255,.08);
+            border-radius:10px; background:rgba(255,255,255,.045); text-align:left;
+            color:var(--text-color); cursor:pointer; font-size:13px; }
+        .catalog-row small { color:var(--hint-color); white-space:nowrap; }
+        .catalog-scroll { max-height:385px; overflow-y:auto; }
+        .catalog-range { margin:6px 0 6px 12px; }
+        .catalog-range .catalog-row { background:rgba(59,130,246,.065); }
+        .catalog-row[disabled] { cursor:not-allowed; opacity:.65; }
+        .pager { display:flex; align-items:center; justify-content:space-between; gap:8px; margin:12px 0 0; }
+        .pager button, .action-small { padding:8px 10px; border:1px solid rgba(255,255,255,.15);
+            border-radius:9px; background:rgba(255,255,255,.075); color:var(--text-color); cursor:pointer; }
+        .pager button:disabled { opacity:.35; cursor:not-allowed; }
+        .notice-mini { margin:8px 0 12px; color:var(--hint-color); font-size:12px; line-height:1.5; }
+        .operator-group { margin:10px 0; padding:10px; border:1px solid rgba(255,255,255,.1);
+            border-radius:12px; }
+        .operator-group summary { cursor:pointer; font-weight:700; font-size:14px; }
+        .operator-prefix { margin:10px 0 0; padding-left:8px; border-left:2px solid rgba(59,130,246,.3); }
+        .operator-prefix summary { font-size:13px; }
+        #tab-admin[hidden] { display:none !important; }
+        #permission-status { font-size:12px; line-height:1.5; }
+        #status-strip { text-align:center; font-size:12px; color:var(--hint-color); margin-bottom:10px; }
+        .admin-user-line { display:flex; gap:6px; align-items:center; justify-content:space-between;
+            margin:6px 0; padding:8px; border-radius:9px; background:rgba(255,255,255,.045); }
+        .admin-user-line span { overflow-wrap:anywhere; min-width:0; font-size:12px; }
+        @media(max-width:390px){ .tab-btn{font-size:11px;padding:8px 6px}.catalog-row{font-size:12px} }
     </style>
 </head>
 <body>
@@ -198,10 +230,14 @@
         </div>
 
         <!-- Naviqasiya Tabları -->
-        <div class="tabs">
+        <div id="status-strip" role="status">Məlumatlar yenilənir...</div>
+        <div class="tabs" role="tablist" aria-label="Mini App bölmələri">
             <button class="tab-btn active" onclick="switchTab('services')">📡 Xidmətlər</button>
+            <button class="tab-btn" onclick="switchTab('countries')">🌍 Bütün ölkələr</button>
+            <button class="tab-btn" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
             <button class="tab-btn" onclick="switchTab('active')">📱 Aktivlər</button>
             <button class="tab-btn" onclick="switchTab('history')">📜 Tarixçə</button>
+            <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
         </div>
 
         <!-- 1. Xidmətlər Tabı -->
@@ -211,6 +247,42 @@
                 <div class="services-grid" id="services-grid-container">
                     <p class="hint">Xidmətlər yüklənir...</p>
                 </div>
+            </div>
+        </div>
+
+        <!-- World country-code directory and per-country provider ranges -->
+        <div id="tab-countries" class="tab-content">
+            <div class="card">
+                <h4 style="margin:0 0 8px">🌍 Bütün ölkələr və telefon kodları</h4>
+                <p class="notice-mini" id="countries-summary">Ölkə kataloqu yüklənir...</p>
+                <div class="catalog-tools">
+                    <input id="country-search" type="search" placeholder="Ölkə adı və ya kod (+994)" aria-label="Ölkə axtar">
+                </div>
+                <div id="countries-list" class="catalog-scroll"></div>
+                <div class="pager">
+                    <button id="countries-prev" onclick="changeCountryPage(-1)">◀️ Əvvəlki</button>
+                    <span id="countries-page">1 / 1</span>
+                    <button id="countries-next" onclick="changeCountryPage(1)">Növbəti ▶️</button>
+                </div>
+            </div>
+            <div class="card" id="country-details" hidden>
+                <h4 id="country-detail-heading" style="margin:0 0 8px"></h4>
+                <p id="country-detail-hint" class="notice-mini"></p>
+                <div id="country-range-list" class="catalog-scroll"></div>
+                <button class="action-small" onclick="closeCountryDetails()">◀️ Ölkələrə qayıt</button>
+            </div>
+        </div>
+
+        <!-- Azerbaijan operator catalog and approval -->
+        <div id="tab-azerbaijan" class="tab-content">
+            <div class="card">
+                <h4 style="margin:0 0 8px">🇦🇿 Azərbaycan operatorları</h4>
+                <p id="permission-status" class="notice-mini">İcazə yoxlanılır...</p>
+                <button class="btn" id="request-az-access" onclick="requestAzPermission()" hidden>
+                    🔒 Admin icazəsi istə
+                </button>
+                <p class="notice-mini">Bakcell, Azercell, Nar, Naxtell, Catel (+99440) və CDMA (+99444). 210/211 və API-də əlavə elan edilən range-lər.</p>
+                <div id="az-operators-list"><p class="hint">Operatorlar yüklənir...</p></div>
             </div>
         </div>
 
@@ -233,8 +305,26 @@
                 </div>
             </div>
         </div>
+
+        <div id="tab-admin" class="tab-content" hidden>
+            <div class="card">
+                <h4 style="margin:0 0 8px">⚙️ Admin idarəetməsi</h4>
+                <p class="notice-mini">Yalnız təsdiqlənmiş bot adminləri üçün. +994 giriş icazələri serverdə yoxlanır.</p>
+                <div class="catalog-tools">
+                    <input class="admin-input" type="text" id="admin-target-id" inputmode="numeric"
+                        placeholder="Telegram istifadəçi ID" aria-label="İstifadəçi ID-si">
+                </div>
+                <div class="catalog-tools">
+                    <button class="action-small" onclick="adminAzPermission(true)">✅ +994 icazə ver</button>
+                    <button class="action-small" onclick="adminAzPermission(false)">🔒 İcazəni ləğv et</button>
+                </div>
+                <p id="admin-result" class="notice-mini"></p>
+                <button class="action-small" onclick="fetchAdminUsers()">🔄 İstifadəçiləri yenilə</button>
+                <div id="admin-users-list" class="catalog-scroll" style="margin-top:12px"></div>
+            </div>
+        </div>
     </div>
 
-    <script src="app.js"></script>
+    <script src="app.js?v=20261023-world"></script>
 </body>
 </html>
