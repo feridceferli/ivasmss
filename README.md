@@ -80,6 +80,14 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 - İcazələr `DB_FOLDER/az_range_permissions.json` faylında saxlanır. Render-də qalıcı disk yoxdursa, redeploy və restart zamanı təsdiqlər itə bilər. Qalıcı disk və ya davamlı məlumat bazası tələb olunur.
 - Dəvət/referral sistemi söndürülüb. İstifadəçi girişində bir dost dəvət etmək şərti yoxdur.
 
+## 🌍 Bütün ölkələr — beynəlxalq telefon kodları
+
+- **Bütün ölkələr** menyusu `world_country_codes.py` kataloqundakı **244 ölkə və ərazini** ayrıca göstərir; mənbə: [country-json](https://github.com/samayo/country-json). Bu, ölkə kodlarının snapshot siyahısıdır, provayder tərəfindən verilən nömrələr deyil.
+- Hər ölkə adı və +telefon kodu ilə görünür. Yanındakı rəqəm `GET /liveaccess` siyahısından uyğunlaşdırılmış range sayı deməkdir; **0** həmin ölkənin mövcud range-i təsdiqlənmədiyini bildirir.
+- Hər ölkə altında API-dən gələn range-lər və aid olduqları xidmətlər ayrıca göstərilir. Bir range bir neçə xidmətdə görünürsə, hər biri saxlanır. Bir kodu bir neçə ölkə bölüşürsə, qeyri-müəyyənlik barədə xəbərdarlıq var.
+- Ölkələrin hamısına nömrə alınacağına zəmanət yoxdur; tətbiq hər ölkə üçün ayrıca və avtomatik `/getnum` sorğuları göndərmir. Nömrə sifarişi yalnız istifadəçinin konkret range seçimi ilə edilir.
+- Azərbaycan (+994) üçün əvvəlki admin təsdiqi və operator qrupları qüvvədə qalır.
+
 ## Xidmətlər və mövcudluq bildirişləri
 
 - Xidmət seçimi API-dən gələn cari xidmət siyahısını göstərir; API-də sonradan görünən xidmətlər (məsələn, Bolt) kod dəyişikliyi olmadan siyahıya düşür.
