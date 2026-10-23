@@ -285,6 +285,22 @@
             <div class="card">
                 <h4 style="margin:0 0 8px">🌍 Bütün ölkələr və telefon kodları</h4>
                 <p class="notice-mini" id="countries-summary">Ölkə kataloqu yüklənir...</p>
+                <div class="card" style="margin:12px 0">
+                    <h4 style="margin:0 0 8px">🩺 Bütün ölkələr üzrə API və aktiv nömrə diaqnostikası</h4>
+                    <p class="notice-mini">Bütün ölkələri yoxla: API kataloqundakı range sayı, yalnız öz hesabınıza ayrılmış aktiv nömrələrin sayı və tam nömrələri. Eyni beynəlxalq kodu bölüşən ölkələr ayrıca işarələnir. Siyahıdakı range SMS/OTP çatdırılmasını təsdiqləmir.</p>
+                    <button id="world-diagnostic-refresh" class="action-small" onclick="refreshWorldProviderDiagnostics()">🔄 Bütün ölkələri yoxla</button>
+                    <p id="world-diagnostic-summary" class="notice-mini" role="status" aria-live="polite"></p>
+                    <div class="catalog-tools">
+                        <input id="world-diagnostic-search" type="search" placeholder="Ölkə, ISO və ya +telefon kodu" aria-label="Ölkə diaqnostikasında axtar">
+                    </div>
+                    <div id="world-diagnostic-list" class="catalog-scroll"></div>
+                    <div class="pager">
+                        <button class="action-small" id="world-diagnostic-prev" onclick="changeWorldDiagnosticPage(-1)">◀️ Əvvəlki</button>
+                        <span id="world-diagnostic-page">1 / 1</span>
+                        <button class="action-small" id="world-diagnostic-next" onclick="changeWorldDiagnosticPage(1)">Növbəti ▶️</button>
+                    </div>
+                    <div id="world-diagnostic-detail" class="card" style="margin-top:12px" hidden></div>
+                </div>
                 <div class="catalog-tools">
                     <input id="country-search" type="search" placeholder="Ölkə adı və ya kod (+994)" aria-label="Ölkə axtar">
                 </div>
@@ -480,5 +496,6 @@
 
     <script src="app.js?v=20261023-newest-autocopy"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
+    <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 </body>
 </html>
