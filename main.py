@@ -35,6 +35,7 @@ from telegram.ext import (
     ContextTypes,
     filters,
     CallbackQueryHandler,
+    ApplicationHandlerStop,
 )
 from telegram.error import TelegramError
 from aiohttp import web
@@ -4299,6 +4300,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 "range_text": param,
             })
             return
+    if not is_admin(uid) and get_referral_count(uid) < 1:
+        await send_referral_gate_message(update.effective_message, context.bot, uid)
+        return
+
     context.user_data.clear()
     if not get_user_language(uid) or "language" not in load_data(USER_DATA_FILE).get(uid_str, {}):
         await update.effective_message.reply_text(
@@ -4316,6 +4321,54 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
              "🔹 Aşağıdaki düğmeleri kullanın:" if lang == "tr" else
              "🔹 PLEASE USE THE BUTTONS BELOW:"),
         reply_markup=main_keyboard(uid),
+    )
+
+
+async def referral_gate_handler(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Block gated private actions before the regular handlers run."""
+    user = update.effective_user
+    chat = update.effective_chat
+    if not user or not chat or chat.type != "private":
+        return
+    uid = user.id
+    if is_admin(uid) or get_referral_count(uid) >= 1:
+        return
+
+    if update.callback_query:
+        query = update.callback_query
+        allowed = {"menu_check_referral", "menu_refer", "verify_me",
+                   "lang_az", "lang_en", "lang_tr"}
+        if query.data in allowed:
+            return
+        await query.answer("🔒 Panel üçün 1 dost dəvət edin.", show_alert=True)
+        raise ApplicationHandlerStop()
+
+    message = update.effective_message
+    if not message:
+        return
+    value = (getattr(message, "text", "") or "").strip()
+    # /start must process ref_ID before the invitation requirement is evaluated.
+    if value.startswith(("/start", "/refer", "/help")):
+        return
+    await send_referral_gate_message(message, context.bot, uid)
+    raise ApplicationHandlerStop()
+
+
+async def send_referral_gate_message(message, bot, uid):
+    info = await bot.get_me()
+    link = build_referral_link(info.username, uid)
+    share = "https://t.me/share/url?url=" + quote(link, safe="")
+    await message.reply_text(
+        "🔒 <b>DƏVƏT TƏLƏBİ</b>\n\n"
+        "Botun funksiyalarını açmaq üçün 1 dostunuzu dəvət edin.\n"
+        f"📊 Cari dəvət: {get_referral_count(uid)}/1\n"
+        f"🔗 <code>{html.escape(link)}</code>",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton("🔗 Dostunu dəvət et", url=share)],
+            [InlineKeyboardButton("🔄 Vəziyyəti yoxla",
+                                  callback_data="menu_check_referral")],
+        ]),
     )
 
 
@@ -4970,6 +5023,22 @@ def _miniapp_cors(resp):
     return resp
 
 
+@web.middleware
+async def miniapp_referral_access(request, handler):
+    if (request.path.startswith("/api/")
+            and request.path != "/api/referrals"
+            and request.method != "OPTIONS"):
+        tg_user, _err = _miniapp_auth(request)
+        if tg_user:
+            uid = int(tg_user["id"])
+            if not is_admin(uid) and get_referral_count(uid) < 1:
+                return _miniapp_cors(web.json_response({
+                    "error": "referral_required",
+                    "required": 1,
+                }, status=403))
+    return await handler(request)
+
+
 async def miniapp_referrals_api(request):
     """Authenticated referral count and share link for the existing Mini App."""
     if request.method == "OPTIONS":
@@ -5123,6 +5192,9 @@ async def post_init(application):
 
 
 def register_handlers(app):
+    # Group -1 executes ahead of normal commands, callbacks and Web App actions.
+    app.add_handler(CallbackQueryHandler(referral_gate_handler), group=-1)
+    app.add_handler(MessageHandler(filters.ALL, referral_gate_handler), group=-1)
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
@@ -5195,7 +5267,7 @@ async def run_combined_server():
             "provider_configured": bool(API_KEY),
         })
 
-    server = web.Application(client_max_size=1024 * 1024)
+    server = web.Application(client_max_size=1024 * 1024, middlewares=[miniapp_referral_access])
     server.router.add_post("/webhook", telegram_webhook)
     server.router.add_route("*", "/api/get-number", miniapp_get_number_api)
     server.router.add_route("*", "/api/referrals", miniapp_referrals_api)
