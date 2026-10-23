@@ -4,6 +4,8 @@ body {
     color: var(--tg-theme-text-color, #ffffff);
     margin: 0;
     padding: 16px;
+    -webkit-user-select: none;
+    user-select: none;
 }
 .container {
     max-width: 480px;
@@ -12,67 +14,125 @@ body {
 header {
     text-align: center;
     margin-bottom: 20px;
+    position: relative;
+}
+.status-badge {
+    display: inline-block;
+    font-size: 11px;
+    color: #4cd964;
+    background: rgba(76, 217, 100, 0.1);
+    padding: 4px 8px;
+    border-radius: 12px;
+    margin-bottom: 8px;
 }
 header h2 {
-    margin: 0 0 5px 0;
+    margin: 4px 0;
+    font-size: 22px;
+}
+#user-greeting {
+    font-size: 13px;
+    color: var(--tg-theme-hint-color, #8e8e93);
+    margin: 0;
 }
 .card {
     background-color: var(--tg-theme-secondary-bg-color, #232e3c);
-    border-radius: 12px;
+    border-radius: 14px;
     padding: 16px;
     margin-bottom: 16px;
-    box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 12px;
 }
 h3 {
-    margin-top: 0;
-    font-size: 16px;
-    color: var(--tg-theme-hint-color, #a8b2bc);
+    margin: 0;
+    font-size: 15px;
+    color: var(--tg-theme-hint-color, #8e8e93);
 }
-.ref-box input {
-    width: 100%;
+.status-box {
+    font-size: 14px;
+    margin: 10px 0;
     padding: 10px;
     border-radius: 8px;
-    border: 1px solid #4a5768;
-    background: #111923;
+    background: rgba(255,255,255,0.05);
+}
+.ref-box label {
+    font-size: 12px;
+    color: var(--tg-theme-hint-color, #8e8e93);
+}
+.input-group {
+    display: flex;
+    gap: 8px;
+    margin-top: 6px;
+}
+.input-group input {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid rgba(255,255,255,0.1);
+    background: rgba(0,0,0,0.2);
     color: #fff;
-    margin: 8px 0;
-    box-sizing: border-box;
+    font-size: 13px;
 }
 button {
     background-color: var(--tg-theme-button-color, #2481cc);
     color: var(--tg-theme-button-text-color, #ffffff);
     border: none;
-    padding: 10px 16px;
+    padding: 10px 14px;
     border-radius: 8px;
-    font-size: 14px;
+    font-size: 13px;
+    font-weight: 600;
     cursor: pointer;
-    width: 100%;
-    font-weight: bold;
 }
 button:active {
     opacity: 0.8;
 }
+.refresh-btn {
+    padding: 6px 10px;
+    font-size: 11px;
+    background: rgba(255,255,255,0.1);
+}
 .message-item {
-    background: #111923;
-    padding: 10px;
-    border-radius: 8px;
-    margin-bottom: 8px;
+    background: rgba(0,0,0,0.2);
+    padding: 12px;
+    border-radius: 10px;
+    margin-bottom: 10px;
     border-left: 4px solid var(--tg-theme-button-color, #2481cc);
 }
 .message-item p {
     margin: 4px 0;
-    font-size: 14px;
+    font-size: 13px;
+}
+.message-item code {
+    background: rgba(255,255,255,0.1);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-family: monospace;
+    color: #4cd964;
 }
 .locked-banner {
-    background-color: #d13f3f22;
-    border: 1px solid #d13f3f;
-    padding: 12px;
-    border-radius: 8px;
+    background: rgba(209, 63, 63, 0.12);
+    border: 1px solid rgba(209, 63, 63, 0.4);
+    padding: 20px;
+    border-radius: 14px;
     text-align: center;
-    display: none;
+    margin-top: 10px;
+}
+.lock-icon {
+    font-size: 32px;
+    margin-bottom: 8px;
+}
+.locked-banner p {
+    margin: 0;
+    font-size: 13px;
+    color: #ff6b6b;
 }
 .empty {
-    color: var(--tg-theme-hint-color, #a8b2bc);
+    color: var(--tg-theme-hint-color, #8e8e93);
     text-align: center;
-    font-style: italic;
+    font-size: 13px;
+    padding: 10px 0;
 }
