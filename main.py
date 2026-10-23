@@ -5197,6 +5197,7 @@ async def miniapp_dashboard(request):
             "last_name": tg_user.get("last_name", ""),
             "username": tg_user.get("username", ""),
             "is_admin": is_admin(uid),
+            "az_approved": az_range_allowed(uid),
         },
         "balance": format_balance(user.get("balance", 0)),
         "stats": {
@@ -5266,10 +5267,39 @@ async def miniapp_admin_api(request):
     if request.method=="GET":
         rows=[]
         for user_id,data in list(users.items())[-100:]:
-            rows.append({"id":user_id,"name":data.get("full_name") or data.get("username") or "İstifadəçi","balance":format_balance(data.get("balance",0)),"banned":is_user_banned(user_id)})
+            rows.append({"id":user_id,"name":data.get("full_name") or data.get("username") or "İstifadəçi","balance":format_balance(data.get("balance",0)),"banned":is_user_banned(user_id),"az_approved":az_range_allowed(user_id)})
         cfg=load_system_config()
         return _miniapp_cors(web.json_response({"user_count":len(users),"users":rows,"config":{"min_withdraw":cfg.get("min_withdraw"),"max_withdraw":cfg.get("max_withdraw"),"payment_methods":cfg.get("payment_methods",{})}}))
-    body=await request.json(); action=body.get("action"); target=str(body.get("user_id",""))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+    action = body.get("action")
+    target = str(body.get("user_id", "")).strip()
+    if action in ("az_approve", "az_revoke"):
+        if not target.isdecimal() or len(target) > 20 or int(target) <= 0:
+            return _miniapp_cors(web.json_response({"error": "invalid_user_id"}, status=400))
+        if action == "az_approve" and not user_exists(target):
+            return _miniapp_cors(web.json_response({"error": "user_not_found"}, status=404))
+        access = load_data(AZ_ACCESS_FILE)
+        if action == "az_approve":
+            access[target] = True
+        else:
+            access.pop(target, None)
+        save_data(access, AZ_ACCESS_FILE)
+        if action == "az_approve":
+            try:
+                await request.app["telegram_bot"].send_message(
+                    chat_id=int(target),
+                    text="✅ +994 nömrələrinə icazəniz Mini App admini tərəfindən təsdiqləndi.",
+                )
+            except TelegramError:
+                pass
+        return _miniapp_cors(web.json_response({
+            "ok": True, "user_id": target, "approved": action == "az_approve",
+        }))
     if action in ("ban","unban") and target:
         (ban_user if action=="ban" else unban_user)(target)
         return _miniapp_cors(web.json_response({"ok":True}))
@@ -5370,6 +5400,7 @@ async def run_combined_server():
         })
 
     server = web.Application(client_max_size=1024 * 1024)
+    server["telegram_bot"] = app.bot
     server.router.add_post("/webhook", telegram_webhook)
     server.router.add_route("*", "/api/get-number", miniapp_get_number_api)
     server.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
@@ -5378,6 +5409,8 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
+    server.router.add_route("*", "/api/countries", miniapp_countries_api)
+    server.router.add_route("*", "/api/az-access", miniapp_az_access_api)
     server.router.add_route("*", "/api/incoming-sms", miniapp_incoming_sms_api)
     server.router.add_get("/health", health)
 
@@ -5433,6 +5466,9 @@ async def miniapp_services_api(request):
     if not tg_user:
         return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
     
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
     return _miniapp_cors(web.json_response({
         "services": services,
@@ -5440,9 +5476,88 @@ async def miniapp_services_api(request):
             is_az_range(item)
             for ranges in services.values() for item in ranges
         ),
-        "az_approved": az_range_allowed(int(tg_user["id"])),
+        "az_approved": az_range_allowed(uid),
         "az_catalog": az_range_catalog(services),
     }))
+
+
+async def miniapp_countries_api(request):
+    """Searchable world-country catalogue; upstream listing metadata only."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    services = await fetch_services_cached()
+    countries = build_all_country_rows(services)
+    iso = str(request.query.get("iso", "")).upper().strip()
+    if iso:
+        match = next((c for c in countries if c["iso"] == iso), None)
+        if not match:
+            return _miniapp_cors(web.json_response({"error": "unknown_country"}, status=404))
+        return _miniapp_cors(web.json_response({
+            "country": match, "az_approved": az_range_allowed(uid),
+        }))
+    return _miniapp_cors(web.json_response({
+        "countries": [{
+            "iso": c["iso"], "name": c["name"], "flag": c["flag"],
+            "prefix": c["prefix"], "count": len(c["ranges"]),
+            "is_shared": c["is_shared"],
+        } for c in countries],
+        "total": len(countries),
+        "available_countries": sum(bool(c["ranges"]) for c in countries),
+        "az_approved": az_range_allowed(uid),
+    }))
+
+
+async def miniapp_az_access_api(request):
+    """Request +994 approval through authenticated Telegram initData."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    if request.method == "GET":
+        return _miniapp_cors(web.json_response({
+            "approved": az_range_allowed(uid), "is_admin": is_admin(uid),
+        }))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    if az_range_allowed(uid):
+        return _miniapp_cors(web.json_response({
+            "ok": True, "approved": True, "message": "Artıq icazəniz var.",
+        }))
+    now = time.monotonic()
+    if now - _az_request_times.get(uid, 0) < 300:
+        return _miniapp_cors(web.json_response({
+            "error": "rate_limited", "message": "Təkrar sorğu üçün 5 dəqiqə gözləyin.",
+        }, status=429))
+    sent = 0
+    for admin_id in ADMINS:
+        try:
+            await request.app["telegram_bot"].send_message(
+                chat_id=admin_id,
+                text=(f"🇦🇿 +994 Mini App icazə sorğusu: Telegram ID {uid}\n"
+                      f"İcazə: /az_approve {uid}\nLəğv: /az_revoke {uid}"),
+            )
+            sent += 1
+        except TelegramError:
+            continue
+    if not sent:
+        return _miniapp_cors(web.json_response({
+            "error": "delivery_failed", "message": "Adminə mesaj göndərilə bilmədi.",
+        }, status=503))
+    _az_request_times[uid] = now
+    return _miniapp_cors(web.json_response({
+        "ok": True, "approved": False, "message": "İcazə sorğunuz adminə göndərildi.",
+    }))
+
 
 async def miniapp_incoming_sms_api(request):
     if request.method == "OPTIONS":
@@ -5481,15 +5596,37 @@ async def miniapp_get_number_api(request):
     selected_rid = str(body.get("range", "")).strip()
     requested_country = str(body.get("country", "")).strip()
     if selected_rid:
-        if (requested_country != "994" or
-                not az_catalog_lookup(rid=selected_rid, services=await fetch_services_cached())):
-            return _miniapp_cors(web.json_response({"error": "invalid_catalog_range"}, status=400))
-        if not az_range_allowed(uid):
-            return _miniapp_cors(web.json_response({
-                "error": "admin_approval_required", "message": AZ_ACCESS_DENIED,
-            }, status=403))
+        if not selected_rid.isdecimal() or len(selected_rid) > 10:
+            return _miniapp_cors(web.json_response({"error": "invalid_range"}, status=400))
+        if is_az_range(selected_rid) and service == "az":
+            if not az_range_allowed(uid):
+                return _miniapp_cors(web.json_response({
+                    "error": "admin_approval_required", "message": AZ_ACCESS_DENIED,
+                }, status=403))
+            if (requested_country != "994" or not az_catalog_lookup(
+                    rid=selected_rid, services=await fetch_services_cached())):
+                return _miniapp_cors(web.json_response({"error": "invalid_catalog_range"}, status=400))
+        else:
+            services = await fetch_services_cached()
+            actual_ranges = {
+                re.sub(r"\D", "", str(item))
+                for item in services.get(service, [])
+            }
+            if selected_rid not in actual_ranges:
+                return _miniapp_cors(web.json_response({"error": "range_unavailable"}, status=404))
+            country_iso = str(body.get("country_iso", "")).upper().strip()
+            if country_iso:
+                selected_country = next(
+                    (c for c in build_all_country_rows({service: [selected_rid]})
+                     if c["iso"] == country_iso), None,
+                )
+                if not selected_country or not selected_country["ranges"]:
+                    return _miniapp_cors(web.json_response({"error": "country_mismatch"}, status=400))
+            if is_az_range(selected_rid) and not az_range_allowed(uid):
+                return _miniapp_cors(web.json_response({
+                    "error": "admin_approval_required", "message": AZ_ACCESS_DENIED,
+                }, status=403))
         rid = selected_rid
-        service = "az"
     else:
         # Ordinary services use ranges actually advertised by the upstream API.
         services = await fetch_services_cached()
