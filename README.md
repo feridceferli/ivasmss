@@ -77,6 +77,8 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 - İstifadəçi botun şəxsi çatında `/az_request` göndərərək icazə istəyir və `/az_access` ilə statusu yoxlayır.
 - Admin botun şəxsi çatında `/az_approve 123456789` ilə həmin ID-yə icazə verir, `/az_revoke 123456789` ilə ləğv edir.
 - Telegram botu və Mini App serverdə admin təsdiqini yoxlayır. Konfiqurasiya olunmuş 210/211 seçimləri API-də görünməsə də sınaq üçün seçilə bilər; digər range-lər yalnız cari API siyahısında varsa seçilə bilər. Nömrə alma bir sorğudur və uğuru provayder cavabından asılıdır.
+- **+994 range qiyməti 10 AZN** olaraq Mini App-də göstərilir. İstifadəçi **[@lacin_0041](https://t.me/lacin_0041)** düyməsi ilə adminə yaza bilər. Qiymət məlumat xarakterlidir: Mini App bu düymə vasitəsilə avtomatik ödəniş tutmur və yalnız admin təsdiqi ilə nömrə ayırmağa cəhd edir.
+- **Mövcud Xidmətlər və Ölkələr:** istifadəçi xidməti, ölkə telefon kodunu və API tərəfindən elan edilən uyğun range-i seçərək həmin range üçün **bir** nömrə alma sorğusu göndərə bilər; aktiv nömrə mövcudluğu API-dən asılıdır.
 - İcazələr `DB_FOLDER/az_range_permissions.json` faylında saxlanır. Render-də qalıcı disk yoxdursa, redeploy və restart zamanı təsdiqlər itə bilər. Qalıcı disk və ya davamlı məlumat bazası tələb olunur.
 - Dəvət/referral sistemi söndürülüb. İstifadəçi girişində bir dost dəvət etmək şərti yoxdur.
 
