@@ -26,8 +26,8 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install Telegram package
-        run: pip install "python-telegram-bot[webhooks]==22.8"
+        run: pip install -r requirements.txt
       - name: Check bot syntax
-        run: python -m py_compile main.py premium_ui.py bot_languages.py
+        run: python -m py_compile main.py premium_ui.py bot_languages.py && python -c "import main; assert callable(main.main)"
       - name: Test custom emoji UI and fallback
         run: python -m unittest -v test_premium_ui

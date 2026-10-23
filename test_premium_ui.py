@@ -5,9 +5,9 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from telegram import InlineKeyboardMarkup, WebAppInfo
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, WebAppInfo
 
-from bot_languages import menu_labels
+from bot_languages import menu_labels, t
 from premium_ui import (
     CUSTOM_EMOJI_IDS,
     disable_premium_icons,
@@ -80,6 +80,8 @@ class PremiumEmojiTests(unittest.TestCase):
                 "WEBAPP_URL": "https://example.com",
                 "WebAppInfo": WebAppInfo,
                 "InlineKeyboardMarkup": InlineKeyboardMarkup,
+                "InlineKeyboardButton": InlineKeyboardButton,
+                "t": t,
                 "is_admin": lambda uid: uid == 42,
             }
             exec(code, namespace)

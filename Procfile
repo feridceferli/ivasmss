@@ -1,1 +1,1 @@
-worker: python Belge_Azerbaycanca_EMOJILI.py
+web: python main.py
