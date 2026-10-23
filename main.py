@@ -1740,7 +1740,7 @@ async def show_country_ranges(update, context, info=None, back=None, page=0):
     pages = max(1, (len(entries) + size - 1) // size)
     page = max(0, min(page, pages - 1))
     rows = [[InlineKeyboardButton(
-        "📶 " + entry["display"], callback_data=f"menu_range_pick_{token}_{index}",
+        f"📶 {entry['display']} · {entry['service']}", callback_data=f"menu_range_pick_{token}_{index}",
     )] for index, entry in enumerate(entries)
         if page * size <= index < (page + 1) * size]
     nav = []
