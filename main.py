@@ -5231,7 +5231,14 @@ async def miniapp_services_api(request):
         return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
     
     services = await fetch_services_cached()
-    return _miniapp_cors(web.json_response({"services": services}))
+    return _miniapp_cors(web.json_response({
+        "services": services,
+        "az_available": any(
+            is_az_range(item)
+            for ranges in services.values() for item in ranges
+        ),
+        "az_approved": az_range_allowed(int(tg_user["id"])),
+    }))
 
 async def miniapp_incoming_sms_api(request):
     if request.method == "OPTIONS":
@@ -5259,23 +5266,37 @@ async def miniapp_get_number_api(request):
     
     try:
         body = await request.json()
-        service = str(body.get("service", "CUSTOM")).strip().lower()
-    except Exception:
-        service = "custom"
+        if not isinstance(body, dict):
+            raise ValueError("invalid body")
+        service = str(body.get("service", "")).strip().lower()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
 
-    # Servis için geçerli bir range buluyoruz
+    # Never invent +994 ranges or fall back to a different service.
     services = await fetch_services_cached()
-    ranges = services.get(service)
+    ranges = services.get(service, [])
     if not ranges:
-        all_ranges = list(services.values())
-        ranges = all_ranges[0] if all_ranges else ["99450"]
-        
-    raw_range = ranges[0]
-    rid = re.sub(r"[^0-9]", "", str(raw_range))
-    if not rid:
-        rid = "99450"
+        return _miniapp_cors(web.json_response({"error": "service_unavailable"}, status=404))
+    requested_country = str(body.get("country", "")).strip() if isinstance(body, dict) else ""
+    valid_ranges = sorted(set(
+        re.sub(r"[^0-9]", "", str(item))
+        for item in ranges
+        if re.sub(r"[^0-9]", "", str(item))
+    ))
+    if requested_country == "994":
+        valid_ranges = [rid for rid in valid_ranges if is_az_range(rid)]
+    else:
+        # Prefer unrestricted countries for normal service selection.
+        valid_ranges = sorted(valid_ranges, key=lambda rid: (is_az_range(rid), rid))
+    if not valid_ranges:
+        return _miniapp_cors(web.json_response({"error": "range_unavailable"}, status=404))
+    rid = valid_ranges[0]
+    if is_az_range(rid) and not az_range_allowed(uid):
+        return _miniapp_cors(web.json_response({
+            "error": "admin_approval_required",
+            "message": AZ_ACCESS_DENIED,
+        }, status=403))
 
-    # API'den numara çekiyoruz
     num, country = await get_number_from_api(rid, requester_id=uid)
     if not num:
         return _miniapp_cors(web.json_response({"success": False, "message": "Şu anda bu serviste uygun numara bulunamadı."}, status=400))
