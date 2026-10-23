@@ -235,10 +235,11 @@ function serviceCountryGroups(service) {
     }).sort((a, b) => a.label.localeCompare(b.label));
 }
 
-function showServiceRanges(service) {
+async function showServiceRanges(service) {
     const parent = document.getElementById("service-detail");
     if (!parent) return;
     parent.hidden = false;
+    if (!state.countries.length) await fetchCountries();
     parent.replaceChildren();
     parent.appendChild(node("h4", "📡 " + service.toUpperCase() + " — ölkə və range seçimi"));
     parent.appendChild(node("p",
