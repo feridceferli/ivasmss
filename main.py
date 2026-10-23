@@ -5341,6 +5341,7 @@ async def miniapp_dashboard(request):
             "range": str(info.get("range", "—")),
             "status": "SMS gözlənilir",
             "remaining_seconds": max(0, 3600 - age),
+            "created_at": ts.timestamp(),
         })
 
     return _miniapp_cors(web.json_response({
@@ -5395,6 +5396,7 @@ async def miniapp_orders_api(request):
     uid=int(tg_user["id"])
     if request.method == "GET":
         active=[_safe_order(uid,o) for o in miniapp_orders.get(uid,[]) if o["status"]=="Aktiv"]
+        active.sort(key=lambda order: order.get("created_at", 0), reverse=True)
         history=miniapp_history.get(uid,[])[-20:][::-1]
         return _miniapp_cors(web.json_response({"orders":active,"history":history}))
     body=await request.json()
