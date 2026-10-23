@@ -146,7 +146,7 @@ class NumberArchive:
                     remote = base64.b64decode(entry["content"]).decode("utf-8")
                     await asyncio.to_thread(self.merge_remote, remote)
                 text = await asyncio.to_thread(self.write_snapshot)
-                if text == remote:
+                if sha is not None and text == remote:
                     self.status = "GitHub arxivi yenidir."
                     return
                 content = text.encode("utf-8")
