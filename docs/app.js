@@ -138,8 +138,8 @@ function updatePermissionStatus() {
     const button = document.getElementById("request-az-access");
     if (!status || !button) return;
     status.textContent = state.azApproved
-        ? "✅ +994 istifadə icazəniz var. Nömrə mövcudluğu API-dən asılıdır."
-        : "🔒 +994 nömrələri üçün admin təsdiqi lazımdır. Sorğunu buradan göndərə bilərsiniz.";
+        ? "✅ +994 icazəniz var. Qiymət: 10 AZN. API-də nömrə mövcudluğu ayrıca yoxlanır."
+        : "🔒 +994 range qiyməti 10 AZN-dir. Nömrə almaq üçün admin təsdiqi lazımdır. Admin: @lacin_0041.";
     button.hidden = state.azApproved;
 }
 
@@ -156,13 +156,13 @@ async function requestAzPermission() {
 }
 
 function addRangeButton(container, label, options) {
-    const button = node("button", label, "catalog-row catalog-range");
+    const button = node("button", label + (options.isAz ? " · 10 AZN" : ""), "catalog-row catalog-range");
     button.type = "button";
     const locked = options.isAz && !state.azApproved;
-    if (locked) button.title = "Admin təsdiqi tələb olunur";
+    if (locked) button.title = "10 AZN · +994 üçün admin təsdiqi tələb olunur";
     button.addEventListener("click", () => {
         if (locked) {
-            alertUser("🔒 Azərbaycan +994 üçün admin təsdiqi lazımdır. 🇦🇿 bölməsində icazə istəyə bilərsiniz.");
+            alertUser("🔒 +994 range qiyməti: 10 AZN. İstifadə üçün admin icazəsi alın: @lacin_0041.");
             switchTab("azerbaijan");
             return;
         }
@@ -205,28 +205,105 @@ function renderServices() {
     });
 }
 
+// Group offered service ranges under their longest matching world calling codes.
+// Shared dial codes are labelled as shared; the provider must verify availability.
+function serviceCountryGroups(service) {
+    const available = Array.isArray(state.services[service]) ? state.services[service] : [];
+    const ranges = [...new Set(available.map(item => String(item).replace(/\D/g, "")))]
+        .filter(item => /^\d{1,10}$/.test(item));
+    const codeMap = new Map();
+    for (const country of state.countries) {
+        const code = String(country.prefix);
+        if (!codeMap.has(code)) codeMap.set(code, []);
+        codeMap.get(code).push(country);
+    }
+    const codes = [...codeMap.keys()].sort((a, b) => b.length - a.length);
+    const grouped = new Map();
+    for (const rid of ranges) {
+        const code = codes.find(item => rid.startsWith(item)) || "";
+        if (!grouped.has(code)) grouped.set(code, []);
+        grouped.get(code).push(rid);
+    }
+    return [...grouped.entries()].map(([code, items]) => {
+        const countries = codeMap.get(code) || [];
+        const shared = countries.length > 1;
+        const label = countries.length
+            ? countries.slice(0, 3).map(c => c.flag + " " + c.name).join(", ") +
+              (countries.length > 3 ? " və digər ölkələr" : "")
+            : "🌍 Digər kod";
+        return {code, items, label, iso: shared ? null : (countries[0]?.iso || null), shared};
+    }).sort((a, b) => a.label.localeCompare(b.label));
+}
+
 function showServiceRanges(service) {
     const parent = document.getElementById("service-detail");
     if (!parent) return;
-    parent.replaceChildren();
     parent.hidden = false;
-    parent.appendChild(node("h4", "📡 " + service.toUpperCase() + " — API range-ləri"));
-    parent.appendChild(node("p", "İstifadə etmək üçün konkret range seçin. " +
-        "Siyahıda olması aktiv nömrəyə zəmanət vermir.", "notice-mini"));
-    const area = node("div", "", "catalog-scroll");
-    parent.appendChild(area);
-    const ranges = state.services[service] || [];
-    const unique = [...new Set(ranges.map(r => String(r).replace(/\D/g, "")))]
-        .filter(r => /^\d{1,10}$/.test(r));
-    if (!unique.length) clearAndText(area, "Uyğun range yoxdur.");
-    for (const rid of unique) {
-        addRangeButton(area, rid + (rid.startsWith("994") && !state.azApproved ? " 🔒" : ""),
-            { service, rid, isAz: rid.startsWith("994") });
+    parent.replaceChildren();
+    parent.appendChild(node("h4", "📡 " + service.toUpperCase() + " — ölkə və range seçimi"));
+    parent.appendChild(node("p",
+        "Əvvəl ölkə kodunu, sonra range-i seçin. Nömrə yalnız seçilmiş range üzrə bir dəfə soruşulur; mövcudluq API-dən asılıdır.",
+        "notice-mini"));
+
+    const groups = serviceCountryGroups(service);
+    const controls = node("div", null, "service-filter-row");
+    const label = node("label", "Ölkə kodu:");
+    const picker = document.createElement("select");
+    picker.setAttribute("aria-label", "Xidmət üçün ölkə kodu");
+    const search = document.createElement("input");
+    search.type = "search";
+    search.placeholder = "Range axtar (məs. 99450)";
+    search.setAttribute("aria-label", "Range axtarışı");
+    controls.append(label, picker, search);
+    parent.appendChild(controls);
+    const listing = node("div", null, "catalog-scroll service-range-list");
+    parent.appendChild(listing);
+    const pricing = node("div");
+    parent.appendChild(pricing);
+    const close = node("button", "✕ Bağla", "action-small");
+    close.type = "button";
+    close.addEventListener("click", () => { parent.hidden = true; });
+    parent.appendChild(close);
+
+    for (const [i, group] of groups.entries()) {
+        const option = document.createElement("option");
+        option.value = String(i);
+        option.textContent = group.label + (group.code ? " (+" + group.code + ")" : "") +
+            " · " + group.items.length + " range";
+        picker.appendChild(option);
     }
-    const back = node("button", "✕ Bağla", "action-small");
-    back.addEventListener("click", () => { parent.hidden = true; });
-    parent.appendChild(back);
-    parent.scrollIntoView?.({ block: "nearest", behavior: "smooth" });
+    if (!groups.length) {
+        clearAndText(listing, "Bu xidmət üçün API-də uyğun range yoxdur.");
+        return;
+    }
+    function renderChosenCountry() {
+        listing.replaceChildren();
+        pricing.replaceChildren();
+        const selected = groups[Number(picker.value) || 0];
+        if (!selected) return;
+        const q = search.value.replace(/\D/g, "");
+        const ranges = selected.items.filter(rid => rid.includes(q));
+        for (const rid of ranges) {
+            addRangeButton(listing, "📞 +" + rid + " — Nömrə al" +
+                (rid.startsWith("994") && !state.azApproved ? " 🔒" : ""),
+                {service, rid, country: selected.code, iso: selected.iso, isAz: rid.startsWith("994")});
+        }
+        if (!ranges.length) clearAndText(listing, "Bu ölkə və axtarış üçün range tapılmadı.");
+        if (selected.items.some(rid => rid.startsWith("994"))) {
+            pricing.appendChild(node("p",
+                "🇦🇿 +994 range qiyməti: 10 AZN. İstifadə üçün admin icazəsi lazımdır. " +
+                "Bu panel avtomatik balans çıxmır.", "az-price-note"));
+            const link = node("a", "💬 Adminlə əlaqə — @lacin_0041", "support-cta");
+            link.href = "https://t.me/lacin_0041";
+            link.target = "_blank";
+            link.rel = "noopener noreferrer";
+            pricing.appendChild(link);
+        }
+    }
+    picker.addEventListener("change", renderChosenCountry);
+    search.addEventListener("input", renderChosenCountry);
+    renderChosenCountry();
+    parent.scrollIntoView?.({block: "nearest", behavior: "smooth"});
 }
 
 function renderAzOperators() {
@@ -324,6 +401,7 @@ async function openCountry(iso) {
         state.azApproved = !!data.az_approved;
         document.getElementById("country-detail-heading").textContent =
             c.flag + " " + c.name + " (+" + c.prefix + ")";
+        document.getElementById("country-az-pricing").hidden = c.prefix !== "994";
         document.getElementById("country-detail-hint").textContent =
             c.is_shared ? "⚠️ Bu telefon kodunu birdən çox ölkə paylaşır; API konkret ölkəni təsdiqləmir."
             : "Burada yalnız API-də göstərilən range-lər var. Nömrə mövcudluğuna zəmanət verilmir.";
@@ -349,7 +427,18 @@ async function selectService(service, country = null, range = null, countryIso =
         showServiceRanges(service);
         return;
     }
-    // Only direct user clicks reach this path. No bulk allocation.
+    if (String(range).startsWith("994")) {
+        if (!state.azApproved) {
+            alertUser("+994 nömrəsi üçün admin icazəsi lazımdır. Qiymət: 10 AZN. Admin: @lacin_0041.");
+            switchTab("azerbaijan");
+            return;
+        }
+        if (!window.confirm(
+            "🇦🇿 +994 range qiyməti 10 AZN olaraq göstərilir. Bu Mini App avtomatik ödəniş tutmur. " +
+            "Seçilmiş range üçün nömrə sorğusu göndərilsin?"
+        )) return;
+    }
+    // A separate authenticated API request is made only on an explicit click.
     try {
         const data = await api("/api/get-number", {
             method: "POST",
