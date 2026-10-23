@@ -1,0 +1,36 @@
+name: Mini App referral integration tests
+on:
+  push:
+    branches: [main]
+    paths:
+      - main.py
+      - miniapp_referral.py
+      - test_miniapp_referral.py
+      - docs/app.js
+      - docs/index.html
+      - .github/workflows/miniapp-referral-tests.yml
+  pull_request:
+    paths:
+      - main.py
+      - miniapp_referral.py
+      - test_miniapp_referral.py
+      - docs/app.js
+      - docs/index.html
+      - .github/workflows/miniapp-referral-tests.yml
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Python syntax and helper tests
+        run: |
+          python -m py_compile main.py miniapp_referral.py
+          python -m unittest -v test_miniapp_referral
+      - name: JavaScript syntax
+        run: node --check docs/app.js
