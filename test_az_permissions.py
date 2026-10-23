@@ -62,6 +62,71 @@ class AzerbaijanAccessTests(unittest.TestCase):
         self.assertNotIn("referral_required", SOURCE)
 
 
+
+def catalog_constants(namespace):
+    for node in MODULE.body:
+        if not isinstance(node, ast.Assign):
+            continue
+        if len(node.targets) != 1 or not isinstance(node.targets[0], ast.Name):
+            continue
+        name = node.targets[0].id
+        if name in ("AZ_OPERATOR_PREFIXES", "AZ_RANGE_SUFFIXES"):
+            namespace[name] = ast.literal_eval(node.value)
+
+
+class AzerbaijanCatalogTests(unittest.TestCase):
+    def setUp(self):
+        self.ns = {"re": re}
+        catalog_constants(self.ns)
+        self.catalog = extract("az_range_catalog", self.ns)
+        self.lookup = extract("az_catalog_lookup", self.ns)
+
+    def test_requested_operator_order_and_subranges(self):
+        groups = self.catalog()
+        self.assertEqual(
+            [item["name"] for item in groups],
+            ["Bakcell", "Azercell", "Nar", "Naxtell", "Digər (+99440)"],
+        )
+        pairs = [
+            (item["prefix"], entry["rid"])
+            for group in groups
+            for item in group["prefixes"]
+            for entry in item["ranges"]
+        ]
+        expected = [
+            ("99455", "99455210"), ("99455", "99455211"),
+            ("99499", "99499210"), ("99499", "99499211"),
+            ("99450", "99450210"), ("99450", "99450211"),
+            ("99451", "99451210"), ("99451", "99451211"),
+            ("99410", "99410210"), ("99410", "99410211"),
+            ("99470", "99470210"), ("99470", "99470211"),
+            ("99477", "99477210"), ("99477", "99477211"),
+            ("99460", "99460210"), ("99460", "99460211"),
+            ("99440", "99440210"), ("99440", "99440211"),
+        ]
+        self.assertEqual(pairs, expected)
+        self.assertEqual(len(pairs), 18)
+
+    def test_availability_only_when_exactly_listed(self):
+        groups = self.catalog({"svc": ["99450211", "99455XXX", "99460210"]})
+        flags = {
+            range_entry["rid"]: range_entry["listed_in_api"]
+            for group in groups
+            for prefix in group["prefixes"]
+            for range_entry in prefix["ranges"]
+        }
+        self.assertTrue(flags["99450211"])
+        self.assertTrue(flags["99460210"])
+        self.assertFalse(flags["99450210"])
+        self.assertFalse(flags["99455211"])
+
+    def test_lookup_rejects_unknown_range(self):
+        self.assertEqual(self.lookup(rid="99450211")["name"], "Azercell")
+        self.assertEqual(self.lookup(prefix="99499")["name"], "Bakcell")
+        self.assertIsNone(self.lookup(rid="99450333"))
+        self.assertIsNone(self.lookup(prefix="99412"))
+
+
 class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
     async def asyncSetUp(self):
         self.approved = {}
