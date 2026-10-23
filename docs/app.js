@@ -58,7 +58,7 @@ async function fetchServices() {
         const data = await response.json();
         container.replaceChildren();
         const services = Object.entries(data.services || {});
-        if (!services.length) {
+        if (!services.length && !(data.az_catalog || []).length) {
             container.textContent = 'Hazırda aktiv xidmət yoxdur.';
             return;
         }
@@ -87,7 +87,7 @@ async function fetchServices() {
             }
         }
 
-        // Fixed operator order; two clearly labelled subranges per prefix.
+        // Configured 210/211 plus all extra range metadata announced by the API.
         for (const operator of (data.az_catalog || [])) {
             const heading = document.createElement('div');
             heading.style.gridColumn = '1 / -1';
@@ -118,7 +118,8 @@ async function fetchServices() {
                     button.style.border = '1px solid #ffffff33';
                     button.style.color = 'var(--text-color)';
                     button.style.background = 'var(--card-bg)';
-                    button.textContent = item.rid + (data.az_approved ? '' : ' 🔒');
+                    const status = item.listed_in_api ? ' · 📡 API' : ' · ❔';
+                    button.textContent = item.rid + status + (data.az_approved ? '' : ' 🔒');
                     button.title = item.listed_in_api
                         ? 'API siyahısında qeyd olunub; nömrə mövcudluğu zəmanətli deyil'
                         : 'API siyahısında təsdiqlənməyib';
