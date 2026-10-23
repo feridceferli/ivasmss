@@ -5372,6 +5372,7 @@ async def miniapp_services_api(request):
             for ranges in services.values() for item in ranges
         ),
         "az_approved": az_range_allowed(int(tg_user["id"])),
+        "az_catalog": az_range_catalog(services),
     }))
 
 async def miniapp_incoming_sms_api(request):
@@ -5406,30 +5407,41 @@ async def miniapp_get_number_api(request):
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
 
-    # Never invent +994 ranges or fall back to a different service.
-    services = await fetch_services_cached()
-    ranges = services.get(service, [])
-    if not ranges:
-        return _miniapp_cors(web.json_response({"error": "service_unavailable"}, status=404))
-    requested_country = str(body.get("country", "")).strip() if isinstance(body, dict) else ""
-    valid_ranges = sorted(set(
-        re.sub(r"[^0-9]", "", str(item))
-        for item in ranges
-        if re.sub(r"[^0-9]", "", str(item))
-    ))
-    if requested_country == "994":
-        valid_ranges = [rid for rid in valid_ranges if is_az_range(rid)]
+    # +994 operator catalogue supports 210/211 subrange selections.
+    # Catalogue entries are not claims that the upstream has live numbers.
+    selected_rid = str(body.get("range", "")).strip()
+    requested_country = str(body.get("country", "")).strip()
+    if selected_rid:
+        if requested_country != "994" or not az_catalog_lookup(rid=selected_rid):
+            return _miniapp_cors(web.json_response({"error": "invalid_catalog_range"}, status=400))
+        if not az_range_allowed(uid):
+            return _miniapp_cors(web.json_response({
+                "error": "admin_approval_required", "message": AZ_ACCESS_DENIED,
+            }, status=403))
+        rid = selected_rid
+        service = "az"
     else:
-        # Prefer unrestricted countries for normal service selection.
-        valid_ranges = sorted(valid_ranges, key=lambda rid: (is_az_range(rid), rid))
-    if not valid_ranges:
-        return _miniapp_cors(web.json_response({"error": "range_unavailable"}, status=404))
-    rid = valid_ranges[0]
-    if is_az_range(rid) and not az_range_allowed(uid):
-        return _miniapp_cors(web.json_response({
-            "error": "admin_approval_required",
-            "message": AZ_ACCESS_DENIED,
-        }, status=403))
+        # Ordinary services use ranges actually advertised by the upstream API.
+        services = await fetch_services_cached()
+        ranges = services.get(service, [])
+        if not ranges:
+            return _miniapp_cors(web.json_response({"error": "service_unavailable"}, status=404))
+        valid_ranges = sorted(set(
+            re.sub(r"[^0-9]", "", str(item))
+            for item in ranges
+            if re.sub(r"[^0-9]", "", str(item))
+        ))
+        if requested_country == "994":
+            valid_ranges = [rid for rid in valid_ranges if is_az_range(rid)]
+        else:
+            valid_ranges = sorted(valid_ranges, key=lambda rid: (is_az_range(rid), rid))
+        if not valid_ranges:
+            return _miniapp_cors(web.json_response({"error": "range_unavailable"}, status=404))
+        rid = valid_ranges[0]
+        if is_az_range(rid) and not az_range_allowed(uid):
+            return _miniapp_cors(web.json_response({
+                "error": "admin_approval_required", "message": AZ_ACCESS_DENIED,
+            }, status=403))
 
     num, country = await get_number_from_api(rid, requester_id=uid)
     if not num:
