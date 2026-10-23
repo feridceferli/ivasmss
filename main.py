@@ -5054,7 +5054,7 @@ async def miniapp_referrals_api(request):
     return _miniapp_cors(web.json_response({
         "invited_count": count,
         "required": 1,
-        "unlocked": count >= 1,
+        "unlocked": is_admin(uid) or count >= 1,
         "ref_link": build_referral_link(username, uid),
     }))
 
