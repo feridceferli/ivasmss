@@ -6,7 +6,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "leaderboard", "profile", "admin"];
 const state = {
     activeTab: "services",
     services: {},
@@ -89,6 +89,10 @@ function switchTab(tab) {
         fetchOrders();
     } else if (tab === "history") {
         fetchIncomingSms();
+    } else if (tab === "leaderboard") {
+        fetchLeaderboard();
+    } else if (tab === "profile") {
+        fetchProfile();
     } else if (tab === "admin") {
         fetchAdminUsers();
     }
@@ -451,6 +455,125 @@ async function fetchIncomingSms() {
     } catch (err) { clearAndText(container, err.message); }
 }
 
+
+async function fetchProfile() {
+    const display = document.getElementById("profile-name");
+    try {
+        const data = await api("/api/profile");
+        const u = data.user || {};
+        display.textContent =
+            "👤 " + (u.first_name || "İstifadəçi") +
+            (u.username ? " · @" + u.username : "") +
+            " · ID: " + (u.id || "—") +
+            " · 💰 Balans: " + (data.balance || "0.00") + " AZN";
+        const stats = data.stats || {};
+        document.getElementById("profile-stats").textContent =
+            "📱 Bu gün: " + (stats.today_numbers || 0) +
+            " · Son 7 gün: " + (stats.last7d_numbers || 0) +
+            " · Ümumi: " + (stats.total_numbers || 0) + " nömrə" +
+            (data.az_approved ? " · 🇦🇿 +994 təsdiqlənib" : " · 🇦🇿 +994 icazəsi yoxdur");
+        document.getElementById("profile-language").value = data.language || "az";
+        const support = document.getElementById("support-link");
+        if (typeof data.support_url === "string" &&
+            /^https:\/\/t\.me\/[A-Za-z0-9_+/-]+$/.test(data.support_url)) {
+            support.href = data.support_url;
+        }
+    } catch (err) {
+        display.textContent = "Profil yüklənmədi: " + err.message;
+    }
+}
+
+async function saveProfileLanguage() {
+    const language = document.getElementById("profile-language").value;
+    if (!["az", "en", "tr"].includes(language)) {
+        alertUser("Yanlış dil seçimi.");
+        return;
+    }
+    try {
+        await api("/api/profile", {method: "POST", body: {language}});
+        alertUser("✅ Dil seçimi bot hesabınıza saxlandı.");
+        await fetchProfile();
+    } catch (err) { alertUser(err.message); }
+}
+
+async function fetchLeaderboard() {
+    const container = document.getElementById("leaderboard-list");
+    try {
+        const data = await api("/api/leaderboard");
+        container.replaceChildren();
+        const leaders = Array.isArray(data.leaders) ? data.leaders : [];
+        if (!leaders.length) {
+            clearAndText(container, "Bu gün nömrə aktivliyi yoxdur.");
+            return;
+        }
+        leaders.forEach((leader, index) => {
+            const row = node("div", null, "admin-user-line");
+            row.appendChild(node("span", (index + 1) + ". 🏅 " + (leader.name || "İstifadəçi")));
+            row.appendChild(node("b", String(leader.count || 0) + " nömrə"));
+            container.appendChild(row);
+        });
+    } catch (err) { clearAndText(container, err.message); }
+}
+
+async function downloadOwnNumbers() {
+    try {
+        const response = await fetch(API_BASE + "/api/my-numbers", {
+            method: "GET", headers: getAuthHeaders()
+        });
+        if (!response.ok) {
+            const msg = await response.json().catch(() => ({}));
+            throw new Error(msg.message || "Arxiv yüklənmədi.");
+        }
+        const blob = await response.blob();
+        if (!blob.size) throw new Error("Saxlanmış nömrə yoxdur.");
+        const url = URL.createObjectURL(blob);
+        const anchor = document.createElement("a");
+        anchor.href = url;
+        anchor.download = "my_numbers.txt";
+        document.body.appendChild(anchor);
+        anchor.click();
+        anchor.remove();
+        window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+        alertUser("📥 Şəxsi nömrə arxivi hazırlanıb.");
+    } catch (err) {
+        alertUser(err.message + " Alternativ: botun şəxsi çatında /numbers_txt yazın.");
+    }
+}
+
+async function adminUserAction(action, userId) {
+    if (!state.isAdmin || !["ban", "unban"].includes(action)) return;
+    try {
+        await api("/api/admin", {
+            method: "POST", body: {action, user_id: String(userId)}
+        });
+        alertUser(action === "ban" ? "🚫 Hesab bloklandı." : "✅ Blok ləğv edildi.");
+        await fetchAdminUsers();
+    } catch (err) { alertUser(err.message); }
+}
+
+async function adminBalanceChange() {
+    if (!state.isAdmin) return;
+    const target = document.getElementById("admin-balance-id").value.trim();
+    const amount = Number(document.getElementById("admin-balance-amount").value);
+    if (!/^\d{1,20}$/.test(target) || !Number.isFinite(amount) ||
+        amount === 0 || Math.abs(amount) > 10000) {
+        alertUser("Düzgün Telegram ID və -10000 ilə +10000 arası məbləğ daxil edin.");
+        return;
+    }
+    try {
+        const result = await api("/api/admin", {
+            method: "POST", body: {action: "balance", user_id: target, amount}
+        });
+        document.getElementById("admin-balance-result").textContent =
+            "✅ İstifadəçi " + target + " · Yeni balans: " + result.balance + " AZN";
+        await fetchAdminUsers();
+    } catch (err) {
+        document.getElementById("admin-balance-result").textContent = err.message;
+        alertUser(err.message);
+    }
+}
+
+
 async function fetchAdminUsers() {
     if (!state.isAdmin) return;
     const container = document.getElementById("admin-users-list");
@@ -459,14 +582,26 @@ async function fetchAdminUsers() {
         container.replaceChildren();
         container.appendChild(node("p", "İstifadəçilər: " + (data.user_count || 0),
             "notice-mini"));
+        const monitor = data.monitor || {};
+        const sys = document.getElementById("admin-system-status");
+        sys.textContent = "🩺 SMS monitor: " + String(monitor.state || "naməlum") +
+            " · HTTP: " + String(monitor.http_status ?? "—") +
+            " · API: " + String(monitor.upstream_code ?? "—") +
+            " · Yoxlanan: " + String(monitor.items_seen ?? 0);
         (data.users || []).forEach(user => {
             const row = node("div", null, "admin-user-line");
             row.appendChild(node("span", (user.name || "İstifadəçi") + " · ID " + user.id +
-                (user.az_approved ? " ✅ +994" : " 🔒")));
-            const btn = node("button", user.az_approved ? "Ləğv et" : "İcazə ver",
+                (user.az_approved ? " ✅ +994" : " 🔒") +
+                (user.banned ? " · 🚫 Bloklu" : "")));
+            const actions = node("span", null, "quick-actions");
+            const btn = node("button", user.az_approved ? "🇦🇿 Ləğv et" : "🇦🇿 İcazə",
                 "action-small");
             btn.addEventListener("click", () => adminAzPermission(!user.az_approved, user.id));
-            row.appendChild(btn);
+            actions.appendChild(btn);
+            const ban = node("button", user.banned ? "🔓 Aç" : "🚫 Blokla", "action-small");
+            ban.addEventListener("click", () => adminUserAction(user.banned ? "unban" : "ban", user.id));
+            actions.appendChild(ban);
+            row.appendChild(actions);
             container.appendChild(row);
         });
     } catch (err) { clearAndText(container, err.message); }
@@ -511,5 +646,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (state.activeTab === "countries") fetchCountries();
         if (state.activeTab === "active") fetchOrders();
         if (state.activeTab === "history") fetchIncomingSms();
+        if (state.activeTab === "profile") fetchProfile();
+        if (state.activeTab === "leaderboard") fetchLeaderboard();
     }, 30000);
 });
