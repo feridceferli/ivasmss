@@ -81,7 +81,7 @@ async function fetchServices() {
         for (const [service, ranges] of services) {
             addService(service, null, false);
             const azPresent = Array.isArray(ranges) && ranges.some(
-                rid => String(rid).replace(/\\D/g, '').startsWith('994')
+                rid => String(rid).replace(/\D/g, '').startsWith('994')
             );
             if (azPresent) addService(service, '994', !data.az_approved);
         }
