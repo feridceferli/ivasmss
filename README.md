@@ -80,6 +80,15 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 - İcazələr `DB_FOLDER/az_range_permissions.json` faylında saxlanır. Render-də qalıcı disk yoxdursa, redeploy və restart zamanı təsdiqlər itə bilər. Qalıcı disk və ya davamlı məlumat bazası tələb olunur.
 - Dəvət/referral sistemi söndürülüb. İstifadəçi girişində bir dost dəvət etmək şərti yoxdur.
 
+## 📲 Mini App — Telegram botu ilə eyni kataloq və icazələr
+
+- Mini App-də **Xidmətlər**, **Bütün ölkələr**, **Azərbaycan**, **Aktivlər**, **Tarixçə** və adminlər üçün **Admin** bölmələri var.
+- **Bütün ölkələr** bölməsi 244 ölkə/ərazini axtarış və səhifələmə ilə göstərir; ölkə seçildikdə yalnız `/api/countries` vasitəsilə API-yə əsaslanan xidmət/range-lər göstərilir. Konkret range istifadəçi tərəfindən seçildikdən sonra `/api/get-number` çağırılır.
+- **Azərbaycan** bölməsində Bakcell, Azercell, Nar, Naxtell, Catel və CDMA, 210/211 alt-range-ləri və API-nin elan etdiyi digər range-lər ayrıca göstərilir.
+- **Admin icazəsi**: istifadəçi Mini App-də `/api/az-access` vasitəsilə icazə sorğusu verə bilər; bot adminləri Mini App-in **Admin** bölməsində `/api/admin` vasitəsilə +994 icazəsini verib ləğv edə bilərlər. Səlahiyyət yoxlaması hər dəfə serverdə, Telegram imzalı `initData` ilə edilir.
+- **Dəvət məcburiyyəti yoxdur**. Mini App arxivdəki bütün dünya nömrələrini kütləvi əldə etmir, boş API range-lərini mövcud kimi göstərmir. Mini App yalnız Telegram botundan açıldıqda etibarlı `initData` alır.
+- `test_miniapp_parity.py` və `.github/workflows/miniapp-parity-tests.yml` Mini App menyu/API uyğunluğunu, təhlükəsiz yazı çıxışını və sintaksisi yoxlayır.
+
 ## 🌍 Bütün ölkələr — beynəlxalq telefon kodları
 
 - **Bütün ölkələr** menyusu `world_country_codes.py` kataloqundakı **244 ölkə və ərazini** ayrıca göstərir; mənbə: [country-json](https://github.com/samayo/country-json). Bu, ölkə kodlarının snapshot siyahısıdır, provayder tərəfindən verilən nömrələr deyil.
