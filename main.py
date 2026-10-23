@@ -2,6 +2,7 @@ import asyncio
 from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
 from range_collection import RangeCollector
+from world_country_codes import build_all_country_rows
 
 range_collector = RangeCollector()
 import io
@@ -1752,6 +1753,9 @@ async def show_country_ranges(update, context, info=None, back=None, page=0):
     rows.append([InlineKeyboardButton("🔙", callback_data=view["back"])])
     lang = get_user_language(update.effective_user.id)
     title = f"{info['flag']} {info['name']} — {len(entries)} range\n\n"
+    if info.get("is_shared"):
+        title += "⚠️ Bu telefon kodu bir neçə ölkə arasında paylaşılır. " \
+                 "API range-i konkret ölkəyə təsdiqləmir.\n\n"
     title += t(lang, "choose_range")
     if pages > 1:
         title += f"\n{page + 1}/{pages}"
@@ -1832,34 +1836,52 @@ async def show_az_suffix_menu(query, uid, prefix, page=0):
     )
 
 async def show_all_countries(update, context, page=0, refresh=True):
+    """Show the full country-code directory, not just API-positive countries."""
     uid = update.effective_user.id
     lang = get_user_language(uid)
     if refresh or "all_country_rows" not in context.user_data:
         services = await fetch_services_cached()
-        context.user_data["all_country_rows"] = _collect_all_countries(services or {})
+        context.user_data["all_country_rows"] = build_all_country_rows(services)
     countries = context.user_data["all_country_rows"]
-    page_size = 30
+    page_size = 25
     pages = max(1, (len(countries) + page_size - 1) // page_size)
     page = max(0, min(page, pages - 1))
     rows = []
     for info in countries[page * page_size:(page + 1) * page_size]:
-        label = f"{info['flag']} {info['name']} ({len(info['ranges'])})"
+        count = len(info["ranges"])
+        label = f"{info['flag']} {info['name']} (+{info['prefix']}) · {count}"
         if info["prefix"] == "994" and not az_range_allowed(uid):
             label += " 🔒"
-        rows.append([InlineKeyboardButton(label, callback_data=f"menu_all_country_{info['rid']}")])
+        rows.append([InlineKeyboardButton(
+            label, callback_data=f"menu_all_country_{info['iso']}"
+        )])
     navigation = []
     if page:
-        navigation.append(InlineKeyboardButton("◀️", callback_data=f"menu_countries_page_{page - 1}"))
+        navigation.append(InlineKeyboardButton(
+            "◀️", callback_data=f"menu_countries_page_{page - 1}"
+        ))
     if page + 1 < pages:
-        navigation.append(InlineKeyboardButton("▶️", callback_data=f"menu_countries_page_{page + 1}"))
+        navigation.append(InlineKeyboardButton(
+            "▶️", callback_data=f"menu_countries_page_{page + 1}"
+        ))
     if navigation:
         rows.append(navigation)
-    rows.append([InlineKeyboardButton(t(lang, "countries_back"), callback_data="back_to_main")])
-    text = t(lang, "all_countries") + f" ({len(countries)})\n\n"
-    text += t(lang, "choose_country") if countries else t(lang, "no_countries")
-    if pages > 1:
-        text += f"\n{page + 1}/{pages}"
-    await update.effective_message.reply_text(text, reply_markup=InlineKeyboardMarkup(rows))
+    rows.append([InlineKeyboardButton(
+        t(lang, "countries_back"), callback_data="back_to_main"
+    )])
+    available = sum(bool(country["ranges"]) for country in countries)
+    text = (
+        f"🌍 <b>BÜTÜN ÖLKƏLƏR VƏ TELEFON KODLARI</b>\n"
+        f"Ölkə və ərazilər: <b>{len(countries)}</b>\n"
+        f"API-də range görünən: <b>{available}</b>\n\n"
+        "Ölkə yanında rəqəm API-də olan range sayıdır; "
+        "0 olduqda nömrə yoxdur və ya API onu elan etmir.\n"
+        "Eyni ölkə kodu bir neçə ölkə tərəfindən paylaşıla bilər.\n"
+        f"Səhifə {page + 1}/{pages}"
+    )
+    await update.effective_message.reply_text(
+        text, parse_mode="HTML", reply_markup=InlineKeyboardMarkup(rows)
+    )
 
 
 async def show_app_selection(update, context):
@@ -4667,16 +4689,24 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await show_all_countries(update, context, page=page, refresh=False)
         return
     if data.startswith("menu_all_country_"):
-        rid = data.removeprefix("menu_all_country_")
+        iso = data.removeprefix("menu_all_country_")
         info = next((row for row in context.user_data.get("all_country_rows", [])
-                     if row["rid"] == rid), None)
+                     if row["iso"] == iso), None)
         if info is None:
             await show_all_countries(update, context)
             return
-        if len(info.get("ranges", [])) > 1:
-            await show_country_ranges(update, context, info, "menu_all_countries")
-        else:
-            await fast_allocate_number(query, context, rid, info["service"], rid + "XXX")
+        if not info["ranges"]:
+            await query.message.reply_text(
+                f"{info['flag']} {info['name']} (+{info['prefix']})\n"
+                "API hazırda bu ölkə kodu üçün range elan etmir. "
+                "Digər ölkələrə baxın və ya siyahını yenidən açın.",
+                reply_markup=InlineKeyboardMarkup([
+                    [InlineKeyboardButton("🌍 Bütün ölkələr",
+                                          callback_data="menu_all_countries")]
+                ]),
+            )
+            return
+        await show_country_ranges(update, context, info, "menu_all_countries")
         return
 
     if data.startswith("menu_service_country_"):
