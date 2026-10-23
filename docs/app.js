@@ -6,7 +6,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "leaderboard", "profile", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "twofa", "leaderboard", "profile", "admin"];
 const state = {
     activeTab: "services",
     services: {},
@@ -89,6 +89,10 @@ function switchTab(tab) {
         fetchOrders();
     } else if (tab === "history") {
         fetchIncomingSms();
+    } else if (tab === "twofa") {
+        document.getElementById("totp-output").textContent = "— — — — — —";
+        document.getElementById("totp-secret").value = "";
+        lastLocal2faCode = "";
     } else if (tab === "leaderboard") {
         fetchLeaderboard();
     } else if (tab === "profile") {
@@ -455,6 +459,75 @@ async function fetchIncomingSms() {
     } catch (err) { clearAndText(container, err.message); }
 }
 
+
+// Local-only RFC 6238 TOTP. The secret is never transmitted or stored.
+let lastLocal2faCode = "";
+
+function decodeBase32Key(input) {
+    const normalized = String(input).trim().replace(/[\s-]/g, "").replace(/=+$/, "").toUpperCase();
+    if (!normalized || !/^[A-Z2-7]+$/.test(normalized)) {
+        throw new Error("Etibarlı Base32 2FA açarı daxil edin.");
+    }
+    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
+    let buffer = 0, bits = 0;
+    const bytes = [];
+    for (const ch of normalized) {
+        buffer = (buffer << 5) | alphabet.indexOf(ch);
+        bits += 5;
+        if (bits >= 8) {
+            bits -= 8;
+            bytes.push((buffer >>> bits) & 255);
+        }
+    }
+    if (bytes.length < 10 || bytes.length > 256) {
+        throw new Error("2FA açarı düzgün uzunluqda deyil.");
+    }
+    return new Uint8Array(bytes);
+}
+
+async function createLocal2faCode() {
+    const target = document.getElementById("totp-output");
+    target.textContent = "Hesablanır...";
+    lastLocal2faCode = "";
+    try {
+        if (!window.crypto?.subtle) throw new Error("Bu brauzer təhlükəsiz 2FA hesablamasını dəstəkləmir.");
+        const secret = decodeBase32Key(document.getElementById("totp-secret").value);
+        const key = await crypto.subtle.importKey(
+            "raw", secret, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
+        );
+        const counter = BigInt(Math.floor(Date.now() / 30000));
+        const block = new Uint8Array(8);
+        for (let i = 7, value = counter; i >= 0; i--, value >>= 8n) {
+            block[i] = Number(value & 255n);
+        }
+        const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, block));
+        const offset = mac[mac.length - 1] & 15;
+        const binary = ((mac[offset] & 127) << 24) |
+            (mac[offset + 1] << 16) | (mac[offset + 2] << 8) | mac[offset + 3];
+        lastLocal2faCode = String(binary % 1000000).padStart(6, "0");
+        target.textContent = lastLocal2faCode;
+        document.getElementById("totp-secret").value = "";
+        // Do not retain the key, code is only for the current 30-second interval.
+        target.dataset.expiry = String((Math.floor(Date.now() / 30000) + 1) * 30000);
+    } catch (err) {
+        target.textContent = "— — — — — —";
+        alertUser(err.message);
+    }
+}
+
+async function copyLocal2faCode() {
+    const view = document.getElementById("totp-output");
+    if (!lastLocal2faCode || Date.now() >= Number(view.dataset.expiry || 0)) {
+        alertUser("Kodun müddəti bitib. Öz açarınızla yenisini yaradın.");
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(lastLocal2faCode);
+        alertUser("🔐 Kod kopyalandı.");
+    } catch (_) {
+        alertUser("Kodu əl ilə kopyalayın.");
+    }
+}
 
 async function fetchProfile() {
     const display = document.getElementById("profile-name");
