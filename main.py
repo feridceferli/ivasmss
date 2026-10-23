@@ -844,43 +844,55 @@ AZ_RANGE_SUFFIXES = ("210", "211")
 
 
 def az_range_catalog(services=None):
-    """Configured subranges and whether each is explicitly listed by the API."""
+    """Display the 210/211 presets plus other range metadata from /liveaccess.
+
+    This is read-only range discovery, not bulk number retrieval. Full phone
+    numbers are excluded from the catalogue.
+    """
     listed = {
-        re.sub(r"[^0-9]", "", str(raw))
-        for ranges in (services or {}).values()
+        digits for ranges in (services or {}).values()
         for raw in (ranges or [])
+        for digits in [re.sub(r"[^0-9]", "", str(raw))]
+        if digits.startswith("994") and 5 <= len(digits) <= 10
     }
-    return [
-        {
-            "id": key,
-            "name": name,
-            "prefixes": [
-                {
-                    "prefix": prefix,
-                    "ranges": [
-                        {
-                            "rid": prefix + suffix,
-                            "suffix": suffix,
-                            "listed_in_api": prefix + suffix in listed,
-                        }
-                        for suffix in AZ_RANGE_SUFFIXES
-                    ],
-                }
-                for prefix in prefixes
-            ],
-        }
-        for key, name, prefixes in AZ_OPERATOR_PREFIXES
-    ]
-
-
-def az_catalog_lookup(operator_id=None, prefix=None, rid=None):
+    catalog = []
     for key, name, prefixes in AZ_OPERATOR_PREFIXES:
-        if operator_id == key or (prefix is not None and prefix in prefixes):
-            return {"id": key, "name": name, "prefixes": prefixes}
-        if rid is not None and any(
-            rid == item + suffix for item in prefixes for suffix in AZ_RANGE_SUFFIXES
-        ):
-            return {"id": key, "name": name, "prefixes": prefixes}
+        groups = []
+        for prefix in prefixes:
+            standard = {prefix + suffix for suffix in AZ_RANGE_SUFFIXES}
+            entries = [
+                {
+                    "rid": prefix + suffix,
+                    "suffix": suffix,
+                    "source": "configured",
+                    "listed_in_api": prefix + suffix in listed,
+                }
+                for suffix in AZ_RANGE_SUFFIXES
+            ]
+            entries.extend({
+                "rid": rid,
+                "suffix": "",
+                "source": "api",
+                "listed_in_api": True,
+            } for rid in sorted(listed) if rid.startswith(prefix) and rid not in standard)
+            groups.append({"prefix": prefix, "ranges": entries})
+        catalog.append({"id": key, "name": name, "prefixes": groups})
+    return catalog
+
+
+def az_catalog_lookup(operator_id=None, prefix=None, rid=None, services=None):
+    """Authorize only configured 210/211 or ranges in the live API catalogue."""
+    for group in az_range_catalog(services):
+        if operator_id == group["id"]:
+            return {"id": group["id"], "name": group["name"],
+                    "prefixes": tuple(row["prefix"] for row in group["prefixes"])}
+        for item in group["prefixes"]:
+            if prefix == item["prefix"]:
+                return {"id": group["id"], "name": group["name"],
+                        "prefixes": tuple(row["prefix"] for row in group["prefixes"])}
+            if rid is not None and any(entry["rid"] == rid for entry in item["ranges"]):
+                return {"id": group["id"], "name": group["name"],
+                        "prefixes": tuple(row["prefix"] for row in group["prefixes"])}
     return None
 
 
@@ -1781,7 +1793,7 @@ async def show_az_prefix_menu(query, operator_id):
     )
 
 
-async def show_az_suffix_menu(query, uid, prefix):
+async def show_az_suffix_menu(query, uid, prefix, page=0):
     operator = az_catalog_lookup(prefix=prefix)
     if not operator:
         await query.message.reply_text("❌ Prefiks tapılmadı.")
@@ -1789,20 +1801,33 @@ async def show_az_suffix_menu(query, uid, prefix):
     services = await fetch_services_cached()
     group = next(row for row in az_range_catalog(services) if row["id"] == operator["id"])
     rows_for_prefix = next(row for row in group["prefixes"] if row["prefix"] == prefix)
+    entries = rows_for_prefix["ranges"]
+    page_size = 20
+    total_pages = max(1, (len(entries) + page_size - 1) // page_size)
+    page = max(0, min(page, total_pages - 1))
     rows = []
-    for entry in rows_for_prefix["ranges"]:
-        status = "📡 API siyahısında" if entry["listed_in_api"] else "❔ Təsdiqlənməyib"
+    for entry in entries[page * page_size:(page + 1) * page_size]:
+        status = "📡 API" if entry["listed_in_api"] else "❔ Yoxlanmayıb"
         lock = "" if az_range_allowed(uid) else " 🔒"
         rows.append([InlineKeyboardButton(
             f"{entry['rid']} · {status}{lock}",
             callback_data=f"az_pick_{entry['rid']}",
         )])
+    nav = []
+    if page > 0:
+        nav.append(InlineKeyboardButton("◀️", callback_data=f"az_page_{prefix}_{page - 1}"))
+    if page + 1 < total_pages:
+        nav.append(InlineKeyboardButton("▶️", callback_data=f"az_page_{prefix}_{page + 1}"))
+    if nav:
+        rows.append(nav)
     rows.append([InlineKeyboardButton(
         "◀️ Prefikslər", callback_data=f"az_operator_{operator['id']}"
     )])
     await query.message.reply_text(
-        f"🇦🇿 {operator['name']} / +{prefix}\n"
-        "210 və 211 alt-range-ləri. API siyahısında olması aktiv nömrəyə zəmanət vermir.",
+        f"🇦🇿 {operator['name']} / +{prefix} — {len(entries)} range "
+        f"({page + 1}/{total_pages})\n"
+        "210/211 + API-nin bildirdiyi əlavə range-lər. "
+        "Siyahıda olması aktiv nömrəyə zəmanət deyil.",
         reply_markup=InlineKeyboardMarkup(rows),
     )
 
@@ -4614,14 +4639,21 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data.startswith("az_prefix_"):
         await show_az_suffix_menu(query, uid, data.removeprefix("az_prefix_"))
         return
+    if data.startswith("az_page_"):
+        payload = data.removeprefix("az_page_").split("_", 1)
+        if len(payload) == 2 and payload[1].isdigit():
+            await show_az_suffix_menu(query, uid, payload[0], int(payload[1]))
+        return
     if data.startswith("az_pick_"):
         rid = data.removeprefix("az_pick_")
-        if not az_catalog_lookup(rid=rid):
-            await query.message.reply_text("❌ Bu alt-range siyahıda yoxdur.")
-        elif not az_range_allowed(uid):
+        if not az_range_allowed(uid):
             await query.message.reply_text(AZ_ACCESS_DENIED)
-        else:
-            await fast_allocate_number(query, context, rid, "AZ", rid + "XXX")
+            return
+        services = await fetch_services_cached()
+        if not az_catalog_lookup(rid=rid, services=services):
+            await query.message.reply_text("❌ Bu range API siyahısında yoxdur.")
+            return
+        await fast_allocate_number(query, context, rid, "AZ", rid + "XXX")
         return
 
     if data == "menu_all_countries":
@@ -5413,7 +5445,8 @@ async def miniapp_get_number_api(request):
     selected_rid = str(body.get("range", "")).strip()
     requested_country = str(body.get("country", "")).strip()
     if selected_rid:
-        if requested_country != "994" or not az_catalog_lookup(rid=selected_rid):
+        if (requested_country != "994" or
+                not az_catalog_lookup(rid=selected_rid, services=await fetch_services_cached())):
             return _miniapp_cors(web.json_response({"error": "invalid_catalog_range"}, status=400))
         if not az_range_allowed(uid):
             return _miniapp_cors(web.json_response({
