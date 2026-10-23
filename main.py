@@ -4292,7 +4292,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
                     pass
             except Exception as exc:
                 print(f"Referral processing error: {type(exc).__name__}")
-        elif is_range_request(param):
+        elif not param.startswith("ref_") and is_range_request(param) and not (param.isdigit() and param in existing_data):
             await request_queue.put({
                 "type": "auto_number",
                 "update": update,
