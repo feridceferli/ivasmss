@@ -6088,6 +6088,9 @@ async def miniapp_get_number_api(request):
         if not isinstance(body, dict):
             raise ValueError("invalid body")
         service = str(body.get("service", "")).strip().lower()
+        # A JSON null must not become the literal ISO code "None".
+        raw_country_iso = body.get("country_iso")
+        country_iso = raw_country_iso.strip().upper() if isinstance(raw_country_iso, str) else ""
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
 
@@ -6114,7 +6117,6 @@ async def miniapp_get_number_api(request):
             }
             if selected_rid not in actual_ranges:
                 return _miniapp_cors(web.json_response({"error": "range_unavailable"}, status=404))
-            country_iso = str(body.get("country_iso", "")).upper().strip()
             if country_iso:
                 selected_country = next(
                     (c for c in build_all_country_rows({service: [selected_rid]})
@@ -6151,7 +6153,7 @@ async def miniapp_get_number_api(request):
             }, status=403))
 
     try:
-        quote = quote_range(rid, load_number_prices(), body.get("country_iso"))
+        quote = quote_range(rid, load_number_prices(), country_iso)
         expected_cents = body.get("expected_price_cents")
         if type(expected_cents) is not int or expected_cents != quote["cents"]:
             return _miniapp_cors(web.json_response({
@@ -6161,7 +6163,7 @@ async def miniapp_get_number_api(request):
             }, status=409))
         num, country = await get_number_from_api(
             rid, requester_id=uid,
-            country_iso=str(body.get("country_iso", "")).strip(),
+            country_iso=country_iso,
             expected_price_cents=expected_cents,
         )
     except PricingError as exc:

@@ -623,7 +623,8 @@ async function selectService(service, country = null, range = null, countryIso =
     try {
         const data = await api("/api/get-number", {
             method: "POST",
-            body: { service, country, range, country_iso: countryIso, expected_price_cents: quote.cents }
+            body: { service, country, range, ...(countryIso ? {country_iso: countryIso} : {}),
+                    expected_price_cents: quote.cents }
         });
         if (!data.success) {
             alertUser(data.message || "Hazırda bu range üzrə nömrə yoxdur.");
