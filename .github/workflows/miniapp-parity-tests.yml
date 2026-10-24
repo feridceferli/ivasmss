@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - main.py
+      - free_ai_posts.py
+      - test_free_ai_posts.py
+      - global_availability_feed.py
       - docs/index.html
       - docs/app.js
       - docs/miniapp-modern.css
@@ -28,6 +31,9 @@ on:
   pull_request:
     paths:
       - main.py
+      - free_ai_posts.py
+      - test_free_ai_posts.py
+      - global_availability_feed.py
       - docs/index.html
       - docs/app.js
       - docs/miniapp-modern.css
@@ -79,6 +85,6 @@ jobs:
       - name: Test Telegram Mini App avatar privacy and fallback
         run: node test_telegram_avatar_ui.cjs
       - name: Check Python syntax
-        run: python -m py_compile main.py world_country_codes.py number_pricing.py
+        run: python -m py_compile main.py world_country_codes.py number_pricing.py free_ai_posts.py global_availability_feed.py
       - name: Test Mini App parity, safe rendering and +994 permissions
-        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing
+        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing test_free_ai_posts test_global_availability_feed
