@@ -163,6 +163,12 @@ class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
             "number_archive": archive,
             "client_async": SimpleNamespace(post=self.post),
             "BASE_URL": "https://example.invalid",
+            "_number_purchase_locks": {},
+            "load_number_prices": lambda: {},
+            "quote_range": lambda rid, settings, iso=None: {"cents": 0, "price": "0.00"},
+            "USER_DATA_FILE": "users.json",
+            "save_data": lambda *_: None,
+            "get_user": lambda uid: {"balance": 0.0},
         }
         for name in ("is_admin", "is_az_range", "az_range_allowed"):
             self.ns[name] = extract(name, self.ns)
