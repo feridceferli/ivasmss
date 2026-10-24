@@ -63,6 +63,17 @@ class MiniAppAdminToolsTests(unittest.TestCase):
         self.assertIn('public_ai_status()', PY)
         self.assertNotIn(".innerHTML", JS)
 
+    def test_world_news_is_admin_only(self):
+        for tag in ("world-news-enabled", "world-news-status", "world-news-preview"):
+            self.assertIn('id="' + tag + '"', HTML)
+        self.assertIn("saveWorldNewsSettings()", HTML)
+        self.assertIn("previewWorldNews()", HTML)
+        self.assertIn('action == "world_news_settings"', PY)
+        self.assertIn('action == "world_news_preview"', PY)
+        self.assertIn("public_news_status()", PY)
+        self.assertIn("publish_world_news(", PY)
+        self.assertNotIn(".innerHTML", JS)
+
     def test_no_provider_secrets_sent_to_miniapp(self):
         code = ast.get_source_segment(
             PY, next(n for n in TREE.body if isinstance(n, ast.AsyncFunctionDef)
