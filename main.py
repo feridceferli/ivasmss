@@ -10,7 +10,8 @@ from free_ai_posts import decorate_feed, load_ai_settings, save_ai_settings, pub
 from world_news_feed import (
     POLL_INTERVAL as WORLD_NEWS_POLL_INTERVAL,
     publish_world_news, fetch_recent_news, choose_headlines,
-    translate_headlines, load_news_settings, save_news_settings, public_news_status,
+    translate_headlines, compose_news_digest,
+    load_news_settings, save_news_settings, public_news_status,
 )
 from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
                             valid_country, valid_range)
@@ -5701,9 +5702,15 @@ async def miniapp_admin_tools_api(request):
                 "message": "Mənbələrdə son 36 saatdan uyğun xəbər tapılmadı."
             }, status=503))
         translations = await translate_headlines(selected)
-        preview_text = "🌍 DÜNYADAN QISA XƏBƏRLƏR\n\n" + "\n\n".join(
-            f"📰 {translations.get(item['id'], item['title'])}\n"
-            f"📎 {item['source']}: {item['url']}" for item in selected)
+        preview_html = compose_news_digest(selected, translations)
+        if not preview_html:
+            return _miniapp_cors(web.json_response({
+                "error": "translation_unavailable",
+                "message": "Azərbaycan dilində xülasə hazırlamaq mümkün olmadı."
+            }, status=503))
+        # The preview contains plain Azerbaijani summaries and source names,
+        # never the article URL. UI renders via textContent, not innerHTML.
+        preview_text = html.unescape(re.sub(r"</?(?:b|code)>", "", preview_html))
         return _miniapp_cors(web.json_response({
             "ok": True, "preview": preview_text, "world_news": public_news_status()
         }))
