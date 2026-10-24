@@ -65,6 +65,15 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 - Hər **10 dəqiqədə** aktiv kataloq üzrə məzəli qrup xülasəsi gedir; **yeni xidmət ID-si** API-də görünəndə növbəti dövr gözlənmədən ayrıca elan göndərilir. Yeni elan 10 dəqiqəlik dövrü yeniləyir. İlk startda spam yoxdur; eyni xidmət təkrar elan edilmir. Bütün istifadəçilərə kütləvi bildiriş göndərilmir. Render yatanda və ya qalıcı fayl yaddaşı olmadıqda dəqiq interval və təkrarsızlıq təmin olunmaya bilər.
 - `DB_FOLDER/ai_post_settings.json` parametrləri saxlayır; Render-də qalıcı disk yoxdursa, yenidən deploy zamanı parametrlər sıfırlana bilər.
 
+## 🌐 Dünyadan qısa və maraqlı xəbərlər
+
+- **Hər 2 saatdan bir:** [BBC World](https://feeds.bbci.co.uk/news/world/rss.xml), [BBC Technology](https://feeds.bbci.co.uk/news/technology/rss.xml) və [The Guardian World](https://www.theguardian.com/world/rss) mənbələrindən maksimum 2 yeni, maraqlı başlıq və hər biri üçün mənbə keçidi paylaşılır.
+- **Təkrarsızlıq və dəqiqlik:** 36 saatdan köhnə xəbərlər, saxta linklər, təsdiqlənməmiş başlıqlar göndərilmir. Hər başlığın orijinal RSS mənbəsi saxlanılır. Faciələr məzəli mövzu kimi təqdim edilmir.
+- **Pulsuz tərcümə:** Render-də `GROQ_API_KEY` varsa, Llama modeli başlıqları Azərbaycan dilinə tərcümə edir; açar və ya pulsuz kvota yoxdursa orijinal ingilis başlığı mənbə linki ilə paylaşılır. Heç vaxt uydurma xəbərlə əvəzlənmir.
+- **Admin panel:** “Dünyadan maraqlı xəbərlər” bölməsindən paylaşımı açıb-bağlayın və heç kimə göndərmədən nümunəsinə baxın.
+- **Başlanğıcda səssiz:** Bot ilk istifadədə mövcud xəbərləri yadda saxlayır, ilk xəbər xülasəsi 2 saatdan sonra yalnız yeni məqalələr varsa göndərilir. Xidmət yenidən başladıqda `DB_FOLDER` disk üzərində qalıcı deyilsə yaddaş sıfırlana bilər.
+- Xəbər modulunun ayrıca 10 dəqiqəlik RSS yoxlaması var, mövcud **10 dəqiqəlik xidmət kataloqu paylaşımı** və **yeni xidmət üçün dərhal elan** dəyişmir.
+
 ## Mini App-in yenilənmiş imkanları
 
 Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegram sessiyası ilə istifadəçi məlumatları serverdə yoxlanır.
