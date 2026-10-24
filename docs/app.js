@@ -125,6 +125,92 @@ function switchTab(tab) {
     }
 }
 
+const telegramAvatarState = {
+    userId: null,
+    objectUrl: null,
+    checkedAt: 0,
+    loading: false
+};
+
+// Fetch only this signed-in Telegram user's own photo. The bot token, Telegram
+// file_id and server-side file URL never reach the browser.
+async function updateTelegramAvatar(user, force = false) {
+    const id = String(user?.id || "");
+    if (!id) return false;
+    const sameUser = id === telegramAvatarState.userId;
+    const now = Date.now();
+    if (!force && sameUser &&
+        (telegramAvatarState.loading || now - telegramAvatarState.checkedAt < 300000)) {
+        return Boolean(telegramAvatarState.objectUrl);
+    }
+
+    telegramAvatarState.userId = id;
+    telegramAvatarState.checkedAt = now;
+    telegramAvatarState.loading = true;
+    const avatars = ["user-avatar", "profile-avatar"]
+        .map(key => document.getElementById(key))
+        .filter(Boolean);
+    const fallback = String(user.first_name || "İ").slice(0, 1).toUpperCase();
+
+    if (!sameUser || !telegramAvatarState.objectUrl) {
+        if (telegramAvatarState.objectUrl) URL.revokeObjectURL(telegramAvatarState.objectUrl);
+        telegramAvatarState.objectUrl = null;
+        for (const avatar of avatars) {
+            avatar.replaceChildren();
+            avatar.textContent = fallback;
+        }
+    }
+
+    try {
+        const response = await fetch(API_BASE + "/api/avatar", {
+            method: "GET",
+            headers: getAuthHeaders(),
+            cache: "no-store"
+        });
+        if (!response.ok) return false;
+        const photo = await response.blob();
+        if (!photo.type.startsWith("image/") || !photo.size || photo.size > 512 * 1024) {
+            return false;
+        }
+        if (telegramAvatarState.userId !== id) return false;
+        const imageUrl = URL.createObjectURL(photo);
+        const oldUrl = telegramAvatarState.objectUrl;
+        telegramAvatarState.objectUrl = imageUrl;
+        for (const avatar of avatars) {
+            const image = document.createElement("img");
+            image.src = imageUrl;
+            image.alt = "Telegram profil şəkliniz";
+            image.decoding = "async";
+            image.loading = "lazy";
+            image.addEventListener("error", () => {
+                if (telegramAvatarState.userId !== id) return;
+                avatar.replaceChildren();
+                avatar.textContent = fallback;
+            }, {once: true});
+            avatar.replaceChildren(image);
+        }
+        if (oldUrl) URL.revokeObjectURL(oldUrl);
+        return true;
+    } catch (_) {
+        // Telegram privacy settings or missing photos should not block profile.
+        return false;
+    } finally {
+        if (telegramAvatarState.userId === id) telegramAvatarState.loading = false;
+    }
+}
+
+async function refreshTelegramAvatar() {
+    try {
+        const dashboard = await api("/api/dashboard");
+        const refreshed = await updateTelegramAvatar(dashboard.user || {}, true);
+        toast(refreshed ? "✅ Telegram şəkliniz yeniləndi."
+            : "Telegram şəkli əlçatan deyil, hərfli avatar göstərilir.",
+            refreshed ? "success" : "info");
+    } catch (_) {
+        toast("Profil şəklini yeniləmək mümkün olmadı.", "error");
+    }
+}
+
 async function fetchDashboard() {
     try {
         const data = await api("/api/dashboard");
@@ -132,8 +218,9 @@ async function fetchDashboard() {
         document.getElementById("user-name").textContent = user.first_name || "İstifadəçi";
         document.getElementById("user-id").textContent = "ID: " + (user.id || "—");
         document.getElementById("user-balance").textContent = (data.balance || "0.00") + " AZN";
-        const avatar = document.getElementById("user-avatar");
-        avatar.textContent = (user.first_name || "İ").slice(0, 1).toUpperCase();
+        // Avatar is served only for the authenticated Telegram account.
+        // Do not reset the picture during the periodic dashboard refresh.
+        void updateTelegramAvatar(user);
         state.isAdmin = !!user.is_admin;
         state.azApproved = !!user.az_approved;
         const adminButton = document.getElementById("admin-tab-button");
@@ -698,6 +785,7 @@ async function fetchProfile() {
     try {
         const data = await api("/api/profile");
         const u = data.user || {};
+        void updateTelegramAvatar(u);
         display.textContent =
             "👤 " + (u.first_name || "İstifadəçi") +
             (u.username ? " · @" + u.username : "") +
