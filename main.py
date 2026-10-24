@@ -3,7 +3,10 @@ from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
 from range_collection import RangeCollector
 from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
-from global_availability_feed import publish_global_availability_feed
+from global_availability_feed import (
+    availability_snapshot, compose_availability_notice, publish_global_availability_feed,
+)
+from free_ai_posts import decorate_feed, load_ai_settings, save_ai_settings, public_ai_status
 from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
                             valid_country, valid_range)
 
@@ -801,6 +804,7 @@ async def country_availability_loop(app):
                 group_id=GLOBAL_FEED_GROUP_ID,
                 country_prefix_lookup=get_country_prefix_from_number,
                 country_name_lookup=get_country_by_prefix,
+                message_decorator=decorate_feed,
             )
             if feed_status in ("sent", "send_failed"):
                 print(f"[global-feed] status={feed_status}", flush=True)
@@ -5667,6 +5671,7 @@ async def miniapp_admin_api(request):
 # Only one manual notification per admin per 90 seconds. Never bulk-send or
 # accept recipients from the Mini App request.
 _miniapp_admin_notification_times = {}
+_ai_preview_times = {}
 
 
 async def miniapp_admin_tools_api(request):
@@ -5709,6 +5714,7 @@ async def miniapp_admin_tools_api(request):
                 "sent_count": int(load_fake_otp_config().get("sent_count", 0)),
             },
             "archive_sync": {"status": str(number_archive.status)[:250]},
+            "ai_posts": public_ai_status(),
         }
 
     if request.method == "GET":
@@ -5722,6 +5728,32 @@ async def miniapp_admin_tools_api(request):
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
     action = body.get("action")
+    if action == "ai_settings":
+        try:
+            save_ai_settings(body.get("enabled"), body.get("style"))
+        except ValueError:
+            return _miniapp_cors(web.json_response(
+                {"error": "invalid_ai_settings"}, status=400))
+        return _miniapp_cors(web.json_response({"ok": True, **snapshot()}))
+    if action == "ai_preview":
+        now = time.monotonic()
+        if now - _ai_preview_times.get(uid, -1e9) < 20:
+            return _miniapp_cors(web.json_response(
+                {"error": "rate_limited", "message": "Növbəti nümunə üçün 20 saniyə gözləyin."},
+                status=429))
+        _ai_preview_times[uid] = now
+        services = await fetch_services_cached()
+        current = availability_snapshot(services, get_country_prefix_from_number)
+        if not current["range_entries"]:
+            return _miniapp_cors(web.json_response(
+                {"error": "empty_catalog", "message": "API-də xidmət məlumatı yoxdur."},
+                status=503))
+        base_message = compose_availability_notice(current, None, get_country_by_prefix)
+        message = await decorate_feed(current, {}, base_message)
+        # This preview NEVER sends to Telegram, and is displayed as plain text.
+        plaintext = re.sub(r"</?(?:b|code)>", "", message)
+        return _miniapp_cors(web.json_response(
+            {"ok": True, "preview": plaintext, "ai_posts": public_ai_status()}))
     if action == "save_settings":
         try:
             minimum = int(body.get("min_withdraw"))
