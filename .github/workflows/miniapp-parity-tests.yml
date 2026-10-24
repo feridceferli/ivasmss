@@ -9,6 +9,8 @@ on:
       - docs/miniapp-modern.css
       - test_miniapp_parity.py
       - test_miniapp_active_numbers.py
+      - test_telegram_profile_photo.py
+      - test_telegram_avatar_ui.cjs
       - test_miniapp_admin_tools.py
       - test_miniapp_withdrawals.py
       - test_miniapp_service_picker.cjs
@@ -29,6 +31,8 @@ on:
       - docs/miniapp-modern.css
       - test_miniapp_parity.py
       - test_miniapp_active_numbers.py
+      - test_telegram_profile_photo.py
+      - test_telegram_avatar_ui.cjs
       - test_miniapp_admin_tools.py
       - test_miniapp_withdrawals.py
       - test_miniapp_service_picker.cjs
@@ -68,7 +72,9 @@ jobs:
         run: node test_miniapp_service_picker.cjs
       - name: Test latest number ordering and automatic copy
         run: node test_miniapp_newest_copy.cjs
+      - name: Test Telegram Mini App avatar privacy and fallback
+        run: node test_telegram_avatar_ui.cjs
       - name: Check Python syntax
         run: python -m py_compile main.py world_country_codes.py
       - name: Test Mini App parity, safe rendering and +994 permissions
-        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions
+        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo
