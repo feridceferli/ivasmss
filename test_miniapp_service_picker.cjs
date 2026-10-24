@@ -45,7 +45,7 @@ assert.match(html, /href="https:\/\/t\.me\/lacin_0411"/);
 assert.match(html, /id="country-pricing-select"/);
 assert.match(html, /id="country-pricing-free"/);
 assert.match(js, /addRangeButton\(listing, "📞 \+" \+ rid \+ " — Nömrə al"/);
-assert.match(js, /body: \{ service, country, range, country_iso: countryIso \}/);
+assert.match(js, /body: \{ service, country, range, country_iso: countryIso, expected_price_cents: quote\.cents \}/);
 assert.match(js, /window\.confirm\([\s\S]*?AZN-dir/);
 assert.match(js, /expected_price_cents: quote\.cents/);
 assert.match(js, /if \(locked\)/);
