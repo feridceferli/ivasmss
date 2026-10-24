@@ -1153,8 +1153,6 @@ def main_keyboard(user_id):
         [
             premium_inline_button(labels["search_otp"], "search_otp",
                                   callback_data="menu_search_otp"),
-            premium_inline_button(labels["get_2fa"], "get_2fa",
-                                  callback_data="menu_get_2fa"),
         ],
         [
             premium_inline_button(labels["balance"], "balance",
@@ -1604,58 +1602,6 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
         msg += '━━━━━━━━━━━━━━━━━━━━\n📊 <i>Hər gün gecə saat 12-də sıfırlanır</i>'
     await update.effective_message.reply_text(
         msg, parse_mode="HTML", reply_markup=main_keyboard(uid)
-    )
-
-
-# ==================== 2FA ====================
-def generate_2fa_code(secret_key):
-    try:
-        clean_secret = secret_key.replace(" ", "").strip()
-        totp = pyotp.TOTP(clean_secret)
-        otp = totp.now()
-        return otp, clean_secret
-    except:
-        return None, None
-
-
-async def get_2fa_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    if is_user_banned(uid):
-        await update.effective_message.reply_text(
-            "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(uid)
-        )
-        return
-    context.user_data["mode"] = "get_2fa"
-    await update.effective_message.reply_text(
-        "⚡ <b>GET 2FA CODE</b> ⚡\n\n"
-        "<blockquote>🔑 ENTER YOUR 2FA SECRET KEY:</blockquote>",
-        parse_mode="HTML",
-    )
-
-
-async def process_2fa_key(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    uid = update.effective_user.id
-    secret_key = update.message.text.strip()
-    context.user_data["mode"] = None
-    otp_code, clean_key = generate_2fa_code(secret_key)
-    if otp_code is None:
-        await update.effective_message.reply_text(
-            "❌ <b>INVALID 2FA SECRET KEY</b>\n\n⚠️ Please send a valid base32 key.",
-            parse_mode="HTML",
-            reply_markup=main_keyboard(uid),
-        )
-        return
-    now = datetime.now()
-    final_msg = (
-        "✅ <b>2FA CODE GENERATED!</b>\n\n"
-        f"<blockquote>🔑 KEY: <code>{clean_key}</code></blockquote>\n"
-        f"<blockquote>🔢 CODE: <code>{otp_code}</code></blockquote>\n"
-        f"<blockquote>⏳ EXPIRES IN: 30 SECONDS</blockquote>\n"
-        f"📅 {now.strftime('%d %B, %Y')} | {now.strftime('%I:%M %p')}"
-    )
-    await update.effective_message.reply_text(
-        final_msg, parse_mode="HTML",
-        reply_markup=otp_copy_keyboard(otp_code, get_user_language(uid)),
     )
 
 
@@ -3962,11 +3908,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             }
         )
         return
-
-    if text == "⚡ GET 2FA":
-        await get_2fa_code(update, context)
-        return
-
     if text == "📋 ACTIVE NUMBERS":
         await show_active_numbers(update, context)
         return
@@ -3974,11 +3915,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if text == "📞 GET NUMBER":
         await show_app_selection(update, context)
         return
-
-    if context.user_data.get("mode") == "get_2fa":
-        await process_2fa_key(update, context)
-        return
-
     if text == "🏆 LEADERBOARD":
         await leaderboard_command(update, context)
         return
@@ -4740,11 +4676,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "menu_search_otp":
         context.user_data["mode"] = "search_otp"
         await query.message.reply_text("🔍 <b>NÖMRƏNİ DAXİL EDİN:</b>", parse_mode="HTML")
-        return
-    if data == "menu_get_2fa":
-        await get_2fa_code(update, context)
-        return
-    if data == "menu_balance":
+        return    if data == "menu_balance":
         balance = get_user(uid)["balance"]
         await query.message.reply_text(
             f"💰 <b>YOUR CURRENT BALANCE</b>\n\n<blockquote>💵 TOTAL: <b>{format_balance(balance)} AZN</b></blockquote>",
@@ -5188,8 +5120,6 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
     elif action == "search_otp":
         context.user_data["mode"] = "search_otp"
         await update.effective_message.reply_text("🔍 OTP axtarmaq üçün nömrəni göndərin:")
-    elif action == "get_2fa":
-        await get_2fa_code(update, context)
     elif action == "balance":
         balance = get_user(uid).get("balance", 0)
         await update.effective_message.reply_text(
@@ -6210,6 +6140,14 @@ async def miniapp_get_number_api(request):
             }, status=403))
 
     try:
+        quote = quote_range(rid, load_number_prices(), body.get("country_iso"))
+        expected_cents = body.get("expected_price_cents")
+        if type(expected_cents) is not int or expected_cents != quote["cents"]:
+            return _miniapp_cors(web.json_response({
+                "error": "price_changed",
+                "message": "Qiymət dəyişib. Sifarişdən əvvəl yeni qiyməti təsdiqləyin.",
+                "price": quote["price"], "free": quote["free"],
+            }, status=409))
         num, country = await get_number_from_api(rid, requester_id=uid,
                                                  country_iso=str(body.get("country_iso", "")).strip())
     except PricingError as exc:
