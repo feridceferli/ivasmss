@@ -17,7 +17,8 @@ const state = {
     countryFilter: "",
     countryPage: 0,
     countryPageSize: 25,
-    authFailed: false
+    authFailed: false,
+    serviceQuery: ""
 };
 
 function node(tag, text = "", className = "") {
@@ -31,9 +32,22 @@ function clearAndText(target, text) {
     target.replaceChildren(node("p", text, "notice-mini"));
 }
 
+let uiToastTimeout = null;
+function toast(message, kind = "info") {
+    const toastNode = document.getElementById("ui-toast");
+    if (!toastNode) return;
+    toastNode.textContent = String(message);
+    toastNode.className = "ui-toast show" + (kind === "error" ? " error" : kind === "success" ? " success" : "");
+    if (uiToastTimeout) window.clearTimeout(uiToastTimeout);
+    uiToastTimeout = window.setTimeout(() => {
+        toastNode.className = "ui-toast";
+        uiToastTimeout = null;
+    }, 3100);
+}
 function alertUser(message) {
+    toast(message, /uğurlu|kopyalandı|✅/i.test(String(message)) ? "success" : "info");
     if (tg.showAlert) tg.showAlert(String(message));
-    else window.alert(String(message));
+    else if (!document.getElementById("ui-toast")) window.alert(String(message));
 }
 
 function getAuthHeaders() {
@@ -78,7 +92,12 @@ function switchTab(tab) {
         content.classList.toggle("active", content.id === "tab-" + tab);
     });
     document.querySelectorAll(".tab-btn").forEach((button, index) => {
-        button.classList.toggle("active", TABS[index] === tab);
+        const active = TABS[index] === tab;
+        button.classList.toggle("active", active);
+        button.setAttribute("aria-selected", active ? "true" : "false");
+        if (active && typeof button.scrollIntoView === "function") {
+            button.scrollIntoView({block: "nearest", inline: "nearest", behavior: "smooth"});
+        }
     });
     if (tab === "countries") {
         if (!state.countries.length) fetchCountries();
@@ -121,6 +140,8 @@ async function fetchDashboard() {
         adminButton.hidden = !state.isAdmin;
         document.getElementById("tab-admin").hidden = !state.isAdmin;
         const stats = data.stats || {};
+        const todayCount = document.getElementById("ui-today-count");
+        if (todayCount) todayCount.textContent = String(stats.today_numbers || 0);
         setStatus("🌍 Bütün ölkələr  ·  Bu gün: " + (stats.today_numbers || 0) +
                   " nömrə  ·  " + (state.isAdmin ? "👑 Admin" : "🔐 Təhlükəsiz giriş"));
         updatePermissionStatus();
@@ -190,15 +211,20 @@ async function fetchServices() {
 function renderServices() {
     const container = document.getElementById("services-grid-container");
     container.replaceChildren();
-    const services = Object.keys(state.services).sort();
+    const query = String(state.serviceQuery || "").trim().toLocaleLowerCase();
+    const services = Object.keys(state.services).sort().filter(service =>
+        service.toLocaleLowerCase().includes(query)
+    );
     if (!services.length) {
         clearAndText(container, "API hazırda heç bir xidmət göstərmir.");
         return;
     }
     services.forEach(service => {
         const offered = Array.isArray(state.services[service]) ? state.services[service] : [];
-        const b = node("button", "📡 " + service.toUpperCase() + "  ·  " +
-                       offered.length + " range", "service-card");
+        const b = node("button", null, "service-card");
+        b.appendChild(node("span", "◈", "service-icon"));
+        b.appendChild(node("span", service.toUpperCase(), "service-name"));
+        b.appendChild(node("span", offered.length + " range · Seçmək üçün toxun", "service-meta"));
         b.type = "button";
         b.addEventListener("click", () => showServiceRanges(service));
         container.appendChild(b);
@@ -344,6 +370,8 @@ async function fetchCountries() {
     try {
         const data = await api("/api/countries");
         state.countries = data.countries || [];
+        const countryCount = document.getElementById("ui-country-count");
+        if (countryCount) countryCount.textContent = String(state.countries.length);
         state.azApproved = !!data.az_approved;
         document.getElementById("countries-summary").textContent =
             state.countries.length + " ölkə və ərazi · " +
@@ -532,6 +560,10 @@ async function fetchOrders() {
         };
         const combined = [...orders, ...botOrders]
             .sort((a, b) => createdAt(b) - createdAt(a));
+        const activeCount = document.getElementById("ui-active-count");
+        if (activeCount) activeCount.textContent = String(new Set(
+            combined.map(order => String(order.number || order.id || ""))
+        ).size);
         const seen = new Set();
         container.replaceChildren();
         if (!combined.length) {
@@ -998,6 +1030,11 @@ async function adminAzPermission(approve, directId = null) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    const serviceSearch = document.getElementById("service-search");
+    if (serviceSearch) serviceSearch.addEventListener("input", () => {
+        state.serviceQuery = serviceSearch.value;
+        renderServices();
+    });
     const search = document.getElementById("country-search");
     search.addEventListener("input", () => {
         state.countryFilter = search.value.trim().toLocaleLowerCase();
