@@ -128,6 +128,23 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(ctx.exception.code, "insufficient_balance")
         self.post.assert_not_awaited()
 
+    async def test_changed_price_is_rejected_under_lock_without_debit(self):
+        # Quote the original 10 AZN, then raise the admin price to 12 AZN.
+        self.settings["country"]["AZ"] = price_rule("12", False)
+        with self.assertRaises(PricingError) as ctx:
+            await self.allocate(
+                "99450210", requester_id=77, expected_price_cents=1000,
+            )
+        self.assertEqual(ctx.exception.code, "price_changed")
+        self.assertEqual(self.users["77"]["balance"], 20.0)
+        self.post.assert_not_awaited()
+
+    async def test_expected_price_matches_paid_purchase(self):
+        await self.allocate(
+            "99450210", requester_id=77, expected_price_cents=1000,
+        )
+        self.assertEqual(self.users["77"]["balance"], 10.0)
+
     async def test_concurrent_orders_do_not_double_spend(self):
         self.users["77"]["balance"] = 10.0
         responses = await asyncio.gather(
