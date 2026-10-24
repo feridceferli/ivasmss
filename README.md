@@ -67,10 +67,10 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 
 ## 🌐 Dünyadan qısa və maraqlı xəbərlər
 
-- **Hər 2 saatdan bir:** [BBC World](https://feeds.bbci.co.uk/news/world/rss.xml), [BBC Technology](https://feeds.bbci.co.uk/news/technology/rss.xml) və [The Guardian World](https://www.theguardian.com/world/rss) mənbələrindən maksimum 2 yeni, maraqlı başlıq və hər biri üçün mənbə keçidi paylaşılır.
+- **Hər 2 saatdan bir:** BBC World, BBC Technology və The Guardian RSS mənbələrindən maksimum 2 yeni mövzunun Azərbaycan dilində 1–2 cümləlik qısa xülasəsi göndərilir. **Telegram paylaşımında heç bir link yoxdur**; yalnız mənbənin adı qalır. Orijinal URL yalnız serverdə mənbə yoxlaması və təkrarsızlıq üçün işlənir.
 - **Təkrarsızlıq və dəqiqlik:** 36 saatdan köhnə xəbərlər, saxta linklər, təsdiqlənməmiş başlıqlar göndərilmir. Hər başlığın orijinal RSS mənbəsi saxlanılır. Faciələr məzəli mövzu kimi təqdim edilmir.
-- **Pulsuz tərcümə:** Render-də `GROQ_API_KEY` varsa, Llama modeli başlıqları Azərbaycan dilinə tərcümə edir; açar və ya pulsuz kvota yoxdursa orijinal ingilis başlığı mənbə linki ilə paylaşılır. Heç vaxt uydurma xəbərlə əvəzlənmir.
-- **Admin panel:** “Dünyadan maraqlı xəbərlər” bölməsindən paylaşımı açıb-bağlayın və heç kimə göndərmədən nümunəsinə baxın.
+- **Pulsuz tərcümə və xülasə:** `GROQ_API_KEY` quraşdırılıbsa Llama modeli yalnız RSS başlıq və açıqlamasına əsaslanaraq qısa Azərbaycan xülasəsi hazırlayır. Açar yoxdursa və ya pulsuz limit bitibsə açarsız MyMemory `en|az-AZ` tərcüməsi qısa RSS mətninə tətbiq edilir (anonim istifadə kvotalıdır). Hər iki xidmət uğursuz olarsa xəbər buraxılır: ingiliscə mətn, uydurma xülasə və link paylaşılmır.
+- **Admin panel:** “Dünyadan maraqlı xəbərlər” bölməsindən paylaşımı açıb-bağlayın və məhz link olmayan Azərbaycan dilindəki paylaşımın nümunəsinə baxın.
 - **Başlanğıcda səssiz:** Bot ilk istifadədə mövcud xəbərləri yadda saxlayır, ilk xəbər xülasəsi 2 saatdan sonra yalnız yeni məqalələr varsa göndərilir. Xidmət yenidən başladıqda `DB_FOLDER` disk üzərində qalıcı deyilsə yaddaş sıfırlana bilər.
 - Xəbər modulunun ayrıca 10 dəqiqəlik RSS yoxlaması var, mövcud **10 dəqiqəlik xidmət kataloqu paylaşımı** və **yeni xidmət üçün dərhal elan** dəyişmir.
 
