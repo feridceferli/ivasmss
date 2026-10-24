@@ -28,7 +28,6 @@ TEXT = {
         "get_number": "📞 NÖMRƏ AL",
         "active_numbers": "📋 AKTİV NÖMRƏLƏR",
         "search_otp": "🔍 OTP AXTAR",
-        "get_2fa": "⚡ 2FA AL",
         "balance": "💰 BALANS",
         "profile": "👤 PROFİL",
         "leaderboard": "🏆 LİDERLƏR",
@@ -59,7 +58,6 @@ TEXT = {
         "get_number": "📞 NUMARA AL",
         "active_numbers": "📋 AKTİF NUMARALAR",
         "search_otp": "🔍 OTP ARA",
-        "get_2fa": "⚡ 2FA AL",
         "balance": "💰 BAKİYE",
         "profile": "👤 PROFİL",
         "leaderboard": "🏆 LİDERLER",
@@ -90,7 +88,6 @@ TEXT = {
         "get_number": "📞 GET NUMBER",
         "active_numbers": "📋 ACTIVE NUMBERS",
         "search_otp": "🔍 SEARCH OTP",
-        "get_2fa": "⚡ GET 2FA",
         "balance": "💰 BALANCE",
         "profile": "👤 PROFILE",
         "leaderboard": "🏆 LEADERBOARD",
@@ -129,7 +126,7 @@ def membership_keyboard(channels, language):
 def menu_labels(language):
     language = normalize_language(language)
     return {key: t(language, key) for key in (
-        "get_number", "active_numbers", "search_otp", "get_2fa",
+        "get_number", "active_numbers", "search_otp",
         "balance", "profile", "leaderboard", "support",
         "admin", "mini_app",
     )}
