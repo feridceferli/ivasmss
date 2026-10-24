@@ -235,7 +235,7 @@
         <!-- Profil və Bakiye Kartı -->
         <div class="card profile-card">
             <div class="user-info">
-                <div class="avatar" id="user-avatar">?</div>
+                <div class="avatar" id="user-avatar" aria-label="Telegram profil şəkliniz">?</div>
                 <div>
                     <h4 id="user-name" style="margin: 0 0 2px 0;">Yüklənir...</h4>
                     <span id="user-id" style="color: var(--hint-color); font-size: 12px;">ID: --</span>
@@ -415,6 +415,14 @@
         <div id="tab-profile" class="tab-content">
             <div class="card">
                 <h4 style="margin:0 0 12px">👤 Profil və hesabım</h4>
+                <div class="telegram-profile-overview">
+                    <div class="profile-avatar" id="profile-avatar" aria-label="Telegram profil şəkliniz">?</div>
+                    <div class="telegram-profile-intro">
+                        <strong>Telegram profiliniz</strong>
+                        <span>Şəkil birbaşa Telegram hesabınızdan götürülür.</span>
+                        <button type="button" class="action-small" onclick="refreshTelegramAvatar()">🔄 Şəklimi yenilə</button>
+                    </div>
+                </div>
                 <div class="profile-fields">
                     <p id="profile-name" class="notice-mini">Hesab yüklənir...</p>
                     <p id="profile-stats" class="notice-mini">Statistika yüklənir...</p>
@@ -514,7 +522,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261025-redesign"></script>
+    <script src="app.js?v=20261025-avatar"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 <div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>
