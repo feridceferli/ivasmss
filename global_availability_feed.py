@@ -135,6 +135,7 @@ async def publish_global_availability_feed(
     country_name_lookup=None,
     now=None,
     state_file=None,
+    message_decorator=None,
 ):
     """Baseline without announcing on startup; send subsequent changes
     no more than once per five minutes.
@@ -172,6 +173,12 @@ async def publish_global_availability_feed(
         return "cooldown"
 
     message = compose_availability_notice(current, previous, country_name_lookup)
+    if message_decorator is not None:
+        try:
+            message = await message_decorator(current, previous, message)
+        except Exception as exc:
+            print(f"[global-feed] optional caption failed: {type(exc).__name__}", flush=True)
+            message = compose_availability_notice(current, previous, country_name_lookup)
     try:
         await bot.send_message(chat_id=int(group_id), text=message, parse_mode="HTML")
     except Exception as exc:
