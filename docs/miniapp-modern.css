@@ -324,3 +324,24 @@ select {appearance:auto}
 .guide-faq details p {margin:10px 0 2px;padding-left:4px;color:var(--ui-muted);font-size:12px;line-height:1.7}
 .guide-contact .support-cta {margin-bottom:0}
 @media(max-width:420px) {.guide-step {gap:11px;padding:14px!important}.guide-step-number {flex-basis:34px;width:34px;height:34px}}
+
+
+/* Country price editor */
+.admin-price-panel {border-color:rgba(117,142,242,.26)}
+.admin-price-panel>h4 {margin:0 0 8px}
+.admin-price-section {margin-top:15px;padding:15px;border:1px solid var(--ui-border);
+  border-radius:15px;background:rgba(140,160,255,.045)}
+.admin-price-section h4 {margin:0 0 9px;font-size:14px}
+.admin-price-section>.notice-mini {display:block;margin:8px 0 5px}
+.admin-price-section>.admin-input {display:block;width:100%!important;max-width:100%;
+  min-height:43px;margin-bottom:10px;color:var(--ui-text);background:var(--ui-panel-high)}
+.admin-price-section select.admin-input {appearance:auto}
+.price-free-check {display:flex;align-items:center;gap:10px;margin:10px 0;
+  padding:11px 13px;border:1px solid rgba(105,227,186,.25);border-radius:12px;
+  background:rgba(105,227,186,.06);font-size:13px;font-weight:730;color:#c6ffea;cursor:pointer}
+.price-free-check input {width:19px;height:19px;accent-color:#67d4b1}
+.admin-price-section .quick-actions {margin-top:12px!important}
+#admin-range-prices-list {max-height:280px;overflow-y:auto;margin-top:12px}
+#admin-range-prices-list .catalog-row {width:100%;margin:5px 0;justify-content:flex-start;text-align:left}
+.admin-price-section input:disabled {opacity:.55;cursor:not-allowed}
+@media(max-width:420px){.admin-price-section {padding:11px}.admin-price-section .action-small {font-size:12px}}
