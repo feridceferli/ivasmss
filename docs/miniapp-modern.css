@@ -302,3 +302,25 @@ select {appearance:auto}
   html {scroll-behavior:auto}
   *,*::before,*::after{animation-duration:.01ms!important;transition-duration:.01ms!important}
 }
+
+
+/* Self-service guide: readable, touch-friendly, aligned with the Mini App palette. */
+.guide-intro {border-color:rgba(143,158,255,.28);background:linear-gradient(135deg,#263854,#17263e)}
+.guide-intro h4,.guide-faq h4,.guide-contact h4 {margin:0 0 10px}
+.guide-intro>p,.guide-contact>p {margin:8px 0;line-height:1.65;color:#d3def0}
+#tab-guide code {padding:2px 6px;border:1px solid #a0b6ec26;border-radius:6px;background:#101c33;color:#d3e1ff;font-size:.93em}
+.guide-steps {display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,340px),1fr));gap:12px;margin:14px 0}
+.guide-steps .card {margin:0}
+.guide-step {display:flex;align-items:flex-start;gap:14px;padding:17px!important}
+.guide-step-number {display:grid;place-items:center;flex:0 0 37px;width:37px;height:37px;border-radius:12px;
+  background:linear-gradient(145deg,#7788ef,#3a4a90);color:#fff;font-size:13px;font-weight:850}
+.guide-step-content {min-width:0;display:flex;flex-direction:column;align-items:flex-start;flex:1}
+.guide-step-content h4 {margin:2px 0 8px;font-size:15px;line-height:1.3}
+.guide-step-content p {margin:0 0 13px;color:var(--ui-muted);font-size:12px;line-height:1.65}
+.guide-step-content .action-small {margin-top:auto;min-height:39px;text-align:left}
+.guide-faq details {padding:13px 0;border-bottom:1px solid var(--ui-border)}
+.guide-faq details:last-child {border-bottom:0}
+.guide-faq summary {list-style:revert;cursor:pointer;font-size:13px;font-weight:730;line-height:1.5;color:#e6edff}
+.guide-faq details p {margin:10px 0 2px;padding-left:4px;color:var(--ui-muted);font-size:12px;line-height:1.7}
+.guide-contact .support-cta {margin-bottom:0}
+@media(max-width:420px) {.guide-step {gap:11px;padding:14px!important}.guide-step-number {flex-basis:34px;width:34px;height:34px}}
