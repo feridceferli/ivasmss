@@ -14,10 +14,11 @@ from unittest.mock import patch
 import world_news_feed as news
 
 
-def make_item(title, link, stamp):
+def make_item(title, link, stamp, description=""):
     date = format_datetime(datetime.fromtimestamp(stamp, timezone.utc))
     return ("<item><title>" + title + "</title><link>" + link +
-            "</link><pubDate>" + date + "</pubDate></item>")
+            "</link><description>" + description + "</description>" +
+            "<pubDate>" + date + "</pubDate></item>")
 
 
 def feed(items):
@@ -36,6 +37,27 @@ class FakeResponse:
         self.content = body
     def raise_for_status(self):
         return None
+
+
+class FakeMemoryResponse:
+    def __init__(self, translation, code=200):
+        self.translation = translation
+        self.code = code
+    def raise_for_status(self):
+        return None
+    def json(self):
+        return {"responseStatus": self.code,
+                "responseData": {"translatedText": self.translation}}
+
+
+class FakeMemoryClient:
+    def __init__(self, translation, code=200):
+        self.translation = translation
+        self.code = code
+        self.calls = []
+    async def get(self, url, params):
+        self.calls.append((url, params))
+        return FakeMemoryResponse(self.translation, self.code)
 
 
 class FakeRssClient:
@@ -94,10 +116,15 @@ class NewsParsingTests(unittest.TestCase):
         self.assertEqual(result[0]["url"],
                          "https://www.bbc.com/news/science-111")
         self.assertEqual(len(result[0]["id"]), 64)
-        formatted = news.compose_news_digest(result)
+        summary = "Dəniz tədqiqatı üçün yeni kosmik robot hazırlanıb."
+        formatted = news.compose_news_digest(result, {result[0]["id"]: summary})
         self.assertIn("BBC World", formatted)
-        self.assertIn("https://www.bbc.com/news/science-111", formatted)
+        self.assertIn(summary, formatted)
+        self.assertNotIn("https://", formatted)
+        self.assertNotIn("<a ", formatted)
         self.assertNotIn("utm_source=", formatted)
+        self.assertEqual(news.compose_news_digest(result), "",
+                         "Never display untranslated English article titles")
 
     def test_bad_xml_future_and_stale_news_are_skipped(self):
         self.assertEqual(news.parse_rss(b"<rss><garbled", "BBC World",
@@ -168,11 +195,11 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
         result = await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
             client=next_client, now=NOW + 7300,
-            translate=lambda stories: async_no_translation())
+            translate=lambda stories: async_az_translation(stories))
         self.assertEqual(result, "sent")
         self.assertEqual(len(bot.messages), 1)
         self.assertEqual(bot.messages[0]["chat_id"], -10012345)
-        self.assertIn("underwater robot", bot.messages[0]["text"])
+        self.assertIn("Alimlər sualtı robot", bot.messages[0]["text"])
         self.assertIn("BBC World", bot.messages[0]["text"])
         self.assertNotIn("utm_", bot.messages[0]["text"])
         self.assertEqual(bot.messages[0]["parse_mode"], "HTML")
@@ -190,14 +217,14 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
         result = await news.publish_world_news(
             bot=FakeBot(fail=True), group_id="-10012345",
             state_file=self.path, client=client, now=NOW + 7300,
-            translate=lambda stories: async_no_translation())
+            translate=lambda stories: async_az_translation(stories))
         self.assertEqual(result, "send_failed")
         self.assertEqual(Path(self.path).read_text(encoding="utf-8"), original)
         bot = FakeBot()
         self.assertEqual(await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
             client=client, now=NOW + 7330,
-            translate=lambda stories: async_no_translation()), "sent")
+            translate=lambda stories: async_az_translation(stories)), "sent")
         self.assertEqual(len(bot.messages), 1)
 
     async def test_disabled_and_missing_group_do_not_fetch_rss(self):
@@ -217,16 +244,70 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
     async def test_optional_ai_translation_rejects_fabricated_numbers(self):
         article = {"id": "test", "title": "Scientists discover 3 planets"}
         with patch.dict(os.environ, {"GROQ_API_KEY": "unit-test-key"}):
-            valid = FakeAiClient('{"titles":["Alimlər 3 planet kəşf ediblər"]}')
-            result = await news.translate_headlines([article], client=valid)
+            valid = FakeAiClient('{"summaries":["Alimlər 3 planet kəşf ediblər"]}')
+            result = await news.translate_headlines(
+                [article], client=valid, allow_fallback=False)
             self.assertEqual(result["test"], "Alimlər 3 planet kəşf ediblər")
-            invalid = FakeAiClient('{"titles":["Alimlər 7 planet kəşf ediblər"]}')
-            result = await news.translate_headlines([article], client=invalid)
+            invalid = FakeAiClient('{"summaries":["Alimlər 7 planet kəşf ediblər"]}')
+            result = await news.translate_headlines(
+                [article], client=invalid, allow_fallback=False)
             self.assertFalse(result)
 
+    async def test_keyless_free_translation_makes_short_az_summary(self):
+        story = {"id": "space-1", "title": "Scientists create new space robot",
+                 "description": "Researchers say the robot can explore distant planets."}
+        backend = FakeMemoryClient(
+            "Alimlər yeni kosmik robot hazırlayıblar. Robot uzaq planetləri araşdıra bilər.")
+        with patch.dict(os.environ, {"GROQ_API_KEY": ""}):
+            result = await news.translate_headlines(
+                [story], fallback_client=backend)
+        self.assertIn(story["id"], result)
+        self.assertEqual(len(backend.calls), 1)
+        self.assertEqual(backend.calls[0][0], news.MYMEMORY_ENDPOINT)
+        self.assertEqual(backend.calls[0][1]["langpair"], "en|az-AZ")
+        self.assertNotIn("http", result[story["id"]])
 
-async def async_no_translation():
+    async def test_no_english_or_links_when_translation_unavailable(self):
+        bot = FakeBot()
+        await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=self.client_for(), now=NOW)
+        before = Path(self.path).read_text(encoding="utf-8")
+        later = self.client_for(first=False, second=True)
+        unavailable = await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=later, now=NOW + 7300,
+            translate=lambda stories: async_unavailable_translation())
+        self.assertEqual(unavailable, "translation_unavailable")
+        self.assertFalse(bot.messages)
+        self.assertEqual(Path(self.path).read_text(encoding="utf-8"), before)
+        self.assertEqual(await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=later, now=NOW + 7330,
+            translate=lambda stories: async_az_translation(stories)), "sent")
+        self.assertNotIn("https://", bot.messages[0]["text"])
+        self.assertNotIn("<a ", bot.messages[0]["text"])
+        self.assertNotIn("underwater robot", bot.messages[0]["text"])
+
+    async def test_bad_free_translation_is_skipped(self):
+        story = {"id": "x", "title": "Scientists create a new space robot",
+                 "description": "New technology research"}
+        with patch.dict(os.environ, {"GROQ_API_KEY": ""}):
+            for output in ("Scientists create a new space robot",
+                           "Yeni robot https://evil.example saytında göstərilib.",
+                           "Alimlər 400 yeni robot yaradıb!"):
+                result = await news.translate_headlines(
+                    [story], fallback_client=FakeMemoryClient(output))
+                self.assertFalse(result)
+
+
+async def async_unavailable_translation():
     return {}
+
+async def async_az_translation(stories):
+    return {story["id"]:
+            "Alimlər sualtı robot hazırlayıblar və yeni tədqiqatlara başlayıblar."
+            for story in stories}
 
 
 if __name__ == "__main__":
