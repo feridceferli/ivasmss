@@ -221,9 +221,17 @@
         .profile-fields p { margin:8px 0; overflow-wrap:anywhere; }
         @media(max-width:390px){ .tab-btn{font-size:11px;padding:8px 6px}.catalog-row{font-size:12px} }
     </style>
+    <link rel="stylesheet" href="miniapp-modern.css?v=20261025-redesign">
 </head>
 <body>
     <div class="container">
+        <header class="app-brand" aria-label="AZE SMS PANEL">
+            <div class="app-brand-left">
+                <div class="app-brand-icon" aria-hidden="true">✦</div>
+                <div><strong class="app-brand-title">AZE SMS PANEL</strong><span class="app-brand-caption">Telegram Mini App · Xidmətlər və nömrələr</span></div>
+            </div>
+            <span class="app-brand-tag">Mini App</span>
+        </header>
         <!-- Profil və Bakiye Kartı -->
         <div class="card profile-card">
             <div class="user-info">
@@ -256,6 +264,16 @@
 
         <!-- 1. Xidmətlər Tabı -->
         <div id="tab-services" class="tab-content active">
+            <div class="section-intro section-intro--hero">
+                <p class="section-eyebrow">SÜRƏTLİ VƏ RAHAT İDARƏETMƏ</p>
+                <h3>Xoş gəlmisiniz 👋</h3>
+                <p>Xidmət seçin, ölkəni tapın və öz nömrələrinizi bir yerdən izləyin.</p>
+                <div class="dashboard-stats">
+                    <div class="dashboard-stat"><strong id="ui-today-count">—</strong><span>Bu gün</span></div>
+                    <div class="dashboard-stat"><strong id="ui-active-count">—</strong><span>Aktiv nömrələr</span></div>
+                    <div class="dashboard-stat"><strong id="ui-country-count">—</strong><span>Ölkə və ərazi</span></div>
+                </div>
+            </div>
             <div class="card">
                 <h3 style="margin:0 0 6px">🚀 AZE SMS PANEL</h3>
                 <p class="notice-mini">Botun əsas funksiyaları buradadır. İstədiyiniz bölməni açın və hesabınıza aid məlumatları idarə edin.</p>
@@ -269,6 +287,7 @@
             <div class="card">
                 <h4 style="margin: 0 0 10px 0;">🌍 Mövcud Xidmətlər və Ölkələr</h4>
                 <p class="notice-mini">Xidməti seçin → ölkə kodunu və range-i seçin → həmin range-dən nömrə almağa cəhd edin. Nömrə mövcudluğu API-dən asılıdır.</p>
+                <div class="service-search-wrap"><input id="service-search" type="search" placeholder="🔎 Xidmət axtar..." aria-label="Xidmətlər üzrə axtarış" autocomplete="off"></div>
                 <div class="services-grid" id="services-grid-container">
                     <p class="hint">Xidmətlər yüklənir...</p>
                 </div>
@@ -495,8 +514,9 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261023-newest-autocopy"></script>
+    <script src="app.js?v=20261025-redesign"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
+<div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>
 </body>
 </html>
