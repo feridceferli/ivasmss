@@ -970,6 +970,11 @@ async function loadAdminTools() {
             ai.mode === "off" ? "⏸️ AI paylaşımları söndürülüb." :
             ai.mode === "ai" ? "✅ Pulsuz Groq Llama AI aktivdir (limitlər tətbiq olunur)." :
             "⚠️ GROQ_API_KEY yoxdur — hazır şablonla paylaşımlar davam edir.";
+        const worldNews = adminTools.world_news || {};
+        document.getElementById("world-news-enabled").checked = !!worldNews.enabled;
+        document.getElementById("world-news-status").textContent =
+            (worldNews.enabled ? "✅ Dünya xəbərləri aktivdir." : "⏸️ Dünya xəbərləri söndürülüb.") +
+            " · " + (worldNews.interval_minutes || 120) + " dəqiqədən bir · mənbə linkləri ilə.";
         const wa = adminTools.whatsapp || {};
         const archive = adminTools.archive_sync || {};
         status.textContent = "📡 WhatsApp: " + (wa.status === "configured" ? "✅ Ayarlanıb" : "⚠️ Ayarlanmayıb") +
@@ -1135,6 +1140,30 @@ async function previewAiPost() {
         preview.textContent = result.preview || "Nümunə mövcud deyil.";
     } catch (err) {
         preview.textContent = "⚠️ " + err.message;
+    }
+}
+
+async function saveWorldNewsSettings() {
+    if (!state.isAdmin) return;
+    try {
+        await sendAdminToolAction("world_news_settings", {
+            enabled: document.getElementById("world-news-enabled").checked
+        });
+        await loadAdminTools();
+        alertUser("✅ Dünya xəbərləri üçün ayarlar saxlanıldı.");
+    } catch (err) { alertUser(err.message); }
+}
+
+async function previewWorldNews() {
+    if (!state.isAdmin) return;
+    const area = document.getElementById("world-news-preview");
+    area.hidden = false;
+    area.textContent = "Son xəbərlər yoxlanılır...";
+    try {
+        const response = await sendAdminToolAction("world_news_preview");
+        area.textContent = response.preview || "Xəbər nümunəsi mövcud deyil.";
+    } catch (err) {
+        area.textContent = "⚠️ " + err.message;
     }
 }
 
