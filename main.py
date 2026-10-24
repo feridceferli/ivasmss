@@ -4,6 +4,8 @@ from number_archive import NumberArchive, txt_chunks
 from range_collection import RangeCollector
 from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
 from global_availability_feed import publish_global_availability_feed
+from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
+                            valid_country, valid_range)
 
 range_collector = RangeCollector()
 import io
@@ -16,7 +18,6 @@ import hashlib
 import time
 from urllib.parse import parse_qsl
 import httpx
-import pyotp
 import random
 import string
 from datetime import datetime, timedelta
@@ -69,6 +70,7 @@ ACTIVITY_LOGS_FILE = data_path("activity_logs.json")
 DATA_RANGE_FILE = data_path("datarange.json")
 AZ_ACCESS_FILE = data_path("az_range_permissions.json")
 SYSTEM_CONFIG_FILE = data_path("system_config.json")
+NUMBER_PRICES_FILE = data_path("number_prices.json")
 USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
@@ -807,27 +809,68 @@ async def country_availability_loop(app):
         await asyncio.sleep(30)
 
 
-async def get_number_from_api(rid: str, requester_id=None):
-    """Never allocate a +994 range without an explicit server-side permission."""
+# User-scoped locks serialize purchases; do not let parallel requests double-spend.
+_number_purchase_locks = {}
+
+
+async def get_number_from_api(rid: str, requester_id=None, country_iso=None):
+    """Allocate with a server-controlled AZN price and refund failed requests.
+
+    This shared entry point covers bot and Mini App allocations. Region prices
+    for ambiguous shared calling codes require a per-range override.
+    """
     digits = re.sub(r"[^0-9]", "", str(rid or ""))
     if not digits or (is_az_range(digits) and not az_range_allowed(requester_id)):
         return None, None
-    try:
-        r = await client_async.post(f"{BASE_URL}/getnum", json={"rid": digits})
-        result = r.json()
-        if result.get("meta", {}).get("code") == 200:
+    if requester_id is None:
+        raise PricingError("unauthorized", "Nömrə almaq üçün hesab tələb olunur.")
+    uid = str(requester_id)
+    lock = _number_purchase_locks.setdefault(uid, asyncio.Lock())
+    async with lock:
+        quote = quote_range(digits, load_number_prices(), country_iso)
+        charge = quote["cents"]
+        if charge:
+            users = load_data(USER_DATA_FILE)
+            user = users.get(uid) or get_user(uid)
+            if uid not in users:
+                users = load_data(USER_DATA_FILE)
+            balance_cents = round(float(user.get("balance", 0.0)) * 100)
+            if balance_cents < charge:
+                raise PricingError(
+                    "insufficient_balance",
+                    f"Balans kifayət etmir. Nömrə qiyməti: {quote['price']} AZN. "
+                    f"Balansınızı artırmaq üçün adminlə əlaqə saxlayın.",
+                )
+            users[uid]["balance"] = round((balance_cents - charge) / 100, 2)
+            save_data(users, USER_DATA_FILE)
+
+        allocated = False
+        try:
+            r = await client_async.post(f"{BASE_URL}/getnum", json={"rid": digits})
+            result = r.json()
+            if result.get("meta", {}).get("code") != 200:
+                return None, None
             data = result.get("data") or {}
             number = data.get("full_number")
             normalized = re.sub(r"[^0-9]", "", str(number or ""))
-            if not normalized.startswith(digits) or (is_az_range(normalized) and not az_range_allowed(requester_id)):
+            if (not normalized.startswith(digits)
+                    or (is_az_range(normalized) and not az_range_allowed(requester_id))):
                 print("[number-api] Unexpected or restricted provider range")
                 return None, None
             await asyncio.to_thread(number_archive.record, number)
+            allocated = True
             return number, data.get("country")
-        return None, None
-    except Exception as e:
-        print(f"get_number error: {type(e).__name__}")
-        return None, None
+        except Exception as exc:
+            print(f"get_number error: {type(exc).__name__}")
+            return None, None
+        finally:
+            if charge and not allocated:
+                # Refund reserved balance if provider fails or sends invalid data.
+                users = load_data(USER_DATA_FILE)
+                if uid in users:
+                    old = round(float(users[uid].get("balance", 0.0)) * 100)
+                    users[uid]["balance"] = round((old + charge) / 100, 2)
+                    save_data(users, USER_DATA_FILE)
 
 
 # ==================== CHECK IF USER IS ADMIN ====================
@@ -1327,6 +1370,24 @@ def load_data(filename=USER_DATA_FILE):
 
 def save_data(data, filename=USER_DATA_FILE):
     atomic_save(data, filename)
+
+
+def load_number_prices():
+    """Only administrator-edited overrides are stored; no public secrets."""
+    raw = load_data(NUMBER_PRICES_FILE)
+    settings = initial_prices()
+    if isinstance(raw, dict):
+        for section in ("country", "range"):
+            if isinstance(raw.get(section), dict):
+                settings[section] = raw[section]
+        rule = raw.get("default")
+        if isinstance(rule, dict) and type(rule.get("free")) is bool:
+            settings["default"] = rule
+    return settings
+
+
+def save_number_prices(settings):
+    save_data(settings, NUMBER_PRICES_FILE)
 
 
 def get_user(uid):
@@ -5228,6 +5289,70 @@ def _miniapp_cors(resp):
     return resp
 
 
+
+async def miniapp_prices_api(request):
+    """Prices are readable by users; only verified admins may change them."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, auth_error = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": auth_error}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    if request.method == "GET":
+        return _miniapp_cors(web.json_response({"pricing": load_number_prices()}))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    if not is_admin(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
+    action = body.get("action")
+    settings = load_number_prices()
+    if action not in ("set_country", "reset_country", "set_range", "reset_range", "set_default"):
+        return _miniapp_cors(web.json_response({"error": "bad_action"}, status=400))
+    if action in ("set_country", "reset_country"):
+        key = str(body.get("country_iso", "")).upper().strip()
+        if not valid_country(key):
+            return _miniapp_cors(web.json_response({"error": "invalid_country"}, status=400))
+        section = "country"
+    elif action in ("set_range", "reset_range"):
+        key = str(body.get("range", "")).strip()
+        if not valid_range(key):
+            return _miniapp_cors(web.json_response({"error": "invalid_range"}, status=400))
+        # The provider range must be recognized by at least one dialing code.
+        try:
+            quote_range(key, {"default": {"cents": 0, "free": True},
+                              "country": {}, "range": {}})
+        except PricingError as exc:
+            return _miniapp_cors(web.json_response(
+                {"error": exc.code, "message": str(exc)}, status=400))
+        section = "range"
+    else:
+        key, section = None, "default"
+    if action.startswith("reset_"):
+        settings[section].pop(key, None)
+    else:
+        try:
+            rule = price_rule(body.get("price"), body.get("free"))
+        except PricingError as exc:
+            return _miniapp_cors(web.json_response(
+                {"error": exc.code, "message": str(exc)}, status=400))
+        if section == "default":
+            settings["default"] = rule
+        else:
+            settings[section][key] = rule
+    save_number_prices(settings)
+    return _miniapp_cors(web.json_response({"ok": True, "pricing": settings}))
+
+
+
 async def miniapp_withdrawals_api(request):
     """Read-only withdrawal status for the owner; admin sees request metadata.
 
@@ -5826,6 +5951,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
+    server.router.add_route("*", "/api/prices", miniapp_prices_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
     server.router.add_route("*", "/api/withdrawals", miniapp_withdrawals_api)
     server.router.add_route("*", "/api/leaderboard", miniapp_leaderboard_api)
@@ -6083,9 +6209,15 @@ async def miniapp_get_number_api(request):
                 "error": "admin_approval_required", "message": AZ_ACCESS_DENIED,
             }, status=403))
 
-    num, country = await get_number_from_api(rid, requester_id=uid)
+    try:
+        num, country = await get_number_from_api(rid, requester_id=uid,
+                                                 country_iso=str(body.get("country_iso", "")).strip())
+    except PricingError as exc:
+        status = 402 if exc.code == "insufficient_balance" else 409 if exc.code == "ambiguous_country_price" else 400
+        return _miniapp_cors(web.json_response(
+            {"error": exc.code, "message": str(exc)}, status=status))
     if not num:
-        return _miniapp_cors(web.json_response({"success": False, "message": "Şu anda bu serviste uygun numara bulunamadı."}, status=400))
+        return _miniapp_cors(web.json_response({"success": False, "message": "Bu range üzrə hazırda nömrə yoxdur. Balansdan ödəniş tutulmadı."}, status=400))
 
     clean_num = normalize_number(num)
     add_number_taken(uid, 1)
