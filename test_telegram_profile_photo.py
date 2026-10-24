@@ -25,6 +25,10 @@ def isolated(name, context):
     if len(nodes) != 1:
         raise AssertionError("Expected exactly one function: " + name)
     module = ast.fix_missing_locations(ast.Module(body=nodes, type_ignores=[]))
+    # Type annotations are evaluated at function definition time in main.py;
+    # provide minimal stubs without importing the actual Telegram package.
+    context.setdefault("Update", object)
+    context.setdefault("ContextTypes", SimpleNamespace(DEFAULT_TYPE=object))
     exec(compile(module, "main.py", "exec"), context)
     return context[name]
 
