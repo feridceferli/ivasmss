@@ -192,7 +192,11 @@ def _az_summary(candidate, original):
     summary = " ".join(html.unescape(candidate).split()).strip(" \"'«»")
     if not 22 <= len(summary) <= 340:
         return None
-    if re.search(r"https?://|www\.|t\.me/|@\w+|<|>|\{|\}", summary, re.I):
+    if re.search(
+        r"https?://|www\.|@\w+|<|>|\{|\}|"
+        r"\b[\w.-]+\.(?:com|net|org|az|co|io|info|news|edu|gov)\b",
+        summary, re.I
+    ):
         return None
     supplied_numbers = re.findall(r"\d+(?:[.,]\d+)?", summary)
     source_numbers = re.findall(r"\d+(?:[.,]\d+)?", original)
