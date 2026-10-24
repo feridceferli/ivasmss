@@ -94,6 +94,19 @@ class FreeAiCopyTests(unittest.IsolatedAsyncioTestCase):
                 ai.save_ai_settings(False, "minimal")
                 self.assertEqual(await ai.decorate_feed(snapshot, {}, base), base)
 
+    async def test_playful_fallback_rotates_and_keeps_verified_facts(self):
+        snapshot = availability_snapshot(SAMPLE, prefix)
+        verified = compose_availability_notice(snapshot, periodic=True)
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.object(ai, "SETTINGS_FILE", str(Path(folder) / "ai.json")):
+                with patch.dict(os.environ, {"GROQ_API_KEY": ""}):
+                    first = await ai.decorate_feed(snapshot, {"post_count": 0}, verified)
+                    second = await ai.decorate_feed(snapshot, {"post_count": 1}, verified)
+        self.assertNotEqual(first, second)
+        self.assertTrue(first.endswith(verified))
+        self.assertTrue(second.endswith(verified))
+        self.assertNotIn("99450210", first)
+
 
 if __name__ == "__main__":
     unittest.main()
