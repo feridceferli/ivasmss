@@ -221,7 +221,7 @@
         .profile-fields p { margin:8px 0; overflow-wrap:anywhere; }
         @media(max-width:390px){ .tab-btn{font-size:11px;padding:8px 6px}.catalog-row{font-size:12px} }
     </style>
-    <link rel="stylesheet" href="miniapp-modern.css?v=20261025-redesign">
+    <link rel="stylesheet" href="miniapp-modern.css?v=20261025-guide">
 </head>
 <body>
     <div class="container">
@@ -259,6 +259,7 @@
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
             <button class="tab-btn" onclick="switchTab('withdrawals')">💸 Çıxarışlar</button>
+            <button class="tab-btn" onclick="switchTab('guide')">📖 İstifadə qaydası</button>
             <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
         </div>
 
@@ -282,6 +283,7 @@
                     <button class="action-small" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
                     <button class="action-small" onclick="switchTab('active')">📱 Aktivlər</button>
                     <button class="action-small" onclick="switchTab('profile')">💰 Profil</button>
+                    <button class="action-small" onclick="switchTab('guide')">📖 Necə istifadə etməli?</button>
                 </div>
             </div>
             <div class="card">
@@ -454,6 +456,99 @@
             </div>
         </div>
 
+
+        <!-- İstifadəçilər üçün bot + Mini App təlimatı -->
+        <section id="tab-guide" class="tab-content" aria-labelledby="guide-heading">
+            <div class="section-intro section-intro--hero">
+                <p class="section-eyebrow">KÖMƏK VƏ TƏLİMAT</p>
+                <h3 id="guide-heading">📖 Botdan necə istifadə etməli?</h3>
+                <p>Telegram botu və Mini App ilə işləmək üçün qısa, addım-addım bələdçi.</p>
+            </div>
+            <div class="card guide-intro">
+                <h4>🚀 İlk dəfə istifadə edirsiniz?</h4>
+                <p>Botun şəxsi çatında <code>/start</code> yazın. Lazım gələrsə, tələb olunan kanallara qoşulun. Botun <strong>Mini App</strong> düyməsinə toxunun. Adi bot menyusu üçün <code>/menu</code> yazın.</p>
+                <p class="notice-mini">Mini App-ı adi brauzerdə deyil, Telegram-dakı bot düyməsindən açın. Daxil olmaq üçün dost dəvət etmək məcburiyyəti yoxdur.</p>
+            </div>
+            <div class="guide-steps" role="list" aria-label="İstifadə addımları">
+                <article class="card guide-step" role="listitem">
+                    <span class="guide-step-number" aria-hidden="true">01</span>
+                    <div class="guide-step-content">
+                        <h4>📡 Xidmət seçin</h4>
+                        <p><strong>Xidmətlər</strong> bölməsində uyğun xidməti axtarın, sonra ölkə və API-də görünən range-i seçin. Seçim nömrə ayırmaq üçün sorğu göndərir; mövcudluq provayderdən asılıdır.</p>
+                        <button type="button" class="action-small" onclick="switchTab('services')">Xidmətlərə keç →</button>
+                    </div>
+                </article>
+                <article class="card guide-step" role="listitem">
+                    <span class="guide-step-number" aria-hidden="true">02</span>
+                    <div class="guide-step-content">
+                        <h4>🌍 Ölkələri yoxlayın</h4>
+                        <p><strong>Bütün ölkələr</strong> bölməsində ölkəni və telefon kodunu axtarın. Range-in görünməsi həmin anda boş nömrənin və ya SMS qəbulunun zəmanəti deyil.</p>
+                        <button type="button" class="action-small" onclick="switchTab('countries')">Ölkələrə keç →</button>
+                    </div>
+                </article>
+                <article class="card guide-step" role="listitem">
+                    <span class="guide-step-number" aria-hidden="true">03</span>
+                    <div class="guide-step-content">
+                        <h4>📱 Öz aktiv nömrənizi tapın</h4>
+                        <p>Uğurla ayrılmış nömrə avtomatik kopyalanmağa çalışılır. <strong>Aktivlər</strong> bölməsində ən yeni sifariş yuxarıda görünür; lazım olsa <strong>Kopyala</strong> düyməsindən istifadə edin.</p>
+                        <button type="button" class="action-small" onclick="switchTab('active')">Aktivlərə keç →</button>
+                    </div>
+                </article>
+                <article class="card guide-step" role="listitem">
+                    <span class="guide-step-number" aria-hidden="true">04</span>
+                    <div class="guide-step-content">
+                        <h4>📥 Mesaj tarixçəsinə baxın</h4>
+                        <p><strong>Tarixçə</strong> bölməsində yalnız öz hesabınıza aid, serverə çatmış mesajlar görünə bilər. Mesajın gəlməsi provayder və göndərən xidmətdən asılıdır; kodların çatması təmin edilmir.</p>
+                        <button type="button" class="action-small" onclick="switchTab('history')">Tarixçəyə keç →</button>
+                    </div>
+                </article>
+                <article class="card guide-step" role="listitem">
+                    <span class="guide-step-number" aria-hidden="true">05</span>
+                    <div class="guide-step-content">
+                        <h4>🇦🇿 +994 üçün icazə alın</h4>
+                        <p>Azərbaycan range-ləri admin təsdiqi tələb edir. <strong>Azərbaycan</strong> bölməsindən icazə sorğusu göndərin və ya botda <code>/az_request</code> yazın. Göstərilən qiymət <strong>10 AZN</strong>-dir; Mini App avtomatik ödəniş tutmur.</p>
+                        <button type="button" class="action-small" onclick="switchTab('azerbaijan')">+994 bölməsinə keç →</button>
+                    </div>
+                </article>
+                <article class="card guide-step" role="listitem">
+                    <span class="guide-step-number" aria-hidden="true">06</span>
+                    <div class="guide-step-content">
+                        <h4>👤 Profil və əlavə alətlər</h4>
+                        <p><strong>Profil</strong> bölməsində balansı, statistikanı və dili görün, öz nömrələrinizin TXT siyahısını endirin. <strong>2FA</strong> bölməsi yalnız öz TOTP açarınız üçündür. Çıxarış sorğusu yaratmaq üçün botun <code>/menu</code> menyusundan istifadə edin.</p>
+                        <button type="button" class="action-small" onclick="switchTab('profile')">Profilə keç →</button>
+                    </div>
+                </article>
+            </div>
+            <div class="card guide-faq">
+                <h4>❓ Tez-tez verilən suallar</h4>
+                <details>
+                    <summary>Mini App açılmırsa, nə etməliyəm?</summary>
+                    <p>Telegram tətbiqində botun şəxsi çatına qayıdın, <code>/start</code> yazın və Mini App düyməsinə toxunun. Adi brauzerdən açılan səhifədə Telegram sessiyası təsdiqlənməyə bilər.</p>
+                </details>
+                <details>
+                    <summary>Range var, amma nömrə verilmir. Niyə?</summary>
+                    <p>Range kataloqda göstərilə bilər, lakin həmin an boş nömrə olmaya bilər. Başqa mövcud range seçin və ya daha sonra yenidən yoxlayın.</p>
+                </details>
+                <details>
+                    <summary>SMS və ya kod gəlmirsə, nə etməliyəm?</summary>
+                    <p>Aktiv sifarişin vaxtını və Tarixçəni yoxlayın. Range diaqnostikası SMS çatdırılmasını təsdiqləmir. Kod və hesab məlumatlarını digər şəxslərlə paylaşmayın.</p>
+                </details>
+                <details>
+                    <summary>+994 icazəsi necə təsdiqlənir?</summary>
+                    <p>Azərbaycan bölməsindən sorğu göndərin. Botda <code>/az_access</code> ilə statusa baxa bilərsiniz. Təsdiqləmə üçün admin qərarı tələb olunur.</p>
+                </details>
+                <details>
+                    <summary>Nömrələrimi necə TXT olaraq endirim?</summary>
+                    <p>Profil bölməsində <strong>Nömrələrim — TXT</strong> düyməsini seçin və ya botun şəxsi çatında <code>/numbers_txt</code> yazın.</p>
+                </details>
+            </div>
+            <div class="card guide-contact">
+                <h4>💬 Kömək lazımdır?</h4>
+                <p>Azərbaycan nömrələri və icazə ilə bağlı administratora müraciət edə bilərsiniz.</p>
+                <a class="support-cta" href="https://t.me/lacin_0411" target="_blank" rel="noopener noreferrer">Adminlə əlaqə — @lacin_0411</a>
+            </div>
+        </section>
+
         <div id="tab-admin" class="tab-content" hidden>
             <div class="card">
                 <h4 style="margin:0 0 8px">⚙️ Admin idarəetməsi</h4>
@@ -522,7 +617,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261025-avatar"></script>
+    <script src="app.js?v=20261025-avatar&amp;guide=1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 <div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>
