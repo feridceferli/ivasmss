@@ -3860,7 +3860,7 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🌐 <b>ALL TIME</b>\n"
             f"<blockquote>📱 NUMBERS: {stats['total_numbers']}\n🔑 OTPS: {stats['total_otps']}</blockquote>"
         )
-        await update.effective_message.reply_text(profile_text, parse_mode="HTML")
+        await reply_with_telegram_profile_photo(update, context, profile_text)
         return
 
     if text == "💰 BALANCE":
@@ -4432,6 +4432,43 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     )
 
 
+async def reply_with_telegram_profile_photo(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE,
+    profile_text: str,
+    *,
+    parse_mode: str = "HTML",
+    reply_markup=None,
+):
+    """Reply with the current caller's Telegram profile photo when accessible.
+
+    Telegram only supplies a profile photo if the user has one and the bot is
+    permitted to access it. Keep photos in private chats, never share them
+    in groups or store them on disk. Text-only fallback is always available.
+    """
+    message = update.effective_message
+    tg_user = update.effective_user
+    chat = update.effective_chat
+    if tg_user and chat and chat.type == "private":
+        try:
+            photos = await context.bot.get_user_profile_photos(user_id=tg_user.id, limit=1)
+            if photos and photos.photos and photos.photos[0]:
+                photo = photos.photos[0][-1]
+                await message.reply_photo(
+                    photo=photo.file_id,
+                    caption=profile_text,
+                    parse_mode=parse_mode,
+                    reply_markup=reply_markup,
+                )
+                return True
+        except TelegramError as exc:
+            print(f"[profile-photo] Telegram photo unavailable: {type(exc).__name__}")
+    await message.reply_text(
+        profile_text, parse_mode=parse_mode, reply_markup=reply_markup
+    )
+    return False
+
+
 async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if is_user_banned(uid):
@@ -4442,17 +4479,19 @@ async def profile_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data = get_user(uid)
     stats = get_user_stats(uid)
     user = update.effective_user
+    full_name = html.escape(user.full_name or "İstifadəçi")
+    username = html.escape(user.username or "Yoxdur")
     profile_text = (
-        f"👤 **YOUR PROFILE**\n━━━━━━━━━━━━━━━━━━━━━━\n\n"
-        f"🏷️ NAME: `{user.full_name}`\n"
-        f"🆔 USERNAME: @{user.username or 'No username'}\n"
-        f"🗝️ ID: `{uid}`\n\n"
-        f"💵 BALANCE: {format_balance(user_data.get('balance', 0))} AZN\n\n"
-        f"✨ TODAY: 📱 {stats['today_numbers']} | 🔑 {stats['today_otps']}\n"
-        f"🔥 7 DAYS: 📱 {stats['last7d_numbers']} | 🔑 {stats['last7d_otps']}\n"
-        f"🌐 ALL TIME: 📱 {stats['total_numbers']} | 🔑 {stats['total_otps']}"
+        f"👤 <b>TELEGRAM PROFİLİNİZ</b>\n\n"
+        f"🏷️ Ad: <b>{full_name}</b>\n"
+        f"🆔 İstifadəçi adı: @{username}\n"
+        f"🗝️ Telegram ID: <code>{uid}</code>\n\n"
+        f"💵 Balans: <b>{format_balance(user_data.get('balance', 0))} AZN</b>\n\n"
+        f"✨ Bu gün: 📱 {stats['today_numbers']} | 🔑 {stats['today_otps']}\n"
+        f"🔥 Son 7 gün: 📱 {stats['last7d_numbers']} | 🔑 {stats['last7d_otps']}\n"
+        f"🌐 Ümumi: 📱 {stats['total_numbers']} | 🔑 {stats['total_otps']}"
     )
-    await update.effective_message.reply_text(profile_text, parse_mode="Markdown")
+    await reply_with_telegram_profile_photo(update, context, profile_text)
 
 
 async def leaderboard_command_slash(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -4666,7 +4705,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"🔥 7 DAYS — 📱 {stats['last7d_numbers']} | 🔑 {stats['last7d_otps']}\n"
             f"🌐 ALL — 📱 {stats['total_numbers']} | 🔑 {stats['total_otps']}</blockquote>"
         )
-        await query.message.reply_text(profile_text, parse_mode="HTML", reply_markup=main_keyboard(uid))
+        await reply_with_telegram_profile_photo(
+            update, context, profile_text, reply_markup=main_keyboard(uid)
+        )
         return
     if data == "menu_leaderboard":
         await leaderboard_command(update, context)
@@ -5327,6 +5368,52 @@ async def miniapp_my_numbers_api(request):
     ))
 
 
+async def miniapp_avatar_api(request):
+    """Serve only the signed-in Telegram user's current avatar.
+
+    Fetch image bytes via the Telegram Bot API without publishing the bot
+    token or a Telegram file URL. An account with no accessible photo gets
+    404, which lets the Mini App show its initial-letter avatar instead.
+    """
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    if request.method != "GET":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": err}, status=401
+        ))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+
+    try:
+        bot = request.app["telegram_bot"]
+        photos = await bot.get_user_profile_photos(user_id=uid, limit=1)
+        if not photos or not photos.photos or not photos.photos[0]:
+            return _miniapp_cors(web.Response(
+                status=404, headers={"Cache-Control": "private, no-store"}
+            ))
+        file = await bot.get_file(photos.photos[0][-1].file_id)
+        if file.file_size and file.file_size > 512 * 1024:
+            return _miniapp_cors(web.Response(status=413))
+        data = await file.download_as_bytearray()
+        if not data or len(data) > 512 * 1024:
+            return _miniapp_cors(web.Response(status=404))
+        return _miniapp_cors(web.Response(
+            body=bytes(data),
+            content_type="image/jpeg",
+            headers={
+                "Cache-Control": "private, no-store",
+                "X-Content-Type-Options": "nosniff",
+            },
+        ))
+    except (TelegramError, KeyError, OSError) as exc:
+        print(f"[miniapp-avatar] Telegram photo unavailable: {type(exc).__name__}")
+        return _miniapp_cors(web.Response(status=502))
+
+
 async def miniapp_dashboard(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
@@ -5365,6 +5452,7 @@ async def miniapp_dashboard(request):
             "first_name": tg_user.get("first_name", ""),
             "last_name": tg_user.get("last_name", ""),
             "username": tg_user.get("username", ""),
+            "has_telegram_photo_url": bool(tg_user.get("photo_url")),
             "is_admin": is_admin(uid),
             "az_approved": az_range_allowed(uid),
         },
@@ -5732,6 +5820,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/get-number", miniapp_get_number_api)
     server.router.add_route("GET", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
+    server.router.add_route("*", "/api/avatar", miniapp_avatar_api)
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
