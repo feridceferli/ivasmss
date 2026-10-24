@@ -6,6 +6,7 @@ on:
       - main.py
       - docs/index.html
       - docs/app.js
+      - docs/miniapp-modern.css
       - test_miniapp_parity.py
       - test_miniapp_active_numbers.py
       - test_miniapp_admin_tools.py
@@ -25,6 +26,7 @@ on:
       - main.py
       - docs/index.html
       - docs/app.js
+      - docs/miniapp-modern.css
       - test_miniapp_parity.py
       - test_miniapp_active_numbers.py
       - test_miniapp_admin_tools.py
@@ -52,6 +54,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "22"
+      - name: Confirm modern CSS stylesheet exists
+        run: test -s docs/miniapp-modern.css
       - name: Check JavaScript syntax
         run: node --check docs/app.js && node --check docs/az-provider-diagnostics.js && node --check docs/world-provider-diagnostics.js && node --check docs/world-provider-diagnostics.js
       - name: Test read-only Azerbaijan range diagnostics
