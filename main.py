@@ -7,6 +7,11 @@ from global_availability_feed import (
     availability_snapshot, compose_availability_notice, publish_global_availability_feed,
 )
 from free_ai_posts import decorate_feed, load_ai_settings, save_ai_settings, public_ai_status
+from world_news_feed import (
+    POLL_INTERVAL as WORLD_NEWS_POLL_INTERVAL,
+    publish_world_news, fetch_recent_news, choose_headlines,
+    translate_headlines, load_news_settings, save_news_settings, public_news_status,
+)
 from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
                             valid_country, valid_range)
 
@@ -725,7 +730,8 @@ async def fetch_services_cached():
 
 
 async def country_availability_loop(app):
-    """One group-only feed with 10-minute updates and instant new services."""
+    """Provider announcements and separately throttled world news digests."""
+    last_news_poll = 0.0
     while True:
         try:
             _services_cache["timestamp"] = 0
@@ -742,6 +748,17 @@ async def country_availability_loop(app):
                 print(f"[global-feed] status={status}", flush=True)
         except Exception as exc:
             print(f"[service-country-watch] {type(exc).__name__}: {exc}")
+        # Separate ten-minute RSS poll; only posts when fresh unread headlines
+        # and the two-hour news interval are satisfied. No user broadcasts.
+        if time.monotonic() - last_news_poll >= WORLD_NEWS_POLL_INTERVAL:
+            last_news_poll = time.monotonic()
+            try:
+                news_status = await publish_world_news(
+                    bot=app.bot, group_id=GLOBAL_FEED_GROUP_ID)
+                if news_status in ("sent", "send_failed"):
+                    print(f"[world-news] status={news_status}", flush=True)
+            except Exception as exc:
+                print(f"[world-news] error={type(exc).__name__}", flush=True)
         await asyncio.sleep(30)
 
 # User-scoped locks serialize purchases; do not let parallel requests double-spend.
@@ -5603,6 +5620,7 @@ async def miniapp_admin_api(request):
 # accept recipients from the Mini App request.
 _miniapp_admin_notification_times = {}
 _ai_preview_times = {}
+_world_news_preview_times = {}
 
 
 async def miniapp_admin_tools_api(request):
@@ -5646,6 +5664,7 @@ async def miniapp_admin_tools_api(request):
             },
             "archive_sync": {"status": str(number_archive.status)[:250]},
             "ai_posts": public_ai_status(),
+            "world_news": public_news_status(),
         }
 
     if request.method == "GET":
@@ -5659,6 +5678,35 @@ async def miniapp_admin_tools_api(request):
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
     action = body.get("action")
+    if action == "world_news_settings":
+        try:
+            save_news_settings(body.get("enabled"))
+        except ValueError:
+            return _miniapp_cors(web.json_response(
+                {"error": "invalid_news_settings"}, status=400))
+        return _miniapp_cors(web.json_response({"ok": True, **snapshot()}))
+    if action == "world_news_preview":
+        now = time.monotonic()
+        if now - _world_news_preview_times.get(uid, -1e9) < 30:
+            return _miniapp_cors(web.json_response({
+                "error": "rate_limited",
+                "message": "Növbəti xəbər nümunəsi üçün 30 saniyə gözləyin."
+            }, status=429))
+        _world_news_preview_times[uid] = now
+        recent = await fetch_recent_news()
+        selected = choose_headlines(recent, set(), limit=2)
+        if not selected:
+            return _miniapp_cors(web.json_response({
+                "error": "no_fresh_news",
+                "message": "Mənbələrdə son 36 saatdan uyğun xəbər tapılmadı."
+            }, status=503))
+        translations = await translate_headlines(selected)
+        preview_text = "🌍 DÜNYADAN QISA XƏBƏRLƏR\n\n" + "\n\n".join(
+            f"📰 {translations.get(item['id'], item['title'])}\n"
+            f"📎 {item['source']}: {item['url']}" for item in selected)
+        return _miniapp_cors(web.json_response({
+            "ok": True, "preview": preview_text, "world_news": public_news_status()
+        }))
     if action == "ai_settings":
         try:
             save_ai_settings(body.get("enabled"), body.get("style"))
