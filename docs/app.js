@@ -6,7 +6,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "leaderboard", "profile", "withdrawals", "guide", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "leaderboard", "profile", "guide", "admin"];
 const state = {
     activeTab: "services",
     services: {},
@@ -113,12 +113,9 @@ function switchTab(tab) {
         fetchLeaderboard();
     } else if (tab === "profile") {
         fetchProfile();
-    } else if (tab === "withdrawals") {
-        fetchWithdrawals();
     } else if (tab === "admin") {
         fetchAdminUsers();
         loadAdminTools();
-        fetchAdminWithdrawals();
         fetchPrices();
     }
 }
@@ -931,44 +928,6 @@ async function fetchAdminUsers() {
 
 
 
-function renderWithdrawals(container, records, admin) {
-    container.replaceChildren();
-    if (!records.length) {
-        clearAndText(container, "Çıxarış sorğusu yoxdur.");
-        return;
-    }
-    for (const r of records) {
-        const row = node("div", null, "sms-item");
-        const header = admin ? "İstifadəçi: " + String(r.user_id || "—") + " · " : "";
-        row.appendChild(node("strong", header + String(r.method || "Çıxarış") +
-            " · " + String(r.amount || "0") + " AZN"));
-        row.appendChild(node("p", "Status: " + String(r.status || "pending") +
-            " · " + String(r.time || "—") + " · ID " + String(r.id || ""), "notice-mini"));
-        container.appendChild(row);
-    }
-}
-
-async function fetchWithdrawals() {
-    const container = document.getElementById("withdrawals-list");
-    try {
-        const result = await api("/api/withdrawals");
-        renderWithdrawals(container, result.withdrawals || [], false);
-    } catch (err) {
-        clearAndText(container, "Sorğular yüklənmədi: " + err.message);
-    }
-}
-
-async function fetchAdminWithdrawals() {
-    if (!state.isAdmin) return;
-    const container = document.getElementById("admin-withdrawals-list");
-    try {
-        const result = await api("/api/withdrawals?scope=admin");
-        renderWithdrawals(container, result.withdrawals || [], true);
-    } catch (err) {
-        clearAndText(container, "Admin sorğuları yüklənmədi: " + err.message);
-    }
-}
-
 let adminTools = null;
 
 async function loadAdminTools() {
@@ -1274,6 +1233,5 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (state.activeTab === "history") fetchIncomingSms();
         if (state.activeTab === "profile") fetchProfile();
         if (state.activeTab === "leaderboard") fetchLeaderboard();
-        if (state.activeTab === "withdrawals") fetchWithdrawals();
     }, 30000);
 });

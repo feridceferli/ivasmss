@@ -257,7 +257,6 @@
             <button class="tab-btn" onclick="switchTab('history')">📜 Tarixçə</button>
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
-            <button class="tab-btn" onclick="switchTab('withdrawals')">💸 Çıxarışlar</button>
             <button class="tab-btn" onclick="switchTab('guide')">📖 İstifadə qaydası</button>
             <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
         </div>
@@ -428,17 +427,6 @@
             </div>
         </div>
 
-        <div id="tab-withdrawals" class="tab-content">
-            <div class="card">
-                <h4 style="margin:0 0 8px">💸 Çıxarış sorğularım</h4>
-                <p class="notice-mini">Burada mövcud sorğularınızın vəziyyəti görünür. Yeni çıxarış sorğuları və təsdiqlər hələ botun yoxlanılmış maliyyə axınında aparılır.</p>
-                <button class="action-small" onclick="fetchWithdrawals()">🔄 Sorğuları yenilə</button>
-                <div id="withdrawals-list" class="catalog-scroll" style="margin-top:12px"></div>
-                <p class="notice-mini">Yeni sorğu üçün botun şəxsi çatında /menu ilə ehtiyat menyunu açın.</p>
-            </div>
-        </div>
-
-
         <!-- İstifadəçilər üçün bot + Mini App təlimatı -->
         <section id="tab-guide" class="tab-content" aria-labelledby="guide-heading">
             <div class="section-intro section-intro--hero">
@@ -496,7 +484,7 @@
                     <span class="guide-step-number" aria-hidden="true">06</span>
                     <div class="guide-step-content">
                         <h4>👤 Profil və əlavə alətlər</h4>
-                        <p><strong>Profil</strong> bölməsində balansı, statistikanı və dili görün, öz nömrələrinizin TXT siyahısını endirin. Çıxarış sorğusu yaratmaq üçün botun <code>/menu</code> menyusundan istifadə edin.</p>
+                        <p><strong>Profil</strong> bölməsində balansı, statistikanı və dili görün, öz nömrələrinizin TXT siyahısını endirin. </p>
                         <button type="button" class="action-small" onclick="switchTab('profile')">Profilə keç →</button>
                     </div>
                 </article>
@@ -546,8 +534,6 @@
                 <p id="admin-result" class="notice-mini"></p>
                 <button class="action-small" onclick="fetchAdminUsers()">🔄 İstifadəçiləri yenilə</button>
                 <div id="admin-system-status" class="notice-mini" style="margin-top:12px"></div>
-                <h4 style="margin:16px 0 8px">💸 Çıxarış sorğuları (yalnız metadata)</h4>
-                <div id="admin-withdrawals-list" class="catalog-scroll"></div>
                 <div id="admin-users-list" class="catalog-scroll" style="margin-top:12px"></div>
                 <section class="card admin-price-panel" aria-labelledby="pricing-heading">
                     <h4 id="pricing-heading">💰 Ölkə və nömrə qiymətləri</h4>
@@ -639,7 +625,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261025-country-iso-fix"></script>
+    <script src="app.js?v=20261025-remove-withdrawals"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 <div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>

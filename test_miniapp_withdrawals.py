@@ -26,13 +26,17 @@ class WithdrawalsParityTests(unittest.TestCase):
         self.assertNotIn('record["number"]', code)
         self.assertIn('"withdrawals": values[:100]', code)
 
-    def test_view_navigation_and_rendering(self):
-        self.assertIn('id="tab-withdrawals"', HTML)
-        self.assertIn('id="withdrawals-list"', HTML)
-        self.assertIn('id="admin-withdrawals-list"', HTML)
-        self.assertIn("fetchWithdrawals()", JS)
-        self.assertIn("/api/withdrawals?scope=admin", JS)
-        self.assertIn('renderWithdrawals(container, result.withdrawals || [], true)', JS)
+    def test_withdrawal_section_is_not_in_miniapp(self):
+        # UI removal preserves historical data and the authenticated API.
+        self.assertNotIn('id="tab-withdrawals"', HTML)
+        self.assertNotIn('id="withdrawals-list"', HTML)
+        self.assertNotIn('id="admin-withdrawals-list"', HTML)
+        self.assertNotIn("switchTab('withdrawals')", HTML)
+        self.assertNotIn('"withdrawals"', JS)
+        self.assertNotIn("fetchWithdrawals()", JS)
+        self.assertNotIn("fetchAdminWithdrawals()", JS)
+        self.assertNotIn("/api/withdrawals", JS)
+        self.assertNotIn("renderWithdrawals(", JS)
         self.assertNotIn(".innerHTML", JS)
 
 
