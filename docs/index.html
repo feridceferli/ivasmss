@@ -597,6 +597,26 @@
                     <button class="action-small" onclick="adminAddChannel()" style="margin-top:8px">➕ Kanal əlavə et</button>
                 </div>
                 <div class="card" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">✨ Pulsuz AI paylaşımları</h4>
+                    <p class="notice-mini">Groq Free Tier (Llama) ilə API kataloqu yeniliklərini cəlbedici yazın. AI yalnız ümumi sayları görür — şəxsi nömrə, SMS və OTP göndərilmir. Açar yoxdursa, hazır şablon işləyir.</p>
+                    <label class="price-free-check" for="ai-post-enabled">
+                        <input id="ai-post-enabled" type="checkbox"> ✨ AI ilə avtomatik paylaşım
+                    </label>
+                    <label for="ai-post-style" class="notice-mini">Paylaşım üslubu</label>
+                    <select id="ai-post-style" class="admin-input">
+                        <option value="energetic">🔥 Enerjili və emojili</option>
+                        <option value="professional">📊 Peşəkar</option>
+                        <option value="minimal">✨ Minimal</option>
+                    </select>
+                    <p id="ai-post-status" class="notice-mini" role="status">AI vəziyyəti yüklənir...</p>
+                    <div class="quick-actions">
+                        <button class="action-small" onclick="saveAiPostSettings()">💾 Saxla</button>
+                        <button class="action-small" onclick="previewAiPost()">👁️ Nümunəyə bax</button>
+                    </div>
+                    <pre id="ai-post-preview" class="ai-post-preview" hidden aria-live="polite"></pre>
+                    <p class="notice-mini">Real AI-ni aktivləşdirmək üçün Render → Environment hissəsinə <code>GROQ_API_KEY</code> əlavə edin. Nümunə heç kimə göndərilmir; real elan yalnız kataloq dəyişəndə göndərilir.</p>
+                </div>
+                <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 8px">📢 QRUPA BİLDİRİŞ</h4>
                     <p class="notice-mini">Yalnız konfiqurasiya edilmiş məlumat qrupuna. OTP, şəxsi nömrələr və şifrələri daxil etməyin. 90 saniyə limit var.</p>
                     <textarea id="admin-group-notice" class="admin-input" rows="3" maxlength="600" placeholder="Qrup üçün yenilik və ya məlumat"></textarea>
@@ -625,7 +645,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261025-remove-withdrawals"></script>
+    <script src="app.js?v=20261025-free-ai"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 <div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>
