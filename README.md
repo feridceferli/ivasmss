@@ -56,6 +56,15 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 | ❤️ Health endpoint | `GET /health` ilə backend vəziyyətinin yoxlanması |
 | 📶 Xidmət və range məlumatı | Xidmət üzrə ölkə/range-ləri ayrıca nəzərdən keçirmə; range məlumat bölməsi yalnız baxış üçündür və nömrə ayırmır |
 
+## ✨ Pulsuz AI ilə cəlbedici Telegram paylaşımları
+
+- Render-in **Environment** bölməsinə [Groq Console](https://console.groq.com/keys) saytından pulsuz API açarı yaradıb `GROQ_API_KEY` olaraq əlavə edin. Açarı GitHub koduna və ya Mini App-a yazmayın.
+- Pulsuz **Groq Llama** modeli `GLOBAL FEED` elanları üçün yalnız ümumi ölkə/xidmət/range qeydiyyatı saylarından qısa giriş hazırlayır. Xüsusi nömrələr, SMS, OTP, hesab məlumatları və tokenlər AI-yə ötürülmür.
+- **Admin → AI paylaşımları** bölməsindən aktivləşdirmə, 3 üslub və göndərilməyən nümunə mövcuddur.
+- Groq pulsuz limitinə çatanda və ya açar olmayanda sistem hazır, cəlbedici şablona keçir; real AI işlədiyini iddia etmir. Pulsuz limit zəmanətli və limitsiz deyil.
+- Kataloq dəyişikliklərindən başqa göndəriş etmir; qrupda əvvəlki 5 dəqiqəlik cooldown və təkrarsızlıq qalır.
+- `DB_FOLDER/ai_post_settings.json` parametrləri saxlayır; Render-də qalıcı disk yoxdursa, yenidən deploy zamanı parametrlər sıfırlana bilər.
+
 ## Mini App-in yenilənmiş imkanları
 
 Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegram sessiyası ilə istifadəçi məlumatları serverdə yoxlanır.
