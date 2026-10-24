@@ -94,7 +94,7 @@ class PremiumEmojiTests(unittest.TestCase):
             }
             expected = (
                 "menu_ivas_web_panel", "menu_get_number", "menu_active_numbers",
-                "menu_search_otp", "menu_get_2fa", "menu_balance", "menu_profile",
+                "menu_search_otp", "menu_balance", "menu_profile",
                 "menu_az_ranges", "menu_leaderboard", "menu_support", "menu_language",
                 "menu_admin",
             )
