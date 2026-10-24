@@ -724,81 +724,13 @@ async def fetch_services_cached():
     return _services_cache["services"]
 
 
-_known_service_countries = set()
-_known_service_types = set()
-_service_country_watch_initialized = False
-
-def _service_country_availability(services):
-    found = {}
-    for service, ranges in (services or {}).items():
-        service_name = str(service).strip()
-        if not service_name:
-            continue
-        for raw_range in ranges or []:
-            rid = re.sub(r"[^0-9]", "", str(raw_range))
-            prefix = get_country_prefix_from_number(rid)
-            if not prefix:
-                continue
-            flag, country = get_country_by_prefix(prefix)
-            key = (service_name.lower(), prefix)
-            if key not in found:
-                found[key] = {
-                    "service": service_name,
-                    "prefix": prefix,
-                    "flag": flag,
-                    "country": country,
-                    "number_count": 0,
-                }
-            found[key]["number_count"] += 1
-    return found
-
-async def send_availability_notice(app, group_id, text):
-    """Send non-sensitive availability notices to the group and bot users."""
-    recipients = set(get_all_users())
-    if group_id:
-        recipients.add(str(group_id))
-    for recipient in recipients:
-        try:
-            await app.bot.send_message(chat_id=int(recipient), text=text, parse_mode="HTML")
-        except Exception as exc:
-            print(f"[availability-notice] delivery failed: {type(exc).__name__}")
-
-
 async def country_availability_loop(app):
-    """Announce new service and country availability to group and bot users."""
-    global _known_service_countries, _known_service_types, _service_country_watch_initialized
+    """One group-only feed with 10-minute updates and instant new services."""
     while True:
         try:
             _services_cache["timestamp"] = 0
             services = await fetch_services_cached()
-            current = _service_country_availability(services)
-            current_keys = set(current)
-            current_services = {str(name).strip().lower() for name in (services or {}) if str(name).strip()}
-            if _service_country_watch_initialized:
-                for service in sorted(current_services - _known_service_types):
-                    notice = (
-                        "🆕 <b>Yeni xidmət əlavə olundu</b>\n\n"
-                        f"📡 Xidmət: <code>{html.escape(service.upper())}</code>\n\n"
-                        "✅ API-də yeni xidmət növü aşkarlandı."
-                    )
-                    await send_availability_notice(app, NOTIFY_GROUP_ID, notice)
-                for key in sorted(current_keys - _known_service_countries):
-                    info = current[key]
-                    notice = (
-                        "🆕 <b>Yeni xidmət mövcudluğu</b>\n\n"
-                        f"📡 Xidmət: <code>{html.escape(info['service'].upper())}</code>\n"
-                        f"🌍 Ölkə: {info['flag']} {html.escape(info['country'])}\n"
-                        f"📞 Ölkə kodu: <code>+{html.escape(info['prefix'])}</code>\n"
-                        f"🔢 Diapazon sayı: <b>{info.get('number_count', 0)}</b>\n\n"
-                        "✅ API-də bu xidmət üçün yeni diapazon mövcudluğu aşkarlandı."
-                    )
-                    await send_availability_notice(app, NOTIFY_GROUP_ID, notice)
-            _known_service_countries = current_keys
-            _known_service_types = current_services
-            _service_country_watch_initialized = True
-            # Public provider range metadata only. Unlike /success-otp, this feed
-            # does not reveal phone numbers or authentication messages.
-            feed_status = await publish_global_availability_feed(
+            status = await publish_global_availability_feed(
                 services=services,
                 bot=app.bot,
                 group_id=GLOBAL_FEED_GROUP_ID,
@@ -806,12 +738,11 @@ async def country_availability_loop(app):
                 country_name_lookup=get_country_by_prefix,
                 message_decorator=decorate_feed,
             )
-            if feed_status in ("sent", "send_failed"):
-                print(f"[global-feed] status={feed_status}", flush=True)
+            if status in ("sent", "new_service", "send_failed"):
+                print(f"[global-feed] status={status}", flush=True)
         except Exception as exc:
             print(f"[service-country-watch] {type(exc).__name__}: {exc}")
         await asyncio.sleep(30)
-
 
 # User-scoped locks serialize purchases; do not let parallel requests double-spend.
 _number_purchase_locks = {}

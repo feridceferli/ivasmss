@@ -12,10 +12,17 @@ SETTINGS_FILE = data_path("ai_post_settings.json")
 STYLES = ("energetic", "professional", "minimal")
 DEFAULT_SETTINGS = {"enabled": True, "style": "energetic"}
 FALLBACK = {
-    "energetic": "✨ Yenilənən xidmət kataloqunu kəşf edin! Dəyişikliklərə nəzər salın.",
+    "energetic": "😄 Kataloq darıxmağa imkan vermir — xidmət siyahısına bir göz atın!",
     "professional": "📊 Xidmət kataloqu üzrə yenilənmiş məlumatların xülasəsi:",
-    "minimal": "🌍 Kataloq yenilənib. Məlumatlara baxın:",
+    "minimal": "🌍 Kataloqun cari vəziyyətinə nəzər salın:",
 }
+PLAYFUL_VARIANTS = (
+    FALLBACK["energetic"],
+    "👀 Xidmət kataloqundan xəbər var — baxmadan keçmək olmaz!",
+    "🎉 Kataloq öz işindədir, biz də yenilikləri qaçırmırıq!",
+    "☕ Xidmət kataloqu ilə qısa xəbər fasiləsi? Buyurun!",
+    "😎 Kataloqu izləyirik, maraqlı məlumatları sizinlə bölüşürük!",
+)
 GROQ_ENDPOINT = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = "llama-3.1-8b-instant"
 
@@ -78,7 +85,7 @@ async def generate_intro(snapshot, settings=None, client=None):
     api_key = os.getenv("GROQ_API_KEY", "").strip()
     if not api_key:
         return fallback
-    tone = {"energetic": "enerjili və emojili", "professional": "peşəkar",
+    tone = {"energetic": "məzəli, yüngül zarafatlı, enerjili və emojili", "professional": "peşəkar",
             "minimal": "çox qısa və minimal"}[style]
     # ONLY numeric aggregate counts, never API range lists, SMS, OTP or users.
     safe_counts = {key: int(snapshot.get(key, 0)) for key in
@@ -91,6 +98,7 @@ async def generate_intro(snapshot, settings=None, client=None):
                 f"Üslub: {tone}. Mövzu: xidmət kataloqunun yenilikləri. "
                 "Heç bir rəqəm, qiymət və ya ad uydurma, telefon nömrəsi, "
                 "OTP, SMS çatdırılması, nömrə mövcudluğu barədə iddia etmə. "
+                "Yumor hörmətli olsun, yanlış vəd vermə. "
                 "Link, hashtag, HTML və Markdown yazma. 'kataloq', 'xidmət' "
                 "və ya 'məlumat' sözünü işlət.")},
             {"role": "user", "content": json.dumps(safe_counts)},
@@ -115,8 +123,13 @@ async def generate_intro(snapshot, settings=None, client=None):
 
 
 async def decorate_feed(snapshot, previous, verified_html):
-    """AI may add an intro, but never rewrites the factual provider digest."""
-    if not load_ai_settings()["enabled"]:
+    """A varied playful caption without rewriting trusted provider statistics."""
+    settings = load_ai_settings()
+    if not settings["enabled"]:
         return verified_html
-    intro = await generate_intro(snapshot)
+    intro = await generate_intro(snapshot, settings)
+    # Rotate fallback captions when no free API key or quota is exhausted.
+    if settings["style"] == "energetic" and intro == FALLBACK["energetic"]:
+        count = int(previous.get("post_count", 0))
+        intro = PLAYFUL_VARIANTS[count % len(PLAYFUL_VARIANTS)]
     return html.escape(intro) + "\n\n" + verified_html

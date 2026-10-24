@@ -61,8 +61,8 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 - Render-in **Environment** bölməsinə [Groq Console](https://console.groq.com/keys) saytından pulsuz API açarı yaradıb `GROQ_API_KEY` olaraq əlavə edin. Açarı GitHub koduna və ya Mini App-a yazmayın.
 - Pulsuz **Groq Llama** modeli `GLOBAL FEED` elanları üçün yalnız ümumi ölkə/xidmət/range qeydiyyatı saylarından qısa giriş hazırlayır. Xüsusi nömrələr, SMS, OTP, hesab məlumatları və tokenlər AI-yə ötürülmür.
 - **Admin → AI paylaşımları** bölməsindən aktivləşdirmə, 3 üslub və göndərilməyən nümunə mövcuddur.
-- Groq pulsuz limitinə çatanda və ya açar olmayanda sistem hazır, cəlbedici şablona keçir; real AI işlədiyini iddia etmir. Pulsuz limit zəmanətli və limitsiz deyil.
-- Kataloq dəyişikliklərindən başqa göndəriş etmir; qrupda əvvəlki 5 dəqiqəlik cooldown və təkrarsızlıq qalır.
+- Groq pulsuz limitinə çatanda və ya açar olmayanda sistem **məzəli və faktlara uyğun 5 fərqli şablonu növbə ilə** istifadə edir; real AI işlədiyini iddia etmir. Pulsuz limit zəmanətli və limitsiz deyil.
+- Hər **10 dəqiqədə** aktiv kataloq üzrə məzəli qrup xülasəsi gedir; **yeni xidmət ID-si** API-də görünəndə növbəti dövr gözlənmədən ayrıca elan göndərilir. Yeni elan 10 dəqiqəlik dövrü yeniləyir. İlk startda spam yoxdur; eyni xidmət təkrar elan edilmir. Bütün istifadəçilərə kütləvi bildiriş göndərilmir. Render yatanda və ya qalıcı fayl yaddaşı olmadıqda dəqiq interval və təkrarsızlıq təmin olunmaya bilər.
 - `DB_FOLDER/ai_post_settings.json` parametrləri saxlayır; Render-də qalıcı disk yoxdursa, yenidən deploy zamanı parametrlər sıfırlana bilər.
 
 ## Mini App-in yenilənmiş imkanları

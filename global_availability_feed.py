@@ -3,8 +3,8 @@
 Tracks /liveaccess service/country/range metadata. It never requests or reads
 /console, /success-otp, SMS bodies, OTP codes, or allocated phone numbers.
 
-A change summary is sent to one configured Telegram group, with a five-minute
-cooldown and a persisted fingerprint to prevent duplicate restart notices.
+A change summary is sent to one configured Telegram group, with a ten-minute
+cadence and persisted state to prevent duplicate restart notices.
 """
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ from data_storage import atomic_save, data_path
 
 
 _STATE_FILENAME = "global_availability_feed_state.json"
-_MIN_NOTIFICATION_INTERVAL = 300
+_MIN_NOTIFICATION_INTERVAL = 600
 _MAX_COUNTRY_LINES = 8
 
 
@@ -54,10 +54,13 @@ def availability_snapshot(services, country_prefix_lookup):
         "countries": len(by_country),
         "range_entries": len(identities),
         "country_counts": {key: len(items) for key, items in sorted(by_country.items())},
+        "service_ids": sorted(s for s in services_seen
+                              if re.fullmatch(r"[a-z0-9_-]{1,32}", s)),
     }
 
 
-def compose_availability_notice(current, previous=None, country_name_lookup=None):
+def compose_availability_notice(current, previous=None, country_name_lookup=None,
+                                *, periodic=False, new_services=()):
     """Plain aggregated feed text; all content is escaped for Telegram HTML."""
     previous = previous if isinstance(previous, dict) else {}
     old_counts = previous.get("country_counts", {})
@@ -65,16 +68,25 @@ def compose_availability_notice(current, previous=None, country_name_lookup=None
         old_counts = {}
 
     first = not bool(previous.get("fingerprint"))
-    title = "🌍 <b>GLOBAL FEED — XİDMƏT AKTİVLİYİ</b>"
+    title = ("🆕 <b>YENİ XİDMƏT XƏBƏRLƏRİ</b>" if new_services else
+             "🕒 <b>10 DƏQİQƏLİK KATALOQ XÜLASƏSİ</b>" if periodic else
+             "🌍 <b>GLOBAL FEED — XİDMƏT AKTİVLİYİ</b>")
+    subtitle = ("😄 <b>Kataloqda təzə qonaq var!</b>" if new_services else
+                "☕ <b>On dəqiqəlik kataloq fasiləsi</b>" if periodic else
+                "📡 <b>API kataloqunun cari vəziyyəti</b>" if first else
+                "🔄 <b>API range siyahısında dəyişiklik</b>")
     rows = [
-        title,
-        "",
-        ("📡 <b>API kataloqunun cari vəziyyəti</b>" if first
-         else "🔄 <b>API range siyahısında dəyişiklik</b>"),
+        title, "", subtitle,
         f"🧩 Xidmət növləri: <b>{current['services']}</b>",
         f"🌐 Ölkə kodları: <b>{current['countries']}</b>",
         f"📊 Xidmət/range qeydiyyatları: <b>{current['range_entries']}</b>",
     ]
+    if new_services:
+        safe = [s for s in new_services if re.fullmatch(r"[a-z0-9_-]{1,32}", s)]
+        rows.extend(["", "🎉 <b>Yeni xidmətlər:</b>"])
+        rows.extend("• <code>" + html.escape(s.upper()) + "</code>" for s in safe[:15])
+        if len(safe) > 15:
+            rows.append(f"… və daha {len(safe) - 15} xidmət")
 
     changed = []
     counts = current["country_counts"]
@@ -137,59 +149,72 @@ async def publish_global_availability_feed(
     state_file=None,
     message_decorator=None,
 ):
-    """Baseline without announcing on startup; send subsequent changes
-    no more than once per five minutes.
+    """Ten-minute digest plus immediate, batched, new-service announcements.
 
-    The baseline avoids a duplicate status announcement after Render restarts
-    without persistent storage. On send failure the previous state is kept.
+    A first snapshot is silent; sent service IDs persist across restarts.
+    Failed Telegram sends never advance state. Only group posts are sent.
     """
     if not group_id:
         return "not_configured"
     current = availability_snapshot(services, country_prefix_lookup)
     if current["range_entries"] == 0:
         return "empty_catalog"
-
     location = state_file or data_path(_STATE_FILENAME)
     previous = _read_state(location)
     timestamp = time.time() if now is None else float(now)
+    service_ids = set(current["service_ids"])
 
-    # Render may use ephemeral storage, causing its local snapshot to disappear
-    # between deployments. Baseline silently rather than reannounce the entire
-    # catalogue on every restart; changes during uptime still notify the group.
     if not previous.get("fingerprint"):
         atomic_save({
             "fingerprint": current["fingerprint"],
             "country_counts": current["country_counts"],
+            "known_services": sorted(service_ids),
+            "post_count": 0,
             "last_sent": timestamp,
         }, location)
         print("[global-feed] Initial snapshot saved; no startup spam", flush=True)
         return "initialized"
 
-    if current["fingerprint"] == previous.get("fingerprint"):
-        return "unchanged"
+    if not isinstance(previous.get("known_services"), list):
+        # Old state has no remembered service IDs. Migrate silently.
+        previous["known_services"] = sorted(service_ids)
+        previous.setdefault("post_count", 0)
+        atomic_save(previous, location)
 
-    last_sent = float(previous.get("last_sent", 0) or 0)
-    if timestamp - last_sent < _MIN_NOTIFICATION_INTERVAL:
-        return "cooldown"
+    known = {s for s in previous["known_services"]
+             if isinstance(s, str) and re.fullmatch(r"[a-z0-9_-]{1,32}", s)}
+    new_services = sorted(service_ids - known)
+    last_sent = float(previous.get("last_sent", timestamp) or timestamp)
+    due = timestamp - last_sent >= _MIN_NOTIFICATION_INTERVAL
+    if not due and not new_services:
+        return ("unchanged" if current["fingerprint"] == previous.get("fingerprint")
+                else "cooldown")
 
-    message = compose_availability_notice(current, previous, country_name_lookup)
+    message = compose_availability_notice(
+        current, previous, country_name_lookup,
+        periodic=not new_services, new_services=new_services,
+    )
     if message_decorator is not None:
         try:
-            message = await message_decorator(current, previous, message)
+            captioned = await message_decorator(current, previous, message)
+            if isinstance(captioned, str) and 1 <= len(captioned) <= 3800:
+                message = captioned
         except Exception as exc:
-            print(f"[global-feed] optional caption failed: {type(exc).__name__}", flush=True)
-            message = compose_availability_notice(current, previous, country_name_lookup)
+            print(f"[global-feed] optional caption failed: {type(exc).__name__}",
+                  flush=True)
     try:
         await bot.send_message(chat_id=int(group_id), text=message, parse_mode="HTML")
     except Exception as exc:
-        # Do not expose user identifiers, authentication headers or feed contents.
         print(f"[global-feed] Telegram delivery failed: {type(exc).__name__}", flush=True)
         return "send_failed"
 
     atomic_save({
         "fingerprint": current["fingerprint"],
         "country_counts": current["country_counts"],
+        "known_services": sorted(known | service_ids),
+        "post_count": int(previous.get("post_count", 0)) + 1,
         "last_sent": timestamp,
     }, location)
-    print("[global-feed] Aggregated provider status delivered", flush=True)
-    return "sent"
+    kind = "new_service" if new_services else "sent"
+    print(f"[global-feed] Published {kind} digest to group", flush=True)
+    return kind
