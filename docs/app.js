@@ -6,7 +6,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "twofa", "leaderboard", "profile", "withdrawals", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "twofa", "leaderboard", "profile", "withdrawals", "guide", "admin"];
 const state = {
     activeTab: "services",
     services: {},
