@@ -963,6 +963,13 @@ async function loadAdminTools() {
             row.appendChild(remove);
             channels.appendChild(row);
         }
+        const ai = adminTools.ai_posts || {};
+        document.getElementById("ai-post-enabled").checked = !!ai.enabled;
+        document.getElementById("ai-post-style").value = ai.style || "energetic";
+        document.getElementById("ai-post-status").textContent =
+            ai.mode === "off" ? "⏸️ AI paylaşımları söndürülüb." :
+            ai.mode === "ai" ? "✅ Pulsuz Groq Llama AI aktivdir (limitlər tətbiq olunur)." :
+            "⚠️ GROQ_API_KEY yoxdur — hazır şablonla paylaşımlar davam edir.";
         const wa = adminTools.whatsapp || {};
         const archive = adminTools.archive_sync || {};
         status.textContent = "📡 WhatsApp: " + (wa.status === "configured" ? "✅ Ayarlanıb" : "⚠️ Ayarlanmayıb") +
@@ -1104,6 +1111,31 @@ function saveAdminDefaultPrice() {
 async function sendAdminToolAction(action, details = {}) {
     if (!state.isAdmin) return null;
     return api("/api/admin-tools", {method: "POST", body: {action, ...details}});
+}
+
+async function saveAiPostSettings() {
+    if (!state.isAdmin) return;
+    try {
+        await sendAdminToolAction("ai_settings", {
+            enabled: document.getElementById("ai-post-enabled").checked,
+            style: document.getElementById("ai-post-style").value
+        });
+        await loadAdminTools();
+        alertUser("✅ AI paylaşım parametrləri saxlanıldı.");
+    } catch (err) { alertUser(err.message); }
+}
+
+async function previewAiPost() {
+    if (!state.isAdmin) return;
+    const preview = document.getElementById("ai-post-preview");
+    preview.hidden = false;
+    preview.textContent = "Nümunə hazırlanır...";
+    try {
+        const result = await sendAdminToolAction("ai_preview");
+        preview.textContent = result.preview || "Nümunə mövcud deyil.";
+    } catch (err) {
+        preview.textContent = "⚠️ " + err.message;
+    }
 }
 
 async function saveAdminSettings() {
