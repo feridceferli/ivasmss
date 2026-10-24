@@ -6,7 +6,7 @@ const tg = window.Telegram.WebApp;
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "twofa", "leaderboard", "profile", "withdrawals", "guide", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "leaderboard", "profile", "withdrawals", "guide", "admin"];
 const state = {
     activeTab: "services",
     services: {},
@@ -18,7 +18,8 @@ const state = {
     countryPage: 0,
     countryPageSize: 25,
     authFailed: false,
-    serviceQuery: ""
+    serviceQuery: "",
+    pricing: null
 };
 
 function node(tag, text = "", className = "") {
@@ -108,10 +109,6 @@ function switchTab(tab) {
         fetchOrders();
     } else if (tab === "history") {
         fetchIncomingSms();
-    } else if (tab === "twofa") {
-        document.getElementById("totp-output").textContent = "— — — — — —";
-        document.getElementById("totp-secret").value = "";
-        lastLocal2faCode = "";
     } else if (tab === "leaderboard") {
         fetchLeaderboard();
     } else if (tab === "profile") {
@@ -122,6 +119,7 @@ function switchTab(tab) {
         fetchAdminUsers();
         loadAdminTools();
         fetchAdminWithdrawals();
+        fetchPrices();
     }
 }
 
@@ -263,14 +261,76 @@ async function requestAzPermission() {
     finally { button.disabled = false; }
 }
 
+
+// The browser displays public price rules; server independently verifies them.
+function countryPriceRule(iso) {
+    const p = state.pricing;
+    if (!p) return null;
+    return p.country?.[iso] || (iso === "AZ" ? {cents: 1000, free: false} : p.default);
+}
+
+function priceLabel(rule) {
+    if (!rule) return "Qiymət yüklənir...";
+    return rule.free ? "🆓 Pulsuz" : "💰 " + (Number(rule.cents) / 100).toFixed(2) + " AZN";
+}
+
+function quotePrice(rid, countryIso = null) {
+    const p = state.pricing;
+    if (!p || !state.countries.length) return {error: "Qiymət məlumatları hələ yüklənməyib."};
+    const digits = String(rid || "").replace(/\D/g, "");
+    const code = [...new Set(state.countries.map(c => String(c.prefix)))]
+        .sort((a, b) => b.length - a.length).find(code => digits.startsWith(code));
+    if (!code) return {error: "Bu range üçün ölkə müəyyən edilmir."};
+    const regions = state.countries.filter(c => String(c.prefix) === code);
+    if (countryIso && !regions.some(c => c.iso === countryIso))
+        return {error: "Ölkə və range uyğun gəlmir."};
+    let rule = p.range?.[digits];
+    if (!rule) {
+        const unique = [...new Set(regions.map(c => {
+            const item = countryPriceRule(c.iso);
+            return String(item?.cents) + "/" + String(item?.free);
+        }))];
+        if (unique.length > 1) return {error: "Eyni +kodlu ölkələrin qiymətləri fərqlidir. Admin bu range üçün ayrıca qiymət qoymalıdır."};
+        rule = countryPriceRule(regions[0]?.iso);
+    }
+    return rule ? {cents: Number(rule.cents), free: !!rule.free, price: priceLabel(rule)} :
+        {error: "Qiymət müəyyən edilmədi."};
+}
+
+function refreshAzPriceNotes() {
+    const rule = countryPriceRule("AZ");
+    for (const id of ["services-az-price", "country-az-pricing-text", "az-price-text"]) {
+        const item = document.getElementById(id);
+        if (item) item.textContent = "🇦🇿 Azərbaycan (+994): " + priceLabel(rule) +
+            " (fərdi range qiymətləri fərqli ola bilər).";
+    }
+}
+
+async function fetchPrices() {
+    try {
+        const response = await api("/api/prices");
+        state.pricing = response.pricing || null;
+        refreshAzPriceNotes();
+        if (state.isAdmin) renderAdminPrices();
+    } catch (err) {
+        state.pricing = null;
+        const status = document.getElementById("admin-prices-status");
+        if (status) status.textContent = "⚠️ " + err.message;
+        toast("Qiymətlər yüklənmədi: " + err.message, "error");
+    }
+}
+
 function addRangeButton(container, label, options) {
-    const button = node("button", label + (options.isAz ? " · 10 AZN" : ""), "catalog-row catalog-range");
+    const quote = quotePrice(options.rid, options.iso || null);
+    const button = node("button", label + " · " + (quote.error ? "⚠️ Qiymət" : quote.price), "catalog-row catalog-range");
     button.type = "button";
     const locked = options.isAz && !state.azApproved;
-    if (locked) button.title = "10 AZN · +994 üçün admin təsdiqi tələb olunur";
+    button.disabled = !!quote.error;
+    if (quote.error) button.title = quote.error;
+    if (locked) button.title = "+994 üçün admin təsdiqi tələb olunur";
     button.addEventListener("click", () => {
         if (locked) {
-            alertUser("🔒 +994 range qiyməti: 10 AZN. İstifadə üçün admin icazəsi alın: @lacin_0411.");
+            alertUser("🔒 +994 üçün admin icazəsi tələb olunur: @lacin_0411.");
             switchTab("azerbaijan");
             return;
         }
@@ -405,8 +465,8 @@ async function showServiceRanges(service) {
         if (!ranges.length) clearAndText(listing, "Bu ölkə və axtarış üçün range tapılmadı.");
         if (selected.items.some(rid => rid.startsWith("994"))) {
             pricing.appendChild(node("p",
-                "🇦🇿 +994 range qiyməti: 10 AZN. İstifadə üçün admin icazəsi lazımdır. " +
-                "Bu panel avtomatik balans çıxmır.", "az-price-note"));
+                "🇦🇿 +994 üçün qiymətlər seçilmiş range-də göstərilir. " +
+                "İcazə tələb olunur; ödənişli nömrə verilərsə məbləğ balansdan tutulur.", "az-price-note"));
             const link = node("a", "💬 Adminlə əlaqə — @lacin_0411", "support-cta");
             link.href = "https://t.me/lacin_0411";
             link.target = "_blank";
@@ -487,7 +547,7 @@ function renderCountries() {
         const b = node("button", null, "catalog-row");
         b.type = "button";
         b.appendChild(node("span", c.flag + " " + c.name + " (+" + c.prefix + ")"));
-        b.appendChild(node("small", (c.count || 0) + " range"));
+        b.appendChild(node("small", (c.count || 0) + " range · " + priceLabel(countryPriceRule(c.iso))));
         b.addEventListener("click", () => openCountry(c.iso));
         host.appendChild(b);
     });
@@ -518,6 +578,8 @@ async function openCountry(iso) {
         document.getElementById("country-detail-heading").textContent =
             c.flag + " " + c.name + " (+" + c.prefix + ")";
         document.getElementById("country-az-pricing").hidden = c.prefix !== "994";
+        document.getElementById("country-price-display").textContent = "Ölkə qiyməti: " +
+            priceLabel(countryPriceRule(c.iso)) + " · Range üzrə ayrıca qiymət ola bilər.";
         document.getElementById("country-detail-hint").textContent =
             c.is_shared ? "⚠️ Bu telefon kodunu birdən çox ölkə paylaşır; API konkret ölkəni təsdiqləmir."
             : "Burada yalnız API-də göstərilən range-lər var. Nömrə mövcudluğuna zəmanət verilmir.";
@@ -543,22 +605,25 @@ async function selectService(service, country = null, range = null, countryIso =
         showServiceRanges(service);
         return;
     }
-    if (String(range).startsWith("994")) {
-        if (!state.azApproved) {
-            alertUser("+994 nömrəsi üçün admin icazəsi lazımdır. Qiymət: 10 AZN. Admin: @lacin_0411.");
-            switchTab("azerbaijan");
-            return;
-        }
-        if (!window.confirm(
-            "🇦🇿 +994 range qiyməti 10 AZN olaraq göstərilir. Bu Mini App avtomatik ödəniş tutmur. " +
-            "Seçilmiş range üçün nömrə sorğusu göndərilsin?"
-        )) return;
+    const quote = typeof quotePrice === "function" ? quotePrice(range, countryIso) : {cents: 0, free: true};
+    if (quote.error) {
+        alertUser(quote.error);
+        return;
     }
+    if (String(range).startsWith("994") && !state.azApproved) {
+        alertUser("+994 nömrəsi üçün admin icazəsi lazımdır. Admin: @lacin_0411.");
+        switchTab("azerbaijan");
+        return;
+    }
+    if (!quote.free && !window.confirm(
+        "Bu nömrənin qiyməti " + (quote.cents / 100).toFixed(2) +
+        " AZN-dir. Uğurlu ayrılma zamanı balansınızdan çıxılacaq. Davam edilsin?"
+    )) return;
     // A separate authenticated API request is made only on an explicit click.
     try {
         const data = await api("/api/get-number", {
             method: "POST",
-            body: { service, country, range, country_iso: countryIso }
+            body: { service, country, range, country_iso: countryIso, expected_price_cents: quote.cents }
         });
         if (!data.success) {
             alertUser(data.message || "Hazırda bu range üzrə nömrə yoxdur.");
@@ -710,75 +775,6 @@ async function fetchIncomingSms() {
     } catch (err) { clearAndText(container, err.message); }
 }
 
-
-// Local-only RFC 6238 TOTP. The secret is never transmitted or stored.
-let lastLocal2faCode = "";
-
-function decodeBase32Key(input) {
-    const normalized = String(input).trim().replace(/[\s-]/g, "").replace(/=+$/, "").toUpperCase();
-    if (!normalized || !/^[A-Z2-7]+$/.test(normalized)) {
-        throw new Error("Etibarlı Base32 2FA açarı daxil edin.");
-    }
-    const alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
-    let buffer = 0, bits = 0;
-    const bytes = [];
-    for (const ch of normalized) {
-        buffer = (buffer << 5) | alphabet.indexOf(ch);
-        bits += 5;
-        if (bits >= 8) {
-            bits -= 8;
-            bytes.push((buffer >>> bits) & 255);
-        }
-    }
-    if (bytes.length < 10 || bytes.length > 256) {
-        throw new Error("2FA açarı düzgün uzunluqda deyil.");
-    }
-    return new Uint8Array(bytes);
-}
-
-async function createLocal2faCode() {
-    const target = document.getElementById("totp-output");
-    target.textContent = "Hesablanır...";
-    lastLocal2faCode = "";
-    try {
-        if (!window.crypto?.subtle) throw new Error("Bu brauzer təhlükəsiz 2FA hesablamasını dəstəkləmir.");
-        const secret = decodeBase32Key(document.getElementById("totp-secret").value);
-        const key = await crypto.subtle.importKey(
-            "raw", secret, { name: "HMAC", hash: "SHA-1" }, false, ["sign"]
-        );
-        const counter = BigInt(Math.floor(Date.now() / 30000));
-        const block = new Uint8Array(8);
-        for (let i = 7, value = counter; i >= 0; i--, value >>= 8n) {
-            block[i] = Number(value & 255n);
-        }
-        const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, block));
-        const offset = mac[mac.length - 1] & 15;
-        const binary = ((mac[offset] & 127) << 24) |
-            (mac[offset + 1] << 16) | (mac[offset + 2] << 8) | mac[offset + 3];
-        lastLocal2faCode = String(binary % 1000000).padStart(6, "0");
-        target.textContent = lastLocal2faCode;
-        document.getElementById("totp-secret").value = "";
-        // Do not retain the key, code is only for the current 30-second interval.
-        target.dataset.expiry = String((Math.floor(Date.now() / 30000) + 1) * 30000);
-    } catch (err) {
-        target.textContent = "— — — — — —";
-        alertUser(err.message);
-    }
-}
-
-async function copyLocal2faCode() {
-    const view = document.getElementById("totp-output");
-    if (!lastLocal2faCode || Date.now() >= Number(view.dataset.expiry || 0)) {
-        alertUser("Kodun müddəti bitib. Öz açarınızla yenisini yaradın.");
-        return;
-    }
-    try {
-        await navigator.clipboard.writeText(lastLocal2faCode);
-        alertUser("🔐 Kod kopyalandı.");
-    } catch (_) {
-        alertUser("Kodu əl ilə kopyalayın.");
-    }
-}
 
 async function fetchProfile() {
     const display = document.getElementById("profile-name");
@@ -1129,6 +1125,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         state.countryPage = 0;
         renderCountries();
     });
+    await fetchPrices();
     await Promise.all([fetchDashboard(), fetchServices(), fetchCountries(), fetchOrders()]);
     if (state.authFailed) {
         setStatus("⚠️ Mini App-i Telegram-un içindən, botun düyməsi ilə açın.");
