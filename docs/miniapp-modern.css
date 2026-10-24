@@ -345,3 +345,8 @@ select {appearance:auto}
 #admin-range-prices-list .catalog-row {width:100%;margin:5px 0;justify-content:flex-start;text-align:left}
 .admin-price-section input:disabled {opacity:.55;cursor:not-allowed}
 @media(max-width:420px){.admin-price-section {padding:11px}.admin-price-section .action-small {font-size:12px}}
+
+/* Preview is inert text: no AI-generated HTML or script is rendered. */
+.ai-post-preview{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:12px;line-height:1.65;
+ background:#0e192b;border:1px solid rgba(142,166,235,.22);border-radius:12px;padding:13px;
+ max-height:360px;overflow-y:auto}
