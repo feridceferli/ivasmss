@@ -295,6 +295,7 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
         with patch.dict(os.environ, {"GROQ_API_KEY": ""}):
             for output in ("Scientists create a new space robot",
                            "Yeni robot https://evil.example saytında göstərilib.",
+                           "Bu məlumat bbc.com saytında təqdim olunub.",
                            "Alimlər 400 yeni robot yaradıb!"):
                 result = await news.translate_headlines(
                     [story], fallback_client=FakeMemoryClient(output))
