@@ -86,7 +86,7 @@ class PublishingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(len(bot.messages), 0, "Startup must not spam group")
             self.assertTrue(Path(state).exists())
             unchanged = await publish_global_availability_feed(
-                services=SAMPLE, now=1600, **args)
+                services=SAMPLE, now=1300, **args)
             self.assertEqual(unchanged, "unchanged")
 
             changed = dict(SAMPLE)
@@ -96,14 +96,14 @@ class PublishingTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(cooldown, "cooldown")
             self.assertEqual(len(bot.messages), 0)
             later = await publish_global_availability_feed(
-                services=changed, now=1401, **args)
+                services=changed, now=1601, **args)
             self.assertEqual(later, "sent")
             self.assertEqual(len(bot.messages), 1)
             self.assertEqual(bot.messages[0]["chat_id"], -100123456)
             self.assertEqual(bot.messages[0]["parse_mode"], "HTML")
             self.assertNotIn("99450211", bot.messages[0]["text"])
             saved = json.loads(Path(state).read_text(encoding="utf-8"))
-            self.assertEqual(saved["last_sent"], 1401)
+            self.assertEqual(saved["last_sent"], 1601)
             self.assertNotIn("99440211", json.dumps(saved))
             # A new process with the same stored snapshot cannot resend it.
             new_bot = FakeTelegramBot()
@@ -124,13 +124,13 @@ class PublishingTests(unittest.IsolatedAsyncioTestCase):
             bad = FakeTelegramBot(fail=True)
             failed = await publish_global_availability_feed(
                 services=changed, bot=bad, group_id="-100123456",
-                country_prefix_lookup=country_prefix, now=1401, state_file=path)
+                country_prefix_lookup=country_prefix, now=1601, state_file=path)
             self.assertEqual(failed, "send_failed")
             self.assertEqual(json.loads(Path(path).read_text(encoding="utf-8")), original)
             good = FakeTelegramBot()
             retry = await publish_global_availability_feed(
                 services=changed, bot=good, group_id="-100123456",
-                country_prefix_lookup=country_prefix, now=1402, state_file=path)
+                country_prefix_lookup=country_prefix, now=1602, state_file=path)
             self.assertEqual(retry, "sent")
             self.assertEqual(len(good.messages), 1)
 
@@ -144,6 +144,95 @@ class PublishingTests(unittest.IsolatedAsyncioTestCase):
             country_prefix_lookup=country_prefix)
         self.assertEqual(empty, "empty_catalog")
         self.assertFalse(bot.messages)
+
+    async def test_periodic_digest_every_ten_minutes_even_when_unchanged(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "state.json")
+            bot = FakeTelegramBot()
+            args = dict(services=SAMPLE, bot=bot, group_id="-100123456",
+                        country_prefix_lookup=country_prefix,
+                        state_file=path)
+            self.assertEqual(await publish_global_availability_feed(
+                now=1000, **args), "initialized")
+            self.assertEqual(await publish_global_availability_feed(
+                now=1599, **args), "unchanged")
+            self.assertEqual(await publish_global_availability_feed(
+                now=1600, **args), "sent")
+            self.assertEqual(len(bot.messages), 1)
+            self.assertIn("10 DƏQİQƏLİK", bot.messages[0]["text"])
+            self.assertEqual(await publish_global_availability_feed(
+                now=1601, **args), "unchanged")
+            self.assertEqual(await publish_global_availability_feed(
+                now=2200, **args), "sent")
+            self.assertEqual(len(bot.messages), 2)
+
+    async def test_new_service_triggers_immediate_group_only_batched_notice(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "state.json")
+            bot = FakeTelegramBot()
+            args = dict(bot=bot, group_id="-100123456",
+                        country_prefix_lookup=country_prefix, state_file=path)
+            await publish_global_availability_feed(services=SAMPLE, now=1000, **args)
+            updated = {**SAMPLE, "bolt": ["447755"], "discord": ["99440122"]}
+            self.assertEqual(await publish_global_availability_feed(
+                services=updated, now=1030, **args), "new_service")
+            self.assertEqual(len(bot.messages), 1)
+            sent = bot.messages[0]
+            self.assertEqual(sent["chat_id"], -100123456)
+            self.assertIn("BOLT", sent["text"])
+            self.assertIn("DISCORD", sent["text"])
+            self.assertNotIn("447755", sent["text"])
+            self.assertEqual(await publish_global_availability_feed(
+                services=updated, now=1040, **args), "unchanged")
+            self.assertEqual(await publish_global_availability_feed(
+                services=updated, now=1630, **args), "sent")
+            self.assertEqual(len(bot.messages), 2)
+            # A removed service is never falsely classified as new on return.
+            await publish_global_availability_feed(services=SAMPLE, now=2230, **args)
+            restored = await publish_global_availability_feed(
+                services=updated, now=2240, **args)
+            self.assertIn(restored, ("cooldown", "unchanged"))
+            self.assertEqual(len(bot.messages), 3)
+
+    async def test_failed_immediate_service_send_retries_without_state_advance(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "state.json")
+            args = dict(group_id="-100123456", country_prefix_lookup=country_prefix,
+                        state_file=path)
+            await publish_global_availability_feed(services=SAMPLE, now=1000,
+                                                   bot=FakeTelegramBot(), **args)
+            before = Path(path).read_text(encoding="utf-8")
+            new = {**SAMPLE, "new-app": ["99440211"]}
+            self.assertEqual(await publish_global_availability_feed(
+                services=new, bot=FakeTelegramBot(fail=True), now=1030, **args),
+                "send_failed")
+            self.assertEqual(Path(path).read_text(encoding="utf-8"), before)
+            bot = FakeTelegramBot()
+            self.assertEqual(await publish_global_availability_feed(
+                services=new, bot=bot, now=1060, **args), "new_service")
+            self.assertEqual(len(bot.messages), 1)
+            again = FakeTelegramBot()
+            self.assertEqual(await publish_global_availability_feed(
+                services=new, bot=again, now=1100, **args), "unchanged")
+            self.assertEqual(len(again.messages), 0)
+
+    async def test_legacy_state_migration_does_not_announce_every_service(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = str(Path(folder) / "state.json")
+            state = availability_snapshot(SAMPLE, country_prefix)
+            Path(path).write_text(json.dumps({
+                "fingerprint": state["fingerprint"],
+                "country_counts": state["country_counts"],
+                "last_sent": 1000,
+            }), encoding="utf-8")
+            bot = FakeTelegramBot()
+            args = dict(services=SAMPLE, bot=bot, group_id="-100123456",
+                        country_prefix_lookup=country_prefix, state_file=path)
+            self.assertEqual(await publish_global_availability_feed(
+                now=1030, **args), "unchanged")
+            self.assertFalse(bot.messages)
+            saved = json.loads(Path(path).read_text(encoding="utf-8"))
+            self.assertEqual(set(saved["known_services"]), {"tg", "wa"})
 
 
 if __name__ == "__main__":
