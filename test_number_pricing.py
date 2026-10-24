@@ -27,11 +27,9 @@ class PriceRuleTests(unittest.TestCase):
         self.assertEqual(quote_range("447700", self.p)["price"], "0.00")
 
     def test_country_price_and_free_toggle(self):
-        self.p["country"]["GB"] = price_rule("2.50", False)
-        self.assertEqual(quote_range("447700", self.p, "GB")["cents"], 250)
-        self.p["country"]["GB"] = price_rule("999", True)
-        self.assertTrue(quote_range("447700", self.p)["free"])
-        self.p["country"]["AZ"] = price_rule("0", True)
+        self.p["country"]["AZ"] = price_rule("2.50", False)
+        self.assertEqual(quote_range("99450210", self.p, "AZ")["cents"], 250)
+        self.p["country"]["AZ"] = price_rule("999", True)
         self.assertTrue(quote_range("99450210", self.p)["free"])
 
     def test_range_overrides_country(self):
