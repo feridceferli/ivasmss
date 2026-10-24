@@ -221,7 +221,7 @@
         .profile-fields p { margin:8px 0; overflow-wrap:anywhere; }
         @media(max-width:390px){ .tab-btn{font-size:11px;padding:8px 6px}.catalog-row{font-size:12px} }
     </style>
-    <link rel="stylesheet" href="miniapp-modern.css?v=20261025-guide">
+    <link rel="stylesheet" href="miniapp-modern.css?v=20261025-prices">
 </head>
 <body>
     <div class="container">
@@ -255,7 +255,6 @@
             <button class="tab-btn" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
             <button class="tab-btn" onclick="switchTab('active')">📱 Aktivlər</button>
             <button class="tab-btn" onclick="switchTab('history')">📜 Tarixçə</button>
-            <button class="tab-btn" onclick="switchTab('twofa')">🔐 2FA</button>
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
             <button class="tab-btn" onclick="switchTab('withdrawals')">💸 Çıxarışlar</button>
@@ -296,7 +295,7 @@
             </div>
             <div class="card" id="service-detail" hidden aria-live="polite"></div>
             <div class="card">
-                <p class="notice-mini">🇦🇿 <strong>+994 Azərbaycan range qiyməti: 10 AZN.</strong> Nömrə almaq üçün admin təsdiqi tələb olunur. Ödəniş Mini App tərəfindən avtomatik tutulmur.</p>
+                <p class="notice-mini"><span id="services-az-price">🇦🇿 +994 qiyməti yüklənir...</span> Nömrə almaq üçün admin təsdiqi tələb olunur. Ödənişli sifarişin qiyməti uğurlu ayrılmadan sonra balansdan tutulur.</p>
                 <a class="support-cta" href="https://t.me/lacin_0411" target="_blank" rel="noopener noreferrer">💬 +994 üçün adminlə əlaqə — @lacin_0411</a>
             </div>
         </div>
@@ -335,9 +334,10 @@
             <div class="card" id="country-details" hidden>
                 <h4 id="country-detail-heading" style="margin:0 0 8px"></h4>
                 <p id="country-detail-hint" class="notice-mini"></p>
+                <p id="country-price-display" class="az-price-note" role="status"></p>
                 <div id="country-range-list" class="catalog-scroll"></div>
                 <div id="country-az-pricing" hidden>
-                    <p class="az-price-note">🇦🇿 +994 range qiyməti: <strong>10 AZN</strong>. Nömrə almaq üçün admin icazəsi lazımdır. Mini App balansdan avtomatik çıxmır.</p>
+                    <p class="az-price-note"><span id="country-az-pricing-text">🇦🇿 +994 qiyməti yüklənir...</span> Nömrə almaq üçün admin icazəsi lazımdır.</p>
                     <a class="support-cta" href="https://t.me/lacin_0411" target="_blank" rel="noopener noreferrer">💬 Adminlə əlaqə — @lacin_0411</a>
                 </div>
                 <button class="action-small" onclick="closeCountryDetails()">◀️ Ölkələrə qayıt</button>
@@ -350,7 +350,7 @@
                 <h4 style="margin:0 0 8px">🇦🇿 Azərbaycan operatorları</h4>
                 <p id="permission-status" class="notice-mini">İcazə yoxlanılır...</p>
                 <p class="notice-mini" role="status">🩺 <strong>SMS qəbul yoxlaması:</strong> 210/211 kimi əvvəlcədən göstərilən range-lərin hamısı API-də mövcud olmaya bilər. 📡 API işarəsi yalnız range-in siyahıda olduğunu göstərir, SMS və ya OTP çatdırılmasını təsdiqləmir. Range görünmürsə, provayderin özündən aktivlik yoxlanmalıdır.</p>
-                <p class="az-price-note">💰 <strong>Azərbaycan (+994) range qiyməti: 10 AZN</strong> · Ödəniş məlumatı üçün adminlə əlaqə saxlayın; avtomatik balans tutulmur.</p>
+                <p class="az-price-note"><span id="az-price-text">💰 Azərbaycan (+994) qiyməti yüklənir...</span> · Ödənişli sifarişin qiyməti uğurla ayrılarsa balansdan tutulur.</p>
                 <a class="support-cta" href="https://t.me/lacin_0411" target="_blank" rel="noopener noreferrer">💬 Adminlə əlaqə — @lacin_0411</a>
                 <button class="btn" id="request-az-access" onclick="requestAzPermission()" hidden>
                     🔒 Admin icazəsi istə
@@ -384,24 +384,6 @@
                 <div id="sms-list-container">
                     <p class="hint">Hələ ki gələn mesaj yoxdur...</p>
                 </div>
-            </div>
-        </div>
-
-        <div id="tab-twofa" class="tab-content">
-            <div class="card">
-                <h4 style="margin:0 0 8px">🔐 2FA kod generatoru</h4>
-                <p class="notice-mini">Yalnız öz hesabınızın TOTP açarından istifadə edin. Açar serverə göndərilmir və saxlanmır.</p>
-                <label for="totp-secret" class="notice-mini">Base32 2FA açarı</label>
-                <div class="catalog-tools">
-                    <input class="admin-input" id="totp-secret" type="password" autocomplete="off" spellcheck="false"
-                        autocapitalize="off" placeholder="JBSWY3DPEHPK3PXP">
-                </div>
-                <div class="quick-actions">
-                    <button class="action-small" onclick="createLocal2faCode()">🔑 Kodu yarat</button>
-                    <button class="action-small" onclick="copyLocal2faCode()">📋 Kopyala</button>
-                </div>
-                <p id="totp-output" class="full-phone-number">— — — — — —</p>
-                <p class="notice-mini">TOTP: 6 rəqəm, 30 saniyə. Açar səhifədən ayrıldığınızda saxlanılmır.</p>
             </div>
         </div>
 
@@ -514,7 +496,7 @@
                     <span class="guide-step-number" aria-hidden="true">06</span>
                     <div class="guide-step-content">
                         <h4>👤 Profil və əlavə alətlər</h4>
-                        <p><strong>Profil</strong> bölməsində balansı, statistikanı və dili görün, öz nömrələrinizin TXT siyahısını endirin. <strong>2FA</strong> bölməsi yalnız öz TOTP açarınız üçündür. Çıxarış sorğusu yaratmaq üçün botun <code>/menu</code> menyusundan istifadə edin.</p>
+                        <p><strong>Profil</strong> bölməsində balansı, statistikanı və dili görün, öz nömrələrinizin TXT siyahısını endirin. Çıxarış sorğusu yaratmaq üçün botun <code>/menu</code> menyusundan istifadə edin.</p>
                         <button type="button" class="action-small" onclick="switchTab('profile')">Profilə keç →</button>
                     </div>
                 </article>
@@ -567,6 +549,46 @@
                 <h4 style="margin:16px 0 8px">💸 Çıxarış sorğuları (yalnız metadata)</h4>
                 <div id="admin-withdrawals-list" class="catalog-scroll"></div>
                 <div id="admin-users-list" class="catalog-scroll" style="margin-top:12px"></div>
+                <section class="card admin-price-panel" aria-labelledby="pricing-heading">
+                    <h4 id="pricing-heading">💰 Ölkə və nömrə qiymətləri</h4>
+                    <p class="notice-mini">Qiymətlər AZN ilədir. “Pulsuz” = 0 AZN. Yalnız uğurlu ayrılmış nömrələr üçün balansdan çıxılır. Eyni +kodlu ölkələrdə qiymətlər fərqlidirsə, həmin range üçün ayrıca qiymət qoyun.</p>
+                    <p id="admin-prices-status" class="notice-mini" role="status">Qiymətlər yüklənir...</p>
+                    <div class="admin-price-section">
+                        <h4>🌍 Ölkə qiyməti</h4>
+                        <label class="notice-mini" for="country-pricing-search">Ölkə axtar</label>
+                        <input id="country-pricing-search" class="admin-input" type="search" autocomplete="off" placeholder="Ölkə və ya +kod">
+                        <label class="notice-mini" for="country-pricing-select">Ölkəni seç</label>
+                        <select id="country-pricing-select" class="admin-input"></select>
+                        <label class="notice-mini" for="country-pricing-amount">Nömrə qiyməti (AZN)</label>
+                        <input id="country-pricing-amount" class="admin-input" type="number" inputmode="decimal" min="0" max="10000" step="0.01" placeholder="Məs: 2.50">
+                        <label class="price-free-check"><input id="country-pricing-free" type="checkbox"> 🆓 Pulsuz</label>
+                        <div class="quick-actions">
+                            <button class="action-small" onclick="saveAdminCountryPrice()">💾 Qiyməti saxla</button>
+                            <button class="action-small" onclick="resetAdminCountryPrice()">↩️ Standart qayda</button>
+                        </div>
+                    </div>
+                    <div class="admin-price-section">
+                        <h4>📱 Ayrı nömrə range-i</h4>
+                        <p class="notice-mini">Range qiyməti ölkə qiymətindən üstün tutulur. Məsələn: 99450210.</p>
+                        <label class="notice-mini" for="range-pricing-id">API range kodu</label>
+                        <input id="range-pricing-id" class="admin-input" inputmode="numeric" maxlength="10" placeholder="99450210">
+                        <label class="notice-mini" for="range-pricing-amount">Range qiyməti (AZN)</label>
+                        <input id="range-pricing-amount" class="admin-input" type="number" inputmode="decimal" min="0" max="10000" step="0.01" placeholder="Məs: 5.00">
+                        <label class="price-free-check"><input id="range-pricing-free" type="checkbox"> 🆓 Pulsuz</label>
+                        <div class="quick-actions">
+                            <button class="action-small" onclick="saveAdminRangePrice()">💾 Range qiymətini saxla</button>
+                            <button class="action-small" onclick="resetAdminRangePrice()">🗑️ Xüsusi qiyməti sil</button>
+                        </div>
+                        <div id="admin-range-prices-list" class="catalog-scroll"></div>
+                    </div>
+                    <div class="admin-price-section">
+                        <h4>⚙️ Digər ölkələrin standart qiyməti</h4>
+                        <label class="notice-mini" for="default-pricing-amount">AZN</label>
+                        <input id="default-pricing-amount" class="admin-input" type="number" inputmode="decimal" min="0" max="10000" step="0.01">
+                        <label class="price-free-check"><input id="default-pricing-free" type="checkbox"> 🆓 Pulsuz</label>
+                        <button class="action-small" onclick="saveAdminDefaultPrice()">💾 Standart qiyməti saxla</button>
+                    </div>
+                </section>
                 <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 8px">⚙️ Sistem konfiqurasiyası</h4>
                     <div class="catalog-tools">
@@ -617,7 +639,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261025-avatar&amp;guide=1"></script>
+    <script src="app.js?v=20261025-prices"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 <div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>
