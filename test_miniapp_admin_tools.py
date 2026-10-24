@@ -52,6 +52,17 @@ class MiniAppAdminToolsTests(unittest.TestCase):
             self.assertIn(attr, HTML)
         self.assertNotIn(".innerHTML", JS)
 
+    def test_optional_ai_settings_are_admin_only(self):
+        self.assertIn('id="ai-post-enabled"', HTML)
+        self.assertIn('id="ai-post-style"', HTML)
+        self.assertIn('id="ai-post-preview"', HTML)
+        self.assertIn("saveAiPostSettings()", HTML)
+        self.assertIn("previewAiPost()", HTML)
+        self.assertIn('action == "ai_settings"', PY)
+        self.assertIn('action == "ai_preview"', PY)
+        self.assertIn('public_ai_status()', PY)
+        self.assertNotIn(".innerHTML", JS)
+
     def test_no_provider_secrets_sent_to_miniapp(self):
         code = ast.get_source_segment(
             PY, next(n for n in TREE.body if isinstance(n, ast.AsyncFunctionDef)
