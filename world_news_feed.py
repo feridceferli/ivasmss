@@ -181,7 +181,7 @@ def _source_excerpt(story):
     title = str(story.get("title") or "").strip()
     detail = _clean_description(story.get("description", ""))
     if detail and detail.casefold() != title.casefold():
-        return (title + ". " + detail[:220])[:425]
+        return (title[:135] + ". " + detail[:145])[:285]
     return title[:250]
 
 
@@ -199,12 +199,15 @@ def _az_summary(candidate, original):
     if any(number not in source_numbers for number in supplied_numbers):
         return None
     # Don't accidentally publish the English original if translation fails.
-    if not re.search(
-        r"[əƏğĞıİöÖşŞüÜçÇ]|\b(?:və|üçün|ilə|olub|edib|bildirib|görə|"
+    # Unicode IGNORECASE would treat Turkish dotless-ı as English "i".
+    # Check AZ diacritics case-sensitively, and AZ words separately.
+    has_az_letters = bool(re.search(r"[əƏğĞıİöÖşŞüÜçÇ]", summary))
+    has_az_terms = bool(re.search(
+        r"\b(?:və|üçün|ilə|olub|edib|bildirib|görə|"
         r"haqqında|yeni|kəşf|alimlər|tədqiqat|inkişaf|dünyada|"
         r"ölkədə|məlumat|təqdim|araşdırma|şirkət|açıqlayıb|nəticə)\b",
-        summary, re.I
-    ):
+        summary, re.I))
+    if not (has_az_letters or has_az_terms):
         return None
     return summary
 
