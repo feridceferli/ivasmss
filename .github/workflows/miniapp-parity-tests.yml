@@ -22,6 +22,8 @@ on:
       - docs/world-provider-diagnostics.js
       - docs/az-provider-diagnostics.js
       - world_country_codes.py
+      - number_pricing.py
+      - test_number_pricing.py
       - .github/workflows/miniapp-parity-tests.yml
   pull_request:
     paths:
@@ -44,6 +46,8 @@ on:
       - docs/world-provider-diagnostics.js
       - docs/az-provider-diagnostics.js
       - world_country_codes.py
+      - number_pricing.py
+      - test_number_pricing.py
       - .github/workflows/miniapp-parity-tests.yml
   workflow_dispatch:
 
@@ -75,6 +79,6 @@ jobs:
       - name: Test Telegram Mini App avatar privacy and fallback
         run: node test_telegram_avatar_ui.cjs
       - name: Check Python syntax
-        run: python -m py_compile main.py world_country_codes.py
+        run: python -m py_compile main.py world_country_codes.py number_pricing.py
       - name: Test Mini App parity, safe rendering and +994 permissions
-        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo
+        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing
