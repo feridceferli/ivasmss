@@ -72,6 +72,8 @@ class MiniAppAdminToolsTests(unittest.TestCase):
         self.assertIn('action == "world_news_preview"', PY)
         self.assertIn("public_news_status()", PY)
         self.assertIn("publish_world_news(", PY)
+        self.assertIn("compose_news_digest(selected, translations)", PY)
+        self.assertIn('"translation_unavailable"', PY)
         self.assertNotIn(".innerHTML", JS)
 
     def test_no_provider_secrets_sent_to_miniapp(self):
