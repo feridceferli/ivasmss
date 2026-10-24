@@ -86,7 +86,7 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         self.assertIn('if (validNumber)', JS)
         self.assertIn('copyPhoneNumber(fullNumber)', JS)
         self.assertIn('order.number || ""', JS)
-        self.assertIn('app.js?v=20261025-free-ai', HTML)
+        self.assertIn('app.js?v=20261025-world-news', HTML)
         self.assertNotIn('.innerHTML', JS)
 
 
