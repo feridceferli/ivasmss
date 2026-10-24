@@ -4676,7 +4676,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if data == "menu_search_otp":
         context.user_data["mode"] = "search_otp"
         await query.message.reply_text("🔍 <b>NÖMRƏNİ DAXİL EDİN:</b>", parse_mode="HTML")
-        return    if data == "menu_balance":
+        return
+    if data == "menu_balance":
         balance = get_user(uid)["balance"]
         await query.message.reply_text(
             f"💰 <b>YOUR CURRENT BALANCE</b>\n\n<blockquote>💵 TOTAL: <b>{format_balance(balance)} AZN</b></blockquote>",
