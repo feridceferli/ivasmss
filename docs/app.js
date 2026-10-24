@@ -1015,6 +1015,132 @@ async function loadAdminTools() {
     }
 }
 
+
+function setPriceFields(amountId, freeId, rule) {
+    const amount = document.getElementById(amountId);
+    const free = document.getElementById(freeId);
+    if (!amount || !free) return;
+    free.checked = !!rule?.free;
+    amount.value = (Number(rule?.cents || 0) / 100).toFixed(2);
+    amount.disabled = free.checked;
+}
+
+function onPriceFreeToggle(amountId, freeId) {
+    const amount = document.getElementById(amountId);
+    const free = document.getElementById(freeId);
+    amount.disabled = free.checked;
+    if (free.checked) amount.value = "0.00";
+    else if (Number(amount.value) <= 0) amount.value = "0.01";
+}
+
+function countryPriceChanged() {
+    const iso = document.getElementById("country-pricing-select").value;
+    setPriceFields("country-pricing-amount", "country-pricing-free", countryPriceRule(iso));
+}
+
+function rangePriceChanged() {
+    const rid = document.getElementById("range-pricing-id").value.trim();
+    const rule = state.pricing?.range?.[rid] || {cents: 0, free: true};
+    setPriceFields("range-pricing-amount", "range-pricing-free", rule);
+}
+
+function renderAdminPrices() {
+    if (!state.isAdmin || !state.pricing) return;
+    const status = document.getElementById("admin-prices-status");
+    if (!status) return;
+    status.textContent = "✅ Qiymətlər aktivdir · Valyuta: AZN · " +
+        Object.keys(state.pricing.country || {}).length + " ölkə qaydası · " +
+        Object.keys(state.pricing.range || {}).length + " range qaydası";
+    const search = document.getElementById("country-pricing-search");
+    const select = document.getElementById("country-pricing-select");
+    const selected = select.value || "AZ";
+    const term = String(search.value || "").trim().toLocaleLowerCase();
+    const rows = state.countries.filter(c =>
+        c.name.toLocaleLowerCase().includes(term) ||
+        c.iso.toLocaleLowerCase().includes(term) ||
+        String(c.prefix).includes(term.replace(/^\+/, "")));
+    select.replaceChildren();
+    for (const c of rows) {
+        const option = document.createElement("option");
+        option.value = c.iso;
+        option.textContent = c.flag + " " + c.name + " (+" + c.prefix + ") · " + priceLabel(countryPriceRule(c.iso));
+        select.appendChild(option);
+    }
+    if (rows.length) select.value = rows.some(c => c.iso === selected) ? selected : rows[0].iso;
+    countryPriceChanged();
+    setPriceFields("default-pricing-amount", "default-pricing-free", state.pricing.default);
+    const list = document.getElementById("admin-range-prices-list");
+    list.replaceChildren();
+    const entries = Object.entries(state.pricing.range || {}).sort((a,b)=>a[0].localeCompare(b[0]));
+    if (!entries.length) {
+        list.appendChild(node("p", "Hələ ayrıca range qiyməti yoxdur.", "notice-mini"));
+    }
+    for (const [rid, rule] of entries) {
+        const btn = node("button", "+" + rid + " · " + priceLabel(rule), "catalog-row");
+        btn.type = "button";
+        btn.addEventListener("click", () => {
+            document.getElementById("range-pricing-id").value = rid;
+            rangePriceChanged();
+            document.getElementById("range-pricing-id").scrollIntoView?.({block:"nearest",behavior:"smooth"});
+        });
+        list.appendChild(btn);
+    }
+    rangePriceChanged();
+}
+
+async function submitAdminPrice(body) {
+    if (!state.isAdmin) return;
+    const status = document.getElementById("admin-prices-status");
+    status.textContent = "Qiymət yadda saxlanır...";
+    try {
+        const result = await api("/api/prices", {method: "POST", body});
+        state.pricing = result.pricing;
+        refreshAzPriceNotes();
+        renderAdminPrices();
+        if (state.countries.length) renderCountries();
+        alertUser("✅ Qiymət qaydası yeniləndi.");
+    } catch (error) {
+        status.textContent = "⚠️ " + error.message;
+        alertUser(error.message);
+    }
+}
+
+function chosenPrice(prefix) {
+    const free = document.getElementById(prefix + "-free").checked;
+    const amount = document.getElementById(prefix + "-amount").value.trim();
+    if (!free && (!/^\d+(?:\.\d{1,2})?$/.test(amount) || Number(amount) <= 0 || Number(amount) > 10000)) {
+        alertUser("Qiymət 0.01–10000 AZN arası, maksimum 2 onluq olmalıdır.");
+        return null;
+    }
+    return {price: free ? "0" : amount, free};
+}
+
+function saveAdminCountryPrice() {
+    const country_iso = document.getElementById("country-pricing-select").value;
+    if (!country_iso) return alertUser("Ölkə seçin.");
+    const rule = chosenPrice("country-pricing");
+    if (rule) submitAdminPrice({action:"set_country",country_iso,...rule});
+}
+function resetAdminCountryPrice() {
+    const country_iso = document.getElementById("country-pricing-select").value;
+    if (country_iso) submitAdminPrice({action:"reset_country",country_iso});
+}
+function saveAdminRangePrice() {
+    const range = document.getElementById("range-pricing-id").value.trim();
+    if (!/^\d{1,10}$/.test(range)) return alertUser("API range kodu 1–10 rəqəm olmalıdır.");
+    const rule = chosenPrice("range-pricing");
+    if (rule) submitAdminPrice({action:"set_range",range,...rule});
+}
+function resetAdminRangePrice() {
+    const range = document.getElementById("range-pricing-id").value.trim();
+    if (!/^\d{1,10}$/.test(range)) return alertUser("Düzgün range daxil edin.");
+    submitAdminPrice({action:"reset_range",range});
+}
+function saveAdminDefaultPrice() {
+    const rule = chosenPrice("default-pricing");
+    if (rule) submitAdminPrice({action:"set_default",...rule});
+}
+
 async function sendAdminToolAction(action, details = {}) {
     if (!state.isAdmin) return null;
     return api("/api/admin-tools", {method: "POST", body: {action, ...details}});
@@ -1125,8 +1251,16 @@ document.addEventListener("DOMContentLoaded", async () => {
         state.countryPage = 0;
         renderCountries();
     });
+    document.getElementById("country-pricing-search").addEventListener("input", renderAdminPrices);
+    document.getElementById("country-pricing-select").addEventListener("change", countryPriceChanged);
+    document.getElementById("range-pricing-id").addEventListener("input", rangePriceChanged);
+    for (const prefix of ["country-pricing", "range-pricing", "default-pricing"]) {
+        document.getElementById(prefix + "-free").addEventListener("change",
+            () => onPriceFreeToggle(prefix + "-amount", prefix + "-free"));
+    }
     await fetchPrices();
     await Promise.all([fetchDashboard(), fetchServices(), fetchCountries(), fetchOrders()]);
+    if (state.isAdmin) renderAdminPrices();
     if (state.authFailed) {
         setStatus("⚠️ Mini App-i Telegram-un içindən, botun düyməsi ilə açın.");
     }
