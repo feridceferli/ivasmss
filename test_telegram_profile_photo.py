@@ -91,7 +91,7 @@ class Message:
 
 
 class TelegramPhotoTests(unittest.IsolatedAsyncioTestCase):
-    def test_api_context(self, authed=True, banned=False):
+    def make_api_context(self, authed=True, banned=False):
         return {
             "web": Web,
             "_miniapp_auth": lambda request: (
@@ -104,7 +104,7 @@ class TelegramPhotoTests(unittest.IsolatedAsyncioTestCase):
         }
 
     async def test_photo_url_is_owner_scoped_and_private(self):
-        context = self.test_api_context()
+        context = self.make_api_context()
         endpoint = isolated("miniapp_avatar_api", context)
         bot = Bot()
         request = SimpleNamespace(
@@ -126,7 +126,7 @@ class TelegramPhotoTests(unittest.IsolatedAsyncioTestCase):
     async def test_rejects_unauthenticated_or_banned_user(self):
         for authed, banned, expected in [(False, False, 401), (True, True, 403)]:
             endpoint = isolated("miniapp_avatar_api",
-                                self.test_api_context(authed=authed, banned=banned))
+                                self.make_api_context(authed=authed, banned=banned))
             bot = Bot()
             response = await endpoint(SimpleNamespace(
                 method="GET", headers={}, app={"telegram_bot": bot}
@@ -135,7 +135,7 @@ class TelegramPhotoTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(bot.requested_uids, [], "No API call for unauthorized users")
 
     async def test_missing_photo_is_not_server_failure(self):
-        endpoint = isolated("miniapp_avatar_api", self.test_api_context())
+        endpoint = isolated("miniapp_avatar_api", self.make_api_context())
         response = await endpoint(SimpleNamespace(
             method="GET", headers={}, app={"telegram_bot": Bot(has_photo=False)}
         ))
@@ -143,7 +143,7 @@ class TelegramPhotoTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.headers["Cache-Control"], "private, no-store")
 
     async def test_telegram_exception_has_safe_fallback(self):
-        endpoint = isolated("miniapp_avatar_api", self.test_api_context())
+        endpoint = isolated("miniapp_avatar_api", self.make_api_context())
         response = await endpoint(SimpleNamespace(
             method="GET", headers={}, app={"telegram_bot": Bot(fail=True)}
         ))
