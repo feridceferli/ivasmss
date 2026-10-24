@@ -813,7 +813,8 @@ async def country_availability_loop(app):
 _number_purchase_locks = {}
 
 
-async def get_number_from_api(rid: str, requester_id=None, country_iso=None):
+async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
+                              expected_price_cents=None):
     """Allocate with a server-controlled AZN price and refund failed requests.
 
     This shared entry point covers bot and Mini App allocations. Region prices
@@ -828,6 +829,15 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None):
     lock = _number_purchase_locks.setdefault(uid, asyncio.Lock())
     async with lock:
         quote = quote_range(digits, load_number_prices(), country_iso)
+        # A paid purchase must never change price after the user's approval.
+        # Check again while holding the user purchase lock, not just in the API.
+        if expected_price_cents is not None and (
+                type(expected_price_cents) is not int
+                or expected_price_cents != quote["cents"]):
+            raise PricingError(
+                "price_changed",
+                "Qiymət dəyişib. Sifarişi yeni qiymətlə yenidən təsdiqləyin.",
+            )
         charge = quote["cents"]
         if charge:
             users = load_data(USER_DATA_FILE)
@@ -6149,10 +6159,13 @@ async def miniapp_get_number_api(request):
                 "message": "Qiymət dəyişib. Sifarişdən əvvəl yeni qiyməti təsdiqləyin.",
                 "price": quote["price"], "free": quote["free"],
             }, status=409))
-        num, country = await get_number_from_api(rid, requester_id=uid,
-                                                 country_iso=str(body.get("country_iso", "")).strip())
+        num, country = await get_number_from_api(
+            rid, requester_id=uid,
+            country_iso=str(body.get("country_iso", "")).strip(),
+            expected_price_cents=expected_cents,
+        )
     except PricingError as exc:
-        status = 402 if exc.code == "insufficient_balance" else 409 if exc.code == "ambiguous_country_price" else 400
+        status = 402 if exc.code == "insufficient_balance" else 409 if exc.code in ("ambiguous_country_price", "price_changed") else 400
         return _miniapp_cors(web.json_response(
             {"error": exc.code, "message": str(exc)}, status=status))
     if not num:
