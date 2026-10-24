@@ -91,7 +91,7 @@ Mini App mobil ekranlara uyğun yenilənib. Bot menyusundan açıldıqda Telegra
 - **Dəvət məcburiyyəti yoxdur**. Mini App arxivdəki bütün dünya nömrələrini kütləvi əldə etmir, boş API range-lərini mövcud kimi göstərmir. Mini App yalnız Telegram botundan açıldıqda etibarlı `initData` alır.
 - **Aktivlər → 📋 Kopyala:** Telegram imzalı `initData` ilə təsdiqlənmiş istifadəçiyə yalnız özünə aid və vaxtı bitməmiş aktiv nömrələrin tam `+` formatı göstərilir. Təkrar nömrələr birləşdirilir və kopyalama düyməsi əlavə olunur. Başqa hesaba aid, ləğv edilmiş və demo sifarişlərinin gizlədilmiş məlumatı açılmır.
 - **/start və daimi Menyu:** Telegram botu Mini App-ə daxil olmaq üçün bir düymə göstərir. Telegram tətbiqi `/start` mesajından sonra veb tətbiqi istifadəçinin toxunuşu olmadan avtomatik aça bilmir; `/menu` ehtiyat bot interfeysini saxlayır.
-- **Profil, balans, dil, liderlər, 2FA, şəxsi TXT:** `/api/profile`, `/api/leaderboard` və `/api/my-numbers` serverdə hesab sahibinin Telegram imzalı sessiyasını yoxlayır; 2FA açarı brauzerdən serverə göndərilmir.
+- **Profil, balans, dil, liderlər və şəxsi TXT:** `/api/profile`, `/api/leaderboard` və `/api/my-numbers` serverdə hesab sahibinin Telegram imzalı sessiyasını yoxlayır.
 - **Mini App admin alətləri:** `/api/admin-tools` yalnız qeydiyyatlı adminə açıqdır. Buradan minimum/maksimum çıxarış məbləği, ödəniş metodlarının vəziyyəti, tələb olunan kanallar, qrupda adi məlumat paylaşımı və yalnız əvvəlcədən razılıq verilmiş alıcıya sabit WhatsApp test mesajı idarə olunur. WhatsApp testinə 5 dəqiqə, əl ilə qrup bildirişinə 90 saniyə limit qoyulub.
 - **Çıxarış sorğuları:** `/api/withdrawals` istifadəçiyə yalnız öz statusunu, adminə isə sorğunun **məbləğ/status metadata**sını göstərir; ödəniş nömrələri buradan açılmır. Yeni maliyyə sorğularının yaradılması və təsdiqi təhlükəsiz yenidən işlənənə qədər mövcud Telegram bot axınında qalır.
 - **Təhlükəsizlik sərhədləri:** real üçüncü tərəf OTP-lərinin sərbəst axtarılması, başqalarının kodlarının qruplara paylaşılması, kütləvi təsdiq/SMS sorğuları və məhdudiyyətsiz mesaj göndərilməsi Mini App-ə köçürülməyib. Xüsusi Telegram admin komandaları üçün ehtiyat `/menu` mövcuddur.
@@ -445,3 +445,16 @@ Layihə **GNU General Public License v3.0 or later** altında yayımlanır. Ətr
 [Layihə ilə bağlı əlaqə — @xudafis](https://t.me/xudafis)
 
 </div>
+
+
+## 💰 Mini App qiymət tənzimləmələri
+
+Admin panelində **Ölkə və nömrə qiymətləri** bölməsindən hər ölkə üçün AZN qiyməti və **🆓 Pulsuz** keçidi tənzimlənir. Ayrı API range kodlarına (məsələn, `99450210`) qiymət qoymaq və ya xüsusi qiyməti silmək mümkündür. Admin digər ölkələr üçün standart qiymət də verə bilər.
+
+- Əvvəlcə range qiyməti, sonra ölkə qiyməti, sonra standart qiymət tətbiq olunur. Başlanğıcda Azərbaycan (+994) üçün 10 AZN, digər ölkələr üçün pulsuzdur.
+- Eyni beynəlxalq kodu paylaşan bir neçə ölkəyə müxtəlif qiymət qoyularsa, ölkəni sırf prefiksdən dəqiqləşdirmək mümkün deyil; həmin range üçün ayrıca qiymət tələb olunur.
+- Telegram imzası təsdiqlənmiş adminlər yalnız `POST /api/prices` vasitəsilə qiymətləri dəyişə bilər; digər istifadəçilər qiymətləri yalnız oxuya bilər.
+- Mini App-in sifariş sorğusu əvvəlcədən görünmüş məbləği `expected_price_cents` kimi göndərir. Serverdə qiymət dəyişibsə, yeni qiymətin təsdiqi istənir.
+- Ödənişli nömrə uğurla ayrıldıqda istifadəçinin balansından məbləğ çıxılır; alınmayan sifarişlərdə öncədən ayrılmış balans geri qaytarılır. Botda da eyni qiymət qaydaları tətbiq edilir.
+- Qiymətlər `DB_FOLDER/number_prices.json` faylında saxlanır. **Render-də qalıcı disk olmadıqda restart/redeploy-dan sonra ayarlar itə bilər** — davamlı verilənlər bazası və ya disk quraşdırın.
+- 2FA/TOTP generatoru botdan və Mini App-dan çıxarılıb.
