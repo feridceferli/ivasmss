@@ -618,10 +618,12 @@
                 </div>
                 <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 8px">🌍 Dünyadan maraqlı xəbərlər</h4>
-                    <p class="notice-mini">Dünya xəbərləri AzadlıqRadiosunun Azərbaycan dilli RSS axınından və BBC/Guardian mənbələrindən götürülür. Hər 2 saatda ən çox 2 qısa Azərbaycan xülasəsi paylaşılır. Link göstərilmir; yalnız mənbənin adı yazılır. Tərcümə servisləri limitə düşsə də Azərbaycan dilli xəbərlər işləyir.</p>
+                    <p class="notice-mini">Dünya xəbərləri AzadlıqRadiosunun Azərbaycan dilli RSS axınından və BBC/Guardian mənbələrindən götürülür. Seçdiyiniz dəqiqə aralığında ən çox 2 qısa Azərbaycan xülasəsi paylaşılır. Link göstərilmir; yalnız mənbənin adı yazılır. Tərcümə servisləri limitə düşsə də Azərbaycan dilli xəbərlər işləyir.</p>
                     <label class="price-free-check" for="world-news-enabled">
                         <input id="world-news-enabled" type="checkbox"> 🌐 Qısa dünya xəbərlərini avtomatik paylaş
                     </label>
+                    <label class="notice-mini" for="world-news-interval">⏱️ Xəbər paylaşım aralığı (dəqiqə, 10–1440)</label>
+                    <input id="world-news-interval" type="number" min="10" max="1440" step="1" value="120" inputmode="numeric" style="width:100%;max-width:220px;margin:8px 0 12px;padding:12px;border-radius:10px">
                     <p id="world-news-status" class="notice-mini" role="status">Xəbər paylaşımının vəziyyəti yüklənir...</p>
                     <div class="quick-actions">
                         <button class="action-small" onclick="saveWorldNewsSettings()">💾 Xəbər ayarlarını saxla</button>
