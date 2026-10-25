@@ -191,6 +191,20 @@ def _source_excerpt(story):
     return title[:250]
 
 
+def _native_az_summary(story):
+    """Shorten an already-Azerbaijani RSS item without external translation."""
+    title = _headline(story.get("title", ""))
+    description = _clean_description(story.get("description", ""))
+    if not title:
+        return None
+    candidate = title.rstrip(" .!?") + "."
+    if description and description.casefold() not in title.casefold():
+        first = re.split(r"(?<=[.!?])\\s+", description, maxsplit=1)[0].strip()
+        if 25 <= len(first) <= 135 and first.casefold() not in candidate.casefold():
+            candidate += " " + first.rstrip(" .!?") + "."
+    return _az_summary(candidate, title + ". " + description)
+
+
 def _az_summary(candidate, original):
     """Reject untranslated, fabricated-numeral, or URL-bearing output."""
     if not isinstance(candidate, str):
