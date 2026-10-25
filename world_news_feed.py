@@ -46,27 +46,33 @@ SENSITIVE_TERMS = ("kill", "massacre", "bomb", "attack", "dead", "death", "war",
 
 
 def load_news_settings():
-    result = {"enabled": True}
+    result = {"enabled": True, "interval_minutes": 120}
     try:
         with open(SETTINGS_FILE, encoding="utf-8") as stream:
             data = json.load(stream)
         if isinstance(data, dict) and type(data.get("enabled")) is bool:
             result["enabled"] = data["enabled"]
+        if type(data.get("interval_minutes")) is int and 10 <= data["interval_minutes"] <= 1440:
+            result["interval_minutes"] = data["interval_minutes"]
     except (OSError, ValueError, TypeError):
         pass
     return result
 
 
-def save_news_settings(enabled):
+def save_news_settings(enabled, interval_minutes=None):
     if type(enabled) is not bool:
         raise ValueError("invalid_news_settings")
-    value = {"enabled": enabled}
+    if interval_minutes is None:
+        interval_minutes = load_news_settings()["interval_minutes"]
+    if type(interval_minutes) is not int or not 10 <= interval_minutes <= 1440:
+        raise ValueError("invalid_news_interval")
+    value = {"enabled": enabled, "interval_minutes": interval_minutes}
     atomic_save(value, SETTINGS_FILE)
     return value
 
 
 def public_news_status():
-    return {"enabled": load_news_settings()["enabled"], "interval_minutes": 120,
+    return {**load_news_settings(),
             "sources": [s[0] for s in SOURCES]}
 
 
@@ -372,14 +378,15 @@ async def publish_world_news(*, bot, group_id, now=None, state_file=None,
     First snapshot is silent to prevent deployment/restart spam. A failed
     Telegram send never marks the headlines as seen.
     """
-    if not load_news_settings()["enabled"]:
+    settings = load_news_settings()
+    if not settings["enabled"]:
         return "disabled"
     if not group_id:
         return "not_configured"
     now = time.time() if now is None else float(now)
     path = state_file or data_path(STATE_FILE)
     prior = _read_state(path)
-    if prior.get("last_sent") and now - float(prior["last_sent"]) < NEWS_INTERVAL:
+    if prior.get("last_sent") and now - float(prior["last_sent"]) < settings["interval_minutes"] * 60:
         return "cooldown"
 
     candidates = await fetch_recent_news(client, now)
