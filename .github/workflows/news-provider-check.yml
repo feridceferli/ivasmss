@@ -24,6 +24,9 @@ jobs:
               "mymemory_az": "https://api.mymemory.translated.net/get?" + urllib.parse.urlencode({"q": sample, "langpair": "en|az"}),
               "google_public_az": "https://translate.googleapis.com/translate_a/single?" + urllib.parse.urlencode({"client": "gtx", "sl":"en", "tl":"az", "dt":"t", "q": sample}),
               "rss_bbc_world": "https://feeds.bbci.co.uk/news/world/rss.xml",
+              "azadliq_world": "https://www.azadliq.org/api/z_bjtl-vomx-tpevvrqq",
+              "azadliq_science": "https://www.azadliq.org/api/zimqmrl-vomx-tpem-imq",
+              "ayna_world": "https://www.ayna.az/rss/category/dunya",
           }
           for label, url in endpoints.items():
               try:
@@ -38,6 +41,13 @@ jobs:
                             "details",str(doc.get("responseDetails",""))[:130])
                   if label.startswith("google"):
                       print(label,"result",repr(json.loads(data)[0][0][0][:160]))
+                  if label.endswith("world") or label=="azadliq_science":
+                      if label!="rss_bbc_world":
+                          import xml.etree.ElementTree as ET
+                          root = ET.fromstring(data)
+                          items=root.findall(".//item")
+                          print(label,"items",len(items),"first",repr(items[0].findtext("title")[:120]) if items else None,
+                                "lastpub",repr(items[0].findtext("pubDate")) if items else None)
               except Exception as e:
                   print(label, type(e).__name__, str(e)[:180])
           PY
