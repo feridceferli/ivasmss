@@ -974,7 +974,7 @@ async function loadAdminTools() {
         document.getElementById("world-news-enabled").checked = !!worldNews.enabled;
         document.getElementById("world-news-status").textContent =
             (worldNews.enabled ? "✅ Dünya xəbərləri aktivdir." : "⏸️ Dünya xəbərləri söndürülüb.") +
-            " · " + (worldNews.interval_minutes || 120) + " dəqiqədən bir · mənbə linkləri ilə.";
+            " · " + (worldNews.interval_minutes || 120) + " dəqiqədən bir · linksiz qısa Azərbaycan xülasələri.";
         const wa = adminTools.whatsapp || {};
         const archive = adminTools.archive_sync || {};
         status.textContent = "📡 WhatsApp: " + (wa.status === "configured" ? "✅ Ayarlanıb" : "⚠️ Ayarlanmayıb") +
