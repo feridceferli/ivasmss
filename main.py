@@ -5695,7 +5695,7 @@ async def miniapp_admin_tools_api(request):
     action = body.get("action")
     if action == "world_news_settings":
         try:
-            save_news_settings(body.get("enabled"))
+            save_news_settings(body.get("enabled"), body.get("interval_minutes"))
         except ValueError:
             return _miniapp_cors(web.json_response(
                 {"error": "invalid_news_settings"}, status=400))
