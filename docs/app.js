@@ -972,6 +972,7 @@ async function loadAdminTools() {
             "⚠️ GROQ_API_KEY yoxdur — hazır şablonla paylaşımlar davam edir.";
         const worldNews = adminTools.world_news || {};
         document.getElementById("world-news-enabled").checked = !!worldNews.enabled;
+        document.getElementById("world-news-interval").value = worldNews.interval_minutes || 120;
         document.getElementById("world-news-status").textContent =
             (worldNews.enabled ? "✅ Dünya xəbərləri aktivdir." : "⏸️ Dünya xəbərləri söndürülüb.") +
             " · " + (worldNews.interval_minutes || 120) + " dəqiqədən bir · linksiz qısa Azərbaycan xülasələri.";
@@ -1147,7 +1148,8 @@ async function saveWorldNewsSettings() {
     if (!state.isAdmin) return;
     try {
         await sendAdminToolAction("world_news_settings", {
-            enabled: document.getElementById("world-news-enabled").checked
+            enabled: document.getElementById("world-news-enabled").checked,
+            interval_minutes: Number(document.getElementById("world-news-interval").value)
         });
         await loadAdminTools();
         alertUser("✅ Dünya xəbərləri üçün ayarlar saxlanıldı.");
