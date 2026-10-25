@@ -251,10 +251,21 @@ async def _mymemory_summary(story, client=None):
         response.raise_for_status()
         data = response.json()
         if str(data.get("responseStatus")) != "200":
+            print("[world-news] mymemory_status=" + str(data.get("responseStatus"))
+                  + " quota=" + str(bool(data.get("quotaFinished"))), flush=True)
             return None
-        return _az_summary(
+        output = _az_summary(
             data.get("responseData", {}).get("translatedText"), excerpt)
-    except (httpx.HTTPError, ValueError, TypeError, KeyError, AttributeError):
+        if not output:
+            print("[world-news] mymemory_unusable_translation", flush=True)
+        return output
+    except (httpx.HTTPStatusError, httpx.RequestError) as exc:
+        print("[world-news] mymemory_http=" +
+              str(exc.response.status_code if isinstance(exc, httpx.HTTPStatusError)
+                  else type(exc).__name__), flush=True)
+        return None
+    except (ValueError, TypeError, KeyError, AttributeError) as exc:
+        print("[world-news] mymemory_parse=" + type(exc).__name__, flush=True)
         return None
 
 
@@ -305,8 +316,8 @@ async def translate_headlines(stories, client=None, fallback_client=None,
                     if checked:
                         translated[story["id"]] = checked
         except (httpx.HTTPError, ValueError, KeyError, TypeError,
-                IndexError, AttributeError):
-            pass
+                IndexError, AttributeError) as exc:
+            print("[world-news] groq_unavailable=" + type(exc).__name__, flush=True)
 
     if allow_fallback:
         for story in stories[:2]:
