@@ -393,13 +393,9 @@ async def publish_world_news(*, bot, group_id, now=None, state_file=None,
     if not candidates:
         return "no_fresh_news"
 
-    if not prior.get("initialized"):
-        atomic_save({
-            "initialized": True,
-            "last_sent": now,
-            "seen_ids": [c["id"] for c in candidates[:100]],
-        }, path)
-        return "initialized"
+    # On a new deployment, publish one fresh sourced digest immediately.
+    # Mark items seen only after Telegram confirms delivery. The old silent
+    # initialization could permanently suppress all recent headlines.
 
     seen = set(prior.get("seen_ids", []))
     selected = choose_headlines(candidates, seen, limit=2)
