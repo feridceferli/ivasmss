@@ -733,6 +733,7 @@ async def fetch_services_cached():
 async def country_availability_loop(app):
     """Provider announcements and separately throttled world news digests."""
     last_news_poll = 0.0
+    news_probe_pending = True
     while True:
         try:
             _services_cache["timestamp"] = 0
@@ -749,6 +750,19 @@ async def country_availability_loop(app):
                 print(f"[global-feed] status={status}", flush=True)
         except Exception as exc:
             print(f"[service-country-watch] {type(exc).__name__}: {exc}")
+        # Single startup diagnostic from the real Render runtime.
+        # No posts, secrets, article text or private data are logged.
+        if news_probe_pending:
+            news_probe_pending = False
+            try:
+                probe_candidates = choose_headlines(await fetch_recent_news(), set(), limit=2)
+                probe_translated = await translate_headlines(probe_candidates)
+                print("[world-news] startup_translation_probe candidates=" +
+                      str(len(probe_candidates)) + " translated=" +
+                      str(len(probe_translated)), flush=True)
+            except Exception as exc:
+                print("[world-news] startup_probe_error=" +
+                      type(exc).__name__, flush=True)
         # Separate ten-minute RSS poll; only posts when fresh unread headlines
         # and the two-hour news interval are satisfied. No user broadcasts.
         if time.monotonic() - last_news_poll >= WORLD_NEWS_POLL_INTERVAL:
