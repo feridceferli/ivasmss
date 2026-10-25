@@ -1,0 +1,41 @@
+name: News translation provider connectivity check
+
+on:
+  push:
+    paths:
+      - .github/workflows/news-provider-check.yml
+  workflow_dispatch:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - name: Probe public news and free translation (safe test text only)
+        run: |
+          python - <<'PY'
+          import json, urllib.parse, urllib.request
+          sample = "Scientists developed a new robot for ocean research."
+          endpoints = {
+              "mymemory_az_AZ": "https://api.mymemory.translated.net/get?" + urllib.parse.urlencode({"q": sample, "langpair": "en|az-AZ"}),
+              "mymemory_az": "https://api.mymemory.translated.net/get?" + urllib.parse.urlencode({"q": sample, "langpair": "en|az"}),
+              "google_public_az": "https://translate.googleapis.com/translate_a/single?" + urllib.parse.urlencode({"client": "gtx", "sl":"en", "tl":"az", "dt":"t", "q": sample}),
+              "rss_bbc_world": "https://feeds.bbci.co.uk/news/world/rss.xml",
+          }
+          for label, url in endpoints.items():
+              try:
+                  req = urllib.request.Request(url, headers={"User-Agent":"Mozilla/5.0 (news healthcheck)"})
+                  with urllib.request.urlopen(req, timeout=10) as response:
+                      data=response.read(100000)
+                      print(label, "status", response.status, "bytes",len(data))
+                  if label.startswith("mymemory"):
+                      doc = json.loads(data)
+                      print(label,"result", str(doc.get("responseStatus")),
+                            repr(str(doc.get("responseData",{}).get("translatedText",""))[:150]),
+                            "details",str(doc.get("responseDetails",""))[:130])
+                  if label.startswith("google"):
+                      print(label,"result",repr(json.loads(data)[0][0][0][:160]))
+              except Exception as e:
+                  print(label, type(e).__name__, str(e)[:180])
+          PY
