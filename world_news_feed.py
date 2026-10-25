@@ -33,7 +33,9 @@ SOURCES = (
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml", ("bbc.co.uk", "bbc.com")),
     ("BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml", ("bbc.co.uk", "bbc.com")),
     ("The Guardian", "https://www.theguardian.com/world/rss", ("theguardian.com",)),
+    ("AzadlıqRadiosu", "https://www.azadliq.org/api/z_bjtl-vomx-tpevvrqq", ("azadliq.org",)),
 )
+AZ_SOURCES = frozenset(("AzadlıqRadiosu",))
 POSITIVE_TERMS = ("science", "space", "technology", "robot", "discovery", "discover",
                   "research", "innovation", "animal", "wildlife", "planet",
                   "moon", "ocean", "archaeolog", "culture", "art", "unusual",
