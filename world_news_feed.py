@@ -127,11 +127,15 @@ def parse_rss(content, source, allowed, now=None):
         canonical = link
         key = hashlib.sha256(canonical.encode("utf-8")).hexdigest()
         text = title.casefold()
+        language = "az" if source in AZ_SOURCES else "en"
         score = sum(term in text for term in POSITIVE_TERMS) * 5
+        if language == "az":
+            # Prefer actual Azerbaijani reporting over rate-limited translation.
+            score += 25
         if any(term in text for term in SENSITIVE_TERMS):
-            # Serious tragedies should never be framed as amusing trivia.
-            score -= 50
-        found.append({"title": title,
+            # Serious events are not used as amusing headlines.
+            score -= 80
+        found.append({"language": language, "title": title,
                       "description": _clean_description(item.findtext("description")),
                       "url": canonical, "source": source,
                       "timestamp": published, "id": key, "score": score})
