@@ -146,6 +146,25 @@ class NewsParsingTests(unittest.TestCase):
         self.assertEqual(len(news.choose_headlines(items, set())), 1)
         self.assertIn("Space robot", news.choose_headlines(items, set())[0]["title"])
 
+    def test_azeri_world_items_are_prioritized_and_summarized_without_translation(self):
+        payload = feed([
+            make_item("Alimlər yeni təbiət layihəsini təqdim ediblər",
+                      "https://www.azadliq.org/a/elm-xeber/33123456.html",
+                      NOW - 100,
+                      "Alimlər bildirirlər ki, yeni layihədə robotlardan istifadə olunur."),
+        ])
+        current = news.parse_rss(payload, "AzadlıqRadiosu",
+                                 ("azadliq.org",), now=NOW)
+        self.assertEqual(len(current), 1)
+        self.assertEqual(current[0]["language"], "az")
+        self.assertGreaterEqual(current[0]["score"], 20)
+        self.assertTrue(news._native_az_summary(current[0]).startswith("Alimlər"))
+        rendered = news.compose_news_digest(
+            current, {current[0]["id"]: news._native_az_summary(current[0])})
+        self.assertIn("Alimlər", rendered)
+        self.assertIn("Mənbə: AzadlıqRadiosu", rendered)
+        self.assertNotIn("https://", rendered)
+
     def test_settings_default_validate_and_preserve(self):
         with tempfile.TemporaryDirectory() as root:
             with patch.object(news, "SETTINGS_FILE", str(Path(root) / "settings.json")):
@@ -252,6 +271,19 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
             result = await news.translate_headlines(
                 [article], client=invalid, allow_fallback=False)
             self.assertFalse(result)
+
+    async def test_native_azerbaijani_story_needs_no_translate_provider(self):
+        story = {
+            "id": "az-1", "language": "az",
+            "title": "Alimlər yeni tədqiqat layihəsini təqdim ediblər",
+            "description": "Tədqiqatçılar bildiriblər ki, layihə gələn il davam edəcək."
+        }
+        with patch.dict(os.environ, {"GROQ_API_KEY": "simulated-unreachable-key"}):
+            result = await news.translate_headlines(
+                [story], client=FakeAiClient("invalid"),
+                fallback_client=FakeMemoryClient("invalid"))
+        self.assertIn("Alimlər", result[story["id"]])
+        self.assertEqual(len(result), 1)
 
     async def test_keyless_free_translation_makes_short_az_summary(self):
         story = {"id": "space-1", "title": "Scientists create new space robot",
