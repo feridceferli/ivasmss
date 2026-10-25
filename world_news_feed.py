@@ -199,7 +199,7 @@ def _native_az_summary(story):
         return None
     candidate = title.rstrip(" .!?") + "."
     if description and description.casefold() not in title.casefold():
-        first = re.split(r"(?<=[.!?])\\s+", description, maxsplit=1)[0].strip()
+        first = re.split(r"(?<=[.!?])\s+", description, maxsplit=1)[0].strip()
         if 25 <= len(first) <= 135 and first.casefold() not in candidate.casefold():
             candidate += " " + first.rstrip(" .!?") + "."
     return _az_summary(candidate, title + ". " + description)
@@ -298,8 +298,16 @@ async def translate_headlines(stories, client=None, fallback_client=None,
     """
     if not stories:
         return {}
-    originals = [_source_excerpt(item) for item in stories]
     translated = {}
+    for item in stories:
+        if item.get("language") == "az":
+            summary = _native_az_summary(item)
+            if summary:
+                translated[item["id"]] = summary
+    foreign = [item for item in stories if item.get("language") != "az"]
+    if not foreign:
+        return translated
+    originals = [_source_excerpt(item) for item in foreign]
     token = os.environ.get("GROQ_API_KEY", "").strip()
     if token:
         from free_ai_posts import GROQ_ENDPOINT, GROQ_MODEL
@@ -330,8 +338,8 @@ async def translate_headlines(stories, client=None, fallback_client=None,
             response.raise_for_status()
             data = json.loads(response.json()["choices"][0]["message"]["content"])
             answers = data.get("summaries", [])
-            if isinstance(answers, list) and len(answers) == len(stories):
-                for story, original, answer in zip(stories, originals, answers):
+            if isinstance(answers, list) and len(answers) == len(foreign):
+                for story, original, answer in zip(foreign, originals, answers):
                     checked = _az_summary(answer, original)
                     if checked:
                         translated[story["id"]] = checked
@@ -340,7 +348,7 @@ async def translate_headlines(stories, client=None, fallback_client=None,
             print("[world-news] groq_unavailable=" + type(exc).__name__, flush=True)
 
     if allow_fallback:
-        for story in stories[:2]:
+        for story in foreign[:2]:
             if story["id"] not in translated:
                 result = await _mymemory_summary(story, fallback_client)
                 if result:
