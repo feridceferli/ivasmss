@@ -12,6 +12,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Install HTTPX
+        run: python -m pip install httpx==0.28.1
       - name: Probe public news and free translation (safe test text only)
         run: |
           python - <<'PY'
@@ -38,4 +40,22 @@ jobs:
                       print(label,"result",repr(json.loads(data)[0][0][0][:160]))
               except Exception as e:
                   print(label, type(e).__name__, str(e)[:180])
+          PY
+      - name: Probe actual news preview pipeline without keys
+        run: |
+          GROQ_API_KEY="" python - <<'PY'
+          import asyncio
+          from world_news_feed import fetch_recent_news,choose_headlines,translate_headlines,_source_excerpt
+          async def main():
+              news = await fetch_recent_news()
+              selected=choose_headlines(news,set(),limit=2)
+              print("RSS story count",len(news),"selected",len(selected))
+              for n,story in enumerate(selected):
+                  print("HEADLINE",n,repr(story["title"][:135]))
+                  print("DESCRIPTION",n,repr(story.get("description","")[:150]))
+                  print("SOURCE EXCERPT",n,repr(_source_excerpt(story)[:300]))
+              translations=await translate_headlines(selected)
+              for n,story in enumerate(selected):
+                  print("TRANSLATION",n,repr(translations.get(story["id"],"missing")))
+          asyncio.run(main())
           PY
