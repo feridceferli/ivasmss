@@ -798,14 +798,15 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
         quote = quote_range(digits, load_number_prices(), country_iso)
         # A paid purchase must never change price after the user's approval.
         # Check again while holding the user purchase lock, not just in the API.
-        if expected_price_cents is not None and (
+        if not is_admin(int(uid)) and expected_price_cents is not None and (
                 type(expected_price_cents) is not int
                 or expected_price_cents != quote["cents"]):
             raise PricingError(
                 "price_changed",
                 "Qiymət dəyişib. Sifarişi yeni qiymətlə yenidən təsdiqləyin.",
             )
-        charge = quote["cents"]
+        # Admin accounts are exempt from number purchase charges.
+        charge = 0 if is_admin(int(uid)) else quote["cents"]
         if charge:
             users = load_data(USER_DATA_FILE)
             user = users.get(uid) or get_user(uid)
@@ -6187,7 +6188,7 @@ async def miniapp_get_number_api(request):
     try:
         quote = quote_range(rid, load_number_prices(), country_iso)
         expected_cents = body.get("expected_price_cents")
-        if type(expected_cents) is not int or expected_cents != quote["cents"]:
+        if not is_admin(uid) and (type(expected_cents) is not int or expected_cents != quote["cents"]):
             return _miniapp_cors(web.json_response({
                 "error": "price_changed",
                 "message": "Qiymət dəyişib. Sifarişdən əvvəl yeni qiyməti təsdiqləyin.",
