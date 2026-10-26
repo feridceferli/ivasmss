@@ -5583,7 +5583,9 @@ async def miniapp_admin_api(request):
     users=load_data(USER_DATA_FILE)
     if request.method=="GET":
         rows=[]
-        for user_id,data in list(users.items())[-100:]:
+        all_stats = load_stats()
+        # All registered accounts are available to the authenticated admin.
+        for user_id,data in users.items():
             first_name = str(data.get("first_name") or "").strip()
             last_name = str(data.get("last_name") or "").strip()
             full_name = (first_name + " " + last_name).strip() or str(data.get("full_name") or "").strip()
@@ -5594,7 +5596,7 @@ async def miniapp_admin_api(request):
                 "first_name": first_name[:100], "last_name": last_name[:100],
                 "username": username[:100],
                 "balance": format_balance(data.get("balance", 0)),
-                "total_numbers": len(load_stats().get(user_id, {}).get("numbers_taken", [])),
+                "total_numbers": len(all_stats.get(user_id, {}).get("numbers_taken", [])),
                 "banned": is_user_banned(user_id), "az_approved": az_range_allowed(user_id),
             })
         cfg=load_system_config()
