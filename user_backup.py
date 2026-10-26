@@ -26,6 +26,11 @@ class UserProfileBackup:
         self.status = "İstifadəçi bazasının yedəklənməsi başlayır."
         self.ready = False
         self._lock = asyncio.Lock()
+        self._changed = asyncio.Event()
+
+    def changed(self):
+        """Wake the background sync after an account or usage update."""
+        self._changed.set()
 
     @staticmethod
     def _read(path):
@@ -180,4 +185,10 @@ class UserProfileBackup:
                 except Exception as exc:
                     self.status = "❌ İstifadəçi arxivi xətası (" + type(exc).__name__ + ")."
                     log.warning("Private user backup failed (%s)", type(exc).__name__)
-                await asyncio.sleep(interval)
+                try:
+                    await asyncio.wait_for(self._changed.wait(), timeout=interval)
+                    self._changed.clear()
+                    # Batch related writes from the same Telegram operation.
+                    await asyncio.sleep(2)
+                except asyncio.TimeoutError:
+                    pass
