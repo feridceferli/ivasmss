@@ -1,0 +1,19 @@
+name: Live website and Telegram smoke test
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - tests/live_website_smoke.py
+      - .github/workflows/live-website-smoke.yml
+
+jobs:
+  live-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Check public website, API protection, and Telegram sign-in challenge
+        run: python tests/live_website_smoke.py
