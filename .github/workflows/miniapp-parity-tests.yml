@@ -11,6 +11,10 @@ on:
       - test_world_news_feed.py
       - docs/index.html
       - docs/app.js
+      - docs/web-login.js
+      - docs/web-login.css
+      - web_login.py
+      - test_web_login.py
       - docs/miniapp-modern.css
       - test_miniapp_parity.py
       - test_miniapp_active_numbers.py
@@ -40,6 +44,10 @@ on:
       - test_world_news_feed.py
       - docs/index.html
       - docs/app.js
+      - docs/web-login.js
+      - docs/web-login.css
+      - web_login.py
+      - test_web_login.py
       - docs/miniapp-modern.css
       - test_miniapp_parity.py
       - test_miniapp_active_numbers.py
@@ -77,7 +85,7 @@ jobs:
       - name: Confirm modern CSS stylesheet exists
         run: test -s docs/miniapp-modern.css
       - name: Check JavaScript syntax
-        run: node --check docs/app.js && node --check docs/az-provider-diagnostics.js && node --check docs/world-provider-diagnostics.js && node --check docs/world-provider-diagnostics.js
+        run: node --check docs/app.js && node --check docs/web-login.js && node --check docs/az-provider-diagnostics.js && node --check docs/world-provider-diagnostics.js && node --check docs/world-provider-diagnostics.js
       - name: Test read-only Azerbaijan range diagnostics
         run: node test_az_provider_diagnostics.cjs
       - name: Test worldwide owner-scoped range and active-number diagnostics
@@ -91,6 +99,6 @@ jobs:
       - name: Test Telegram Mini App avatar privacy and fallback
         run: node test_telegram_avatar_ui.cjs
       - name: Check Python syntax
-        run: python -m py_compile main.py world_country_codes.py number_pricing.py free_ai_posts.py global_availability_feed.py world_news_feed.py
+        run: python -m py_compile main.py web_login.py world_country_codes.py number_pricing.py free_ai_posts.py global_availability_feed.py world_news_feed.py
       - name: Test Mini App parity, safe rendering and +994 permissions
-        run: python -m unittest -v test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing test_free_ai_posts test_global_availability_feed test_world_news_feed
+        run: python -m unittest -v test_web_login test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing test_free_ai_posts test_global_availability_feed test_world_news_feed
