@@ -1348,6 +1348,12 @@ def load_data(filename=USER_DATA_FILE):
 
 def save_data(data, filename=USER_DATA_FILE):
     atomic_save(data, filename)
+    if str(filename) == str(USER_DATA_FILE):
+        try:
+            asyncio.get_running_loop()
+            user_backup.changed()
+        except RuntimeError:
+            pass
 
 
 def load_number_prices():
@@ -1417,6 +1423,11 @@ def load_stats():
 
 def save_stats(stats):
     atomic_save(stats, STATS_FILE)
+    try:
+        asyncio.get_running_loop()
+        user_backup.changed()
+    except RuntimeError:
+        pass
 
 
 def add_number_taken(uid, count=1):
