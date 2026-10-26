@@ -772,7 +772,7 @@ async def country_availability_loop(app):
             try:
                 news_status = await publish_world_news(
                     bot=app.bot, group_id=GLOBAL_FEED_GROUP_ID)
-                if news_status in ("sent", "send_failed"):
+                if news_status != "cooldown":
                     print(f"[world-news] status={news_status}", flush=True)
             except Exception as exc:
                 print(f"[world-news] error={type(exc).__name__}", flush=True)
@@ -5877,6 +5877,8 @@ async def miniapp_admin_tools_api(request):
 
 
 async def post_init(application):
+    # Requested fixed cadence for the verified fun-news group feed.
+    save_news_settings(True, 10)
     # Restore private user balances and usage counts before bot workers start.
     # If remote backup is inaccessible, the backup worker will retry without
     # uploading an empty replacement over the existing archive.
