@@ -5637,7 +5637,9 @@ def _safe_order(uid, order):
     digits = normalize_number(order.get("full_number") or "")
     if digits and order.get("status") == "Aktiv" and age < NUMBER_WAIT_SECONDS:
         assigned = active_numbers.get(digits)
-        if assigned and int(assigned.get("uid", 0)) == int(uid):
+        if (assigned and int(assigned.get("uid", 0)) == int(uid)
+                and assigned.get("lease_id") == order.get("id")
+                and active_number_remaining(assigned) > 0):
             result["number"] = "+" + digits
             result["number_masked"] = result["number"]
     return result
