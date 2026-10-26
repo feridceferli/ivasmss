@@ -893,39 +893,63 @@ async function adminBalanceChange() {
 }
 
 
+let adminUsersCache = [];
+
+function adminJump(targetId) {
+    if (!state.isAdmin) return;
+    const target = document.getElementById(targetId);
+    if (target) target.scrollIntoView({behavior: "smooth", block: "start"});
+}
+
+function filterAdminUsers() {
+    if (!state.isAdmin) return;
+    const term = (document.getElementById("admin-user-search")?.value || "").trim().toLocaleLowerCase();
+    const container = document.getElementById("admin-users-list");
+    if (!container) return;
+    container.replaceChildren();
+    const visible = adminUsersCache.filter(user => {
+        const name = [user.first_name, user.last_name].filter(Boolean).join(" ") || user.name || "";
+        return [name, user.username || "", String(user.id || "")].join(" ").toLocaleLowerCase().includes(term);
+    });
+    container.appendChild(node("p", "Göstərilən: " + visible.length + " / " + adminUsersCache.length + " istifadəçi", "notice-mini"));
+    if (!visible.length) container.appendChild(node("p", "Uyğun istifadəçi tapılmadı.", "notice-mini"));
+    visible.forEach(user => {
+        const row = node("div", null, "admin-user-line");
+        const identity = node("div", null, "admin-user-identity");
+        const fullname = [user.first_name, user.last_name].filter(Boolean).join(" ").trim() || user.name || "Adsız istifadəçi";
+        identity.appendChild(node("strong", "👤 " + fullname));
+        identity.appendChild(node("small", (user.username ? "@" + user.username + " · " : "") + "ID: " + user.id));
+        identity.appendChild(node("small", "💰 " + (user.balance ?? "0.00") + " AZN · 📱 " + (user.total_numbers ?? 0) + " nömrə"));
+        identity.appendChild(node("small", (user.az_approved ? "✅ +994" : "🔒 +994 icazəsiz") + (user.banned ? " · 🚫 Bloklu" : "")));
+        row.appendChild(identity);
+        const actions = node("div", null, "quick-actions");
+        const az = node("button", user.az_approved ? "🇦🇿 Ləğv et" : "🇦🇿 İcazə", "action-small");
+        az.addEventListener("click", () => adminAzPermission(!user.az_approved, user.id));
+        const ban = node("button", user.banned ? "🔓 Aç" : "🚫 Blokla", "action-small");
+        ban.addEventListener("click", () => adminUserAction(user.banned ? "unban" : "ban", user.id));
+        actions.appendChild(az);
+        actions.appendChild(ban);
+        row.appendChild(actions);
+        container.appendChild(row);
+    });
+}
+
 async function fetchAdminUsers() {
     if (!state.isAdmin) return;
     const container = document.getElementById("admin-users-list");
     try {
         const data = await api("/api/admin");
-        container.replaceChildren();
-        container.appendChild(node("p", "İstifadəçilər: " + (data.user_count || 0),
-            "notice-mini"));
+        adminUsersCache = data.users || [];
         const monitor = data.monitor || {};
         const sys = document.getElementById("admin-system-status");
-        sys.textContent = "🩺 SMS monitor: " + String(monitor.state || "naməlum") +
+        sys.textContent = "👥 Cəmi: " + (data.user_count || 0) +
+            " · 🩺 SMS monitor: " + String(monitor.state || "naməlum") +
             " · HTTP: " + String(monitor.http_status ?? "—") +
             " · API: " + String(monitor.upstream_code ?? "—") +
             " · Yoxlanan: " + String(monitor.items_seen ?? 0);
-        (data.users || []).forEach(user => {
-            const row = node("div", null, "admin-user-line");
-            row.appendChild(node("span", (user.name || "İstifadəçi") + " · ID " + user.id +
-                (user.az_approved ? " ✅ +994" : " 🔒") +
-                (user.banned ? " · 🚫 Bloklu" : "")));
-            const actions = node("span", null, "quick-actions");
-            const btn = node("button", user.az_approved ? "🇦🇿 Ləğv et" : "🇦🇿 İcazə",
-                "action-small");
-            btn.addEventListener("click", () => adminAzPermission(!user.az_approved, user.id));
-            actions.appendChild(btn);
-            const ban = node("button", user.banned ? "🔓 Aç" : "🚫 Blokla", "action-small");
-            ban.addEventListener("click", () => adminUserAction(user.banned ? "unban" : "ban", user.id));
-            actions.appendChild(ban);
-            row.appendChild(actions);
-            container.appendChild(row);
-        });
+        filterAdminUsers();
     } catch (err) { clearAndText(container, err.message); }
 }
-
 
 
 let adminTools = null;
@@ -986,6 +1010,11 @@ async function loadAdminTools() {
                 /yeniləndi|yenidir/i.test(detail) ? "✅ " + detail :
                 "ℹ️ " + detail;
         }
+        const demo = adminTools.demo || {};
+        const demoStatus = document.getElementById("admin-demo-status");
+        if (demoStatus) demoStatus.textContent =
+            (demo.running ? "🟢 Aktiv" : "⏸️ Dayandırılıb") +
+            " · Test mesajları: " + String(demo.sent_count ?? 0);
         const userBackup = adminTools.user_backup || {};
         const userBackupStatus = document.getElementById("admin-user-backup-status");
         if (userBackupStatus) {
