@@ -752,7 +752,36 @@ async function fetchOrders() {
     }
 }
 
+async function fetchActivityHistory() {
+    const container = document.getElementById("activity-history-list");
+    if (!container) return;
+    try {
+        const result = await api("/api/activity-history");
+        const events = Array.isArray(result.history) ? result.history : [];
+        container.replaceChildren();
+        if (!events.length) {
+            clearAndText(container, "Hələ saxlanmış fəaliyyət yoxdur.");
+            return;
+        }
+        const actionNames = {
+            "NUMBER_TAKEN": "📱 Nömrə alındı",
+            "OTP_RECEIVED": "✅ OTP qəbul edildi",
+            "OTP_RECEIVED_FREE": "✅ OTP qəbul edildi",
+            "DEMO_OTP_SENT": "🧪 Test bildirişi"
+        };
+        events.slice(0, 100).forEach(event => {
+            const row = node("div", null, "admin-user-line");
+            row.appendChild(node("strong", actionNames[event.action] || "📋 " + String(event.action || "Hadisə")));
+            row.appendChild(node("small", String(event.timestamp || "").replace("T", " "), "notice-mini"));
+            container.appendChild(row);
+        });
+    } catch (err) {
+        clearAndText(container, "Tarixçə yüklənmədi: " + err.message);
+    }
+}
+
 async function fetchIncomingSms() {
+    fetchActivityHistory();
     const container = document.getElementById("sms-list-container");
     try {
         const res = await api("/api/incoming-sms");
@@ -822,13 +851,13 @@ async function fetchLeaderboard() {
         container.replaceChildren();
         const leaders = Array.isArray(data.leaders) ? data.leaders : [];
         if (!leaders.length) {
-            clearAndText(container, "Bu gün nömrə aktivliyi yoxdur.");
+            clearAndText(container, "Bu gün OTP statistikası yoxdur.");
             return;
         }
         leaders.forEach((leader, index) => {
             const row = node("div", null, "admin-user-line");
             row.appendChild(node("span", (index + 1) + ". 🏅 " + (leader.name || "İstifadəçi")));
-            row.appendChild(node("b", String(leader.count || 0) + " nömrə"));
+            row.appendChild(node("b", String(leader.count || 0) + " OTP"));
             container.appendChild(row);
         });
     } catch (err) { clearAndText(container, err.message); }
