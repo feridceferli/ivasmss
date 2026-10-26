@@ -120,12 +120,6 @@ def compose_availability_notice(current, previous=None, country_name_lookup=None
         if len(changed) > _MAX_COUNTRY_LINES:
             rows.append(f"… və daha {len(changed) - _MAX_COUNTRY_LINES} ölkə kodu")
 
-    rows.extend([
-        "",
-        "ℹ️ Məlumat /liveaccess kataloqundan alınır.",
-        "⚠️ Range siyahısı aktiv nömrə ehtiyatını və SMS/OTP çatdırılmasını təsdiqləmir.",
-        "🔒 Şəxsi nömrələr, SMS mətnləri və OTP kodları paylaşılmır.",
-    ])
     return "\n".join(rows)
 
 
