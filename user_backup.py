@@ -95,7 +95,7 @@ class UserProfileBackup:
             raise RuntimeError("Private archive token or repository missing")
         if not re.fullmatch(r"[A-Za-z0-9_.-]+/[A-Za-z0-9_.-]+", repo):
             raise ValueError("Invalid private archive repository")
-        if not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\\.json", path):
+        if not re.fullmatch(r"[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*\.json", path):
             raise ValueError("Invalid private user backup path")
         headers = {
             "Accept": "application/vnd.github+json",
