@@ -1,6 +1,7 @@
 import asyncio
 from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
+from user_backup import UserProfileBackup
 from range_collection import RangeCollector
 from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
 from global_availability_feed import (
@@ -84,6 +85,7 @@ USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
+user_backup = UserProfileBackup(USER_DATA_FILE, STATS_FILE)
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397, 1667507073, 8431489105, 8727114055, 2130079556]
@@ -1414,8 +1416,7 @@ def load_stats():
 
 
 def save_stats(stats):
-    with open(STATS_FILE, "w") as f:
-        json.dump(stats, f, indent=4)
+    atomic_save(stats, STATS_FILE)
 
 
 def add_number_taken(uid, count=1):
@@ -5679,6 +5680,7 @@ async def miniapp_admin_tools_api(request):
                 "sent_count": int(load_fake_otp_config().get("sent_count", 0)),
             },
             "archive_sync": {"status": str(number_archive.status)[:250]},
+            "user_backup": {"status": str(user_backup.status)[:250], "ready": user_backup.ready},
             "ai_posts": public_ai_status(),
             "world_news": public_news_status(),
         }
@@ -5825,6 +5827,16 @@ async def miniapp_admin_tools_api(request):
 
 
 async def post_init(application):
+    # Restore private user balances and usage counts before bot workers start.
+    # If remote backup is inaccessible, the backup worker will retry without
+    # uploading an empty replacement over the existing archive.
+    import httpx as _backup_httpx
+    try:
+        async with _backup_httpx.AsyncClient(timeout=30, follow_redirects=False) as client:
+            await user_backup.restore(client)
+    except Exception as exc:
+        print(f"[user-backup] Initial restore unavailable: {type(exc).__name__}", flush=True)
+    application.bot_data["user_backup_task"] = asyncio.create_task(user_backup.run())
     await asyncio.to_thread(number_archive.import_legacy, load_range_db())
     application.bot_data["number_archive_task"] = asyncio.create_task(number_archive.run())
     for _ in range(20):
@@ -5976,6 +5988,10 @@ async def run_combined_server():
         await asyncio.Event().wait()
     finally:
         range_collector.stop_all()
+        profile_task = app.bot_data.get("user_backup_task")
+        if profile_task:
+            profile_task.cancel()
+            await asyncio.gather(profile_task, return_exceptions=True)
         archive_task = app.bot_data.get("number_archive_task")
         if archive_task:
             archive_task.cancel()
