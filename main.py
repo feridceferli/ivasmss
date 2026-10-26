@@ -27,6 +27,8 @@ import hmac
 import hashlib
 import time
 from urllib.parse import parse_qsl
+from pathlib import Path
+from web_login import WebsiteLogin
 import httpx
 import random
 import string
@@ -64,7 +66,12 @@ from admin_test_tools import register_admin_test_tools
 # ==================== CONFIG SECTION ====================
 
 BOT_TOKEN = (os.environ.get("BOT_TOKEN") or "").strip()
-WEBAPP_URL = os.environ.get("WEBAPP_URL", "https://feridceferli.github.io/ivasmss/").strip()
+WEBAPP_URL = (os.environ.get("WEBAPP_URL") or "").strip() or (
+    (os.environ.get("RENDER_EXTERNAL_URL") or "").strip().rstrip("/") + "/"
+    if os.environ.get("RENDER_EXTERNAL_URL")
+    else "https://ivasmss.onrender.com/"
+)
+website_login = WebsiteLogin(BOT_TOKEN)
 
 # ==================== AZE SMS PANEL API CONFIGURATION ====================
 API_KEY = (os.environ.get("AZE_SMS_API_KEY") or os.environ.get("VOLTX_API_KEY") or "").strip()
@@ -4604,6 +4611,25 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             return
 
     args = context.args
+    if args and str(args[0]).startswith("connect_"):
+        # A browser can link an account only after its Telegram owner approves here.
+        token = str(args[0])[len("connect_"):]
+        if not update.effective_chat or update.effective_chat.type != "private":
+            await update.effective_message.reply_text("🔒 Hesabı yalnız botun şəxsi çatında bağlayın.")
+            return
+        if is_user_banned(uid) or not website_login.can_confirm(token):
+            await update.effective_message.reply_text("⚠️ Bağlantı etibarsızdır və ya vaxtı bitib. Saytdan yenidən başlayın.")
+            return
+        await update.effective_message.reply_text(
+            "🔐 *Sayta Telegram hesabını bağlamaq*\n\n"
+            "ivasmss.onrender.com saytında hesabınıza girişə icazə vermək istəyirsiniz? "
+            "Bu istəyi siz başlamamısınızsa, təsdiqləməyin.",
+            parse_mode="Markdown",
+            reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ Sayta girişi təsdiqlə", callback_data="website:" + token)
+            ]]),
+        )
+        return
     if args:
         param = args[0]
         if is_range_request(param) and not (param.isdigit() and param in existing_data):
@@ -5245,6 +5271,105 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
         await update.effective_message.reply_text("⚠️ Naməlum Mini App əməliyyatı.")
 
 
+async def website_login_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query or not update.effective_user:
+        return
+    await query.answer()
+    token = str(query.data or "")[len("website:"):]
+    uid = update.effective_user.id
+    if not update.effective_chat or update.effective_chat.type != "private" or is_user_banned(uid):
+        await query.edit_message_text("⛔ Hesab bağlamağa icazə verilmir.")
+        return
+    for channel in load_required_channels():
+        joined, _ = await check_user_joined(context.bot, uid, channel)
+        if not joined:
+            await query.edit_message_text("🔒 Əvvəlcə tələb olunan kanallara qoşulun və yenidən cəhd edin.")
+            return
+    owner = update.effective_user
+    if not website_login.confirm(token, {
+        "id": uid, "first_name": owner.first_name,
+        "last_name": owner.last_name, "username": owner.username,
+    }):
+        await query.edit_message_text("⌛ Giriş sorğusunun vaxtı bitib. Saytdan yenidən başlayın.")
+        return
+    await query.edit_message_text(
+        "✅ Telegram hesabınız təsdiqləndi!\n\n"
+        "Brauzerdə açıq olan ivasmss.onrender.com səhifəsinə qayıdın. "
+        "Giriş avtomatik tamamlanacaq."
+    )
+
+
+# ==================== WEBSITE LOGIN API ====================
+def _website_origin_ok(request):
+    origin = request.headers.get("Origin", "")
+    return origin in ("https://" + request.host, "http://" + request.host)
+
+
+def _website_no_cache(response):
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+async def website_auth_start(request):
+    if request.headers.get("X-Website-Request") != "1" or not _website_origin_ok(request):
+        return web.json_response({"error": "forbidden"}, status=403)
+    botname = request.app.get("bot_username")
+    if not botname:
+        return web.json_response({"error": "bot_unavailable"}, status=503)
+    try:
+        token, flow = website_login.begin()
+    except RuntimeError:
+        return web.json_response({"error": "too_many_pending_logins"}, status=429)
+    response = _website_no_cache(web.json_response({
+        "status": "pending",
+        "bot_url": "https://t.me/" + botname + "?start=connect_" + token,
+        "token": token,
+        "expires_in": website_login.PAIR_TTL,
+    }))
+    response.set_cookie(
+        "web_link_flow", flow, max_age=website_login.PAIR_TTL,
+        secure=True, httponly=True, samesite="Strict", path="/api/web-auth/",
+    )
+    return response
+
+
+async def website_auth_status(request):
+    token = str(request.query.get("token") or "")
+    if len(token) > 64:
+        return web.json_response({"error": "invalid_token"}, status=400)
+    status, user = website_login.consume(token, request.cookies.get("web_link_flow"))
+    if status == "forbidden":
+        return web.json_response({"error": "forbidden"}, status=403)
+    if status == "expired":
+        return _website_no_cache(web.json_response({"status": "expired"}, status=410))
+    response = _website_no_cache(web.json_response({"status": status, "user": user}))
+    if status == "connected":
+        response.set_cookie(
+            "web_session", website_login.make_session(user),
+            max_age=website_login.SESSION_TTL, secure=True,
+            httponly=True, samesite="Strict", path="/",
+        )
+        response.del_cookie("web_link_flow", path="/api/web-auth/")
+    return response
+
+
+async def website_auth_me(request):
+    user = website_login.verify_session(request.cookies.get("web_session"))
+    if not user or is_user_banned(user["id"]):
+        return _website_no_cache(web.json_response({"error": "unauthorized"}, status=401))
+    return _website_no_cache(web.json_response({"user": user}))
+
+
+async def website_auth_logout(request):
+    if request.headers.get("X-Website-Request") != "1" or not _website_origin_ok(request):
+        return web.json_response({"error": "forbidden"}, status=403)
+    response = _website_no_cache(web.json_response({"ok": True}))
+    response.del_cookie("web_session", path="/")
+    response.del_cookie("web_link_flow", path="/api/web-auth/")
+    return response
+
+
 # ==================== MINI APP HTTP API ====================
 def validate_telegram_init_data(init_data: str, max_age: int = 86400):
     if not init_data:
@@ -5566,7 +5691,7 @@ async def miniapp_avatar_api(request):
 async def miniapp_dashboard(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
-    tg_user, auth_error = validate_telegram_init_data(request.headers.get("X-Telegram-Init-Data", ""))
+    tg_user, auth_error = _miniapp_auth(request)
     if not tg_user:
         print(f"Mini App auth rejected: {auth_error}")
         return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": auth_error}, status=401))
@@ -5623,7 +5748,17 @@ miniapp_orders = {}
 miniapp_history = {}
 
 def _miniapp_auth(request):
-    return validate_telegram_init_data(request.headers.get("X-Telegram-Init-Data", ""))
+    signed_data = request.headers.get("X-Telegram-Init-Data", "")
+    if signed_data:
+        # Never let a failed Telegram signature silently fall back to cookies.
+        return validate_telegram_init_data(signed_data)
+    user = website_login.verify_session(request.cookies.get("web_session"))
+    if not user:
+        return None, "website_login_required"
+    if request.method not in ("GET", "HEAD", "OPTIONS"):
+        if request.headers.get("X-Website-Request") != "1" or not _website_origin_ok(request):
+            return None, "csrf_check_failed"
+    return user, None
 
 def _safe_order(uid, order):
     """Reveal the full number only while it is assigned to this authenticated user."""
@@ -6011,6 +6146,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("balance", balance_command))
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
+    app.add_handler(CallbackQueryHandler(website_login_callback, pattern=r"^website:[A-Za-z0-9_-]{32}$"))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
@@ -6095,6 +6231,18 @@ async def run_combined_server():
     server.router.add_route("*", "/api/az-access", miniapp_az_access_api)
     server.router.add_route("*", "/api/incoming-sms", miniapp_incoming_sms_api)
     server.router.add_get("/health", health)
+    server.router.add_post("/api/web-auth/start", website_auth_start)
+    server.router.add_get("/api/web-auth/status", website_auth_status)
+    server.router.add_get("/api/web-auth/me", website_auth_me)
+    server.router.add_post("/api/web-auth/logout", website_auth_logout)
+
+    # The same mobile-first interface is now available in a normal browser.
+    docs_dir = Path(__file__).resolve().parent / "docs"
+    async def website_index(request):
+        return web.FileResponse(docs_dir / "index.html",
+                                headers={"Cache-Control": "no-store"})
+    server.router.add_get("/", website_index)
+    server.router.add_static("/", str(docs_dir), show_index=False)
 
     runner = web.AppRunner(server)
     await app.initialize()
