@@ -2305,13 +2305,12 @@ async def show_active_numbers(update, context):
     for number, info in list(active_numbers.items()):
         if info.get("uid") != uid:
             continue
-        ts = info.get("timestamp") or now
-        age = max(0, int((now - ts).total_seconds()))
-        if age >= 3600:
+        remaining = active_number_remaining(info, now)
+        if remaining <= 0:
             continue
-        remaining = max(0, 3600 - age)
         mins, secs = divmod(remaining, 60)
-        rows.append((ts, number, info.get("range", "—"), mins, secs))
+        rows.append((info["timestamp"], number, info.get("range", "—"),
+                     mins, secs, info.get("lease_id", "")))
 
     rows.sort(reverse=True)
     if not rows:
@@ -2322,15 +2321,22 @@ async def show_active_numbers(update, context):
         return
 
     lines = [f"📋 <b>AKTİV NÖMRƏLƏR ({len(rows)})</b>", ""]
-    for i, (_, number, range_text, mins, secs) in enumerate(rows, 1):
+    buttons = []
+    for i, (_, number, range_text, mins, secs, lease_id) in enumerate(rows, 1):
         lines.append(
             f"<blockquote><b>{i}.</b> 📞 <code>+{normalize_number(number)}</code>\n"
             f"📶 Range: <code>{html.escape(str(range_text))}</code>\n"
             f"🟢 Status: AKTİV\n"
             f"⏳ Qalan vaxt: {mins:02d}:{secs:02d}</blockquote>"
         )
-    lines.append("\nℹ️ Bu status yalnız Aze Sms Panel-dəki aktiv sifariş vəziyyətini göstərir; üçüncü tərəf tətbiqlərində hesab mövcudluğunu yoxlamır.")
-    await update.effective_message.reply_text("\n".join(lines), parse_mode="HTML", reply_markup=main_keyboard(uid))
+        if lease_id:
+            buttons.append([InlineKeyboardButton(
+                f"❌ Ləğv et · …{normalize_number(number)[-4:]}",
+                callback_data=f"cancel_number_{lease_id}", style="danger")])
+    lines.append("\nℹ️ Gözləmə limiti 3 dəqiqədir. Ləğv provayder ödənişini geri qaytarmır.")
+    await update.effective_message.reply_text(
+        "\n".join(lines), parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(buttons) if buttons else main_keyboard(uid))
 
 
 # ==================== WORKER & API ====================
@@ -2392,6 +2398,7 @@ async def fast_allocate_number(query, context, rid, service, range_display):
                     "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                 )
             ],
+            [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
             [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
         ]
     )
@@ -2477,7 +2484,8 @@ async def process_auto_number(update, context, range_text):
                         "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                     )
                 ],
-                [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
+                [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
+            [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
             ]
         )
         await status_msg.edit_text(final_text, parse_mode="HTML", reply_markup=keyboard)
@@ -2544,7 +2552,8 @@ async def process_numbers(update_or_query, context, range_text, count, service="
                         "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                     )
                 ],
-                [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
+                [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
+            [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
             ]
         )
         await status_msg.edit_text(final_text, parse_mode="HTML", reply_markup=keyboard)
@@ -4705,6 +4714,19 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
+    if data.startswith("cancel_number_"):
+        lease_id = data.removeprefix("cancel_number_")
+        if cancel_active_number(uid, lease_id):
+            await query.edit_message_text(
+                "❌ <b>SİFARİŞ LƏĞV EDİLDİ</b>\n\n"
+                "Nömrə üçün OTP gözlənilməsi dayandırıldı. "
+                "Bu əməliyyat provayder ödənişini geri qaytarmır.",
+                parse_mode="HTML")
+        else:
+            await query.message.reply_text(
+                "⚠️ Sifariş artıq aktiv deyil, sizə aid deyil və ya 3 dəqiqəsi bitib.")
+        return
+
     # USER INLINE MENU
     if data in ("menu_numbers_txt", "menu_all_numbers_txt"):
         await download_numbers_txt(update, context, all_numbers=data == "menu_all_numbers_txt")
@@ -5009,7 +5031,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
                         "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
                     )
                 ],
-                [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
+                [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
+            [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
             ]
         )
         await query.message.reply_text(
