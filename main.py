@@ -2067,7 +2067,6 @@ async def monitor_loop(app):
                         # One cheerful, non-sensitive caption shared in both notifications.
                         congratulations = random.choice(OTP_SUCCESS_CHEERS)
                         user_msg = (
-                            f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n"
                             f"💬 <b>{html.escape(congratulations)}</b>\n\n"
                             f"<blockquote>📶 RANGE: <code>{num_range_info}</code></blockquote>\n"
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {country_name}</code></blockquote>\n"
@@ -2079,7 +2078,6 @@ async def monitor_loop(app):
                         )
                         # Keep the familiar group layout without publishing private SMS/OTP.
                         group_msg = (
-                            f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n"
                             f"💬 <b>{html.escape(congratulations)}</b>\n\n"
                             f"<blockquote>📶 RANGE: <code>{html.escape(str(num_range_info))}</code></blockquote>\n"
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(str(country_name))}</code></blockquote>\n"
