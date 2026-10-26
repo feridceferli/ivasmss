@@ -978,6 +978,14 @@ async function loadAdminTools() {
             " · " + (worldNews.interval_minutes || 120) + " dəqiqədən bir · linksiz qısa Azərbaycan xülasələri.";
         const wa = adminTools.whatsapp || {};
         const archive = adminTools.archive_sync || {};
+        const archiveStatus = document.getElementById("admin-archive-status");
+        if (archiveStatus) {
+            const detail = archive.status || "Vəziyyət məlum deyil.";
+            archiveStatus.textContent =
+                /xəta|failed|http\s*[45]\d\d/i.test(detail) ? "❌ Yedəkləmə xətası: " + detail :
+                /yeniləndi|yenidir/i.test(detail) ? "✅ " + detail :
+                "ℹ️ " + detail;
+        }
         status.textContent = "📡 WhatsApp: " + (wa.status === "configured" ? "✅ Ayarlanıb" : "⚠️ Ayarlanmayıb") +
             (wa.test_recipient ? " · " + wa.test_recipient : "") +
             " · 📥 Arxiv: " + (archive.status || "naməlum") +
@@ -985,6 +993,8 @@ async function loadAdminTools() {
             (adminTools.notification_group_configured ? "✅" : "⚠️ Ayarlanmayıb");
     } catch (err) {
         status.textContent = "⚠️ Admin alətləri: " + err.message;
+        const archiveStatus = document.getElementById("admin-archive-status");
+        if (archiveStatus) archiveStatus.textContent = "⚠️ Arxiv statusu alınmadı: " + err.message;
     }
 }
 
