@@ -1941,6 +1941,27 @@ async def show_app_selection(update, context):
 
 
 
+OTP_SUCCESS_CHEERS = (
+    "🎉 Təbriklər, qardaş! Uğur səninlədir!",
+    "😎 Xoş gəldin, nəfəs! Bu dəfə də alındı!",
+    "🚀 Nömrəni götür, qaqaş! İşlər əladır!",
+    "🤝 Öpürəm, brat! Əla nəticə!",
+    "🔥 Qaqaş, sən bu işi bilirsən!",
+    "🥳 Afərin, kral! Daha biri uğurla tamam!",
+    "😄 Halaldır sənə, qardaş! Üzün gülsün!",
+    "🏆 Uğur səni tapdı, əjdaha!",
+    "✨ Bu gün sənin günündür, nəfəs!",
+    "🎊 Təbriklər, qaqa! Hər şey yolundadır!",
+    "💪 Belə davam elə, brat! Super!",
+    "🌟 Yenə uğurlu nəticə! Əhsən sənə!",
+    "😎 Kral hərəkəti oldu, qardaş!",
+    "🎈 Xoş xəbərlə gəldik, nəfəs!",
+    "🤩 Əjdahasan, qaqaş! Uğurlar!",
+    "🙌 Əhsən! Bir uğur da cibdə!",
+    "🥂 Sənə yaraşır, brat! Təbriklər!",
+    "💫 İşlər yağ kimi gedir, qardaş!",
+)
+
 # ==================== AUTO OTP MONITOR (REAL) ====================
 # Safe monitor diagnostics: records transport/health metadata only.
 # SMS bodies, OTP values, phone numbers and user identifiers are never stored here.
@@ -2043,8 +2064,11 @@ async def monitor_loop(app):
                         else:
                             user_rate = get_user_otp_rate(uid)
                             balance_msg = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                        # One cheerful, non-sensitive caption shared in both notifications.
+                        congratulations = random.choice(OTP_SUCCESS_CHEERS)
                         user_msg = (
-                            f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n\n"
+                            f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n"
+                            f"💬 <b>{html.escape(congratulations)}</b>\n\n"
                             f"<blockquote>📶 RANGE: <code>{num_range_info}</code></blockquote>\n"
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {country_name}</code></blockquote>\n"
                             f"<blockquote>📱 SERVICE: <code>{service_name}</code></blockquote>\n"
@@ -2053,14 +2077,13 @@ async def monitor_loop(app):
                             f"<blockquote>📩 FULL SMS:\n<code>{safe_full_sms}</code></blockquote>\n\n"
                             f"<b>{balance_msg}</b>"
                         )
+                        # Public group gets a success notice, never SMS or OTP secrets.
                         group_msg = (
-                            f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n\n"
-                            f"<blockquote>📶 RANGE: <code>{num_range_info}</code></blockquote>\n"
-                            f"<blockquote>🌍 COUNTRY: <code>{country_flag} {country_name}</code></blockquote>\n"
-                            f"<blockquote>📱 SERVICE: <code>{service_name}</code></blockquote>\n"
-                            f"<blockquote>📞 NUMBER: <code>{masked_number}</code></blockquote>\n"
-                            f"<blockquote>🔑 OTP: <code>{safe_otp_code}</code></blockquote>\n\n"
-                            f"<blockquote>📩 FULL SMS:\n<code>{safe_full_sms}</code></blockquote>"
+                            f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n"
+                            f"💬 <b>{html.escape(congratulations)}</b>\n\n"
+                            f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(str(country_name))}</code></blockquote>\n"
+                            f"<blockquote>📱 SERVICE: <code>{html.escape(str(service_name))}</code></blockquote>\n"
+                            "🔒 Kod və nömrə yalnız istifadəçiyə göndərildi."
                         )
                         
                         # DÜZƏLDİLMİŞ BÖLGƏ: URL formatı tam yazıldı
