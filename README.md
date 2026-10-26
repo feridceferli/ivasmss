@@ -178,7 +178,7 @@ Göndəriş arxa planda işləyir və uzun toplu göndərişi webhook sorğusunu
 | `.env.example` | Məxfi dəyərlərsiz konfiqurasiya nümunəsi |
 | `docs/index.html` | Mini App səhifəsi |
 | `docs/app.js` | Mini App məntiqi və backend ünvanı |
-| `docs/style.css` | Mini App görünüşü |
+| `docs/miniapp-modern.css` | Aktiv Mini App görünüşü |
 
 ## TXT arxivi və bot komandaları
 
