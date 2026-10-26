@@ -2119,7 +2119,9 @@ async def monitor_loop(app):
                                 "number": full_number,
                                 "otp": otp_code,
                                 "message": full_sms,
-                                "time": datetime.now().strftime("%H:%M:%S")
+                                "time": datetime.now().strftime("%H:%M:%S"),
+                                "event_id": hashlib.sha256(key.encode("utf-8")).hexdigest()[:24],
+                                "congratulations": congratulations,
                             })
                             miniapp_incoming_sms[uid] = miniapp_incoming_sms[uid][:20]
                         except Exception as e:
