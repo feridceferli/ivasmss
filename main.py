@@ -2077,12 +2077,14 @@ async def monitor_loop(app):
                             f"<blockquote>📩 FULL SMS:\n<code>{safe_full_sms}</code></blockquote>\n\n"
                             f"<b>{balance_msg}</b>"
                         )
-                        # Public group gets a success notice, never SMS or OTP secrets.
+                        # Keep the familiar group layout without publishing private SMS/OTP.
                         group_msg = (
                             f"✅ <b>OTP RECEIVE SUCCESSFUL</b> ✅\n"
                             f"💬 <b>{html.escape(congratulations)}</b>\n\n"
+                            f"<blockquote>📶 RANGE: <code>{html.escape(str(num_range_info))}</code></blockquote>\n"
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(str(country_name))}</code></blockquote>\n"
                             f"<blockquote>📱 SERVICE: <code>{html.escape(str(service_name))}</code></blockquote>\n"
+                            f"<blockquote>📞 NUMBER: <code>{html.escape(masked_number)}</code></blockquote>\n"
                         )
                         
                         # DÜZƏLDİLMİŞ BÖLGƏ: URL formatı tam yazıldı
