@@ -21,8 +21,9 @@ log = logging.getLogger(__name__)
 
 
 class UserProfileBackup:
-    def __init__(self, users_file, stats_file):
+    def __init__(self, users_file, stats_file, activity_file=None):
         self.files = {"users": Path(users_file), "stats": Path(stats_file)}
+        self.activity_file = Path(activity_file) if activity_file else None
         self.status = "İstifadəçi bazasının yedəklənməsi başlayır."
         self.ready = False
         self._lock = asyncio.Lock()
@@ -64,6 +65,33 @@ class UserProfileBackup:
             filtered[uid] = data
         return filtered
 
+    def _read_activity(self):
+        if self.activity_file is None or not self.activity_file.exists():
+            return []
+        try:
+            entries = json.loads(self.activity_file.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            raise RuntimeError("History cannot be read safely")
+        if not isinstance(entries, list):
+            raise ValueError("Invalid local history")
+        return self._sanitize_activity(entries)
+
+    @staticmethod
+    def _sanitize_activity(entries):
+        # Archive metadata only; never save OTP codes, numbers or SMS bodies.
+        if not isinstance(entries, list):
+            return []
+        result = []
+        for item in entries:
+            if not isinstance(item, dict):
+                continue
+            uid = str(item.get("uid", ""))
+            action = str(item.get("action", ""))[:64]
+            timestamp = str(item.get("timestamp", ""))[:50]
+            if (uid.isdecimal() or uid == "SYSTEM") and action and timestamp:
+                result.append({"uid": uid, "action": action, "timestamp": timestamp})
+        return result
+
     def _merge_restore(self, remote):
         if remote.get("version") != 1:
             raise ValueError("Unknown private backup version")
@@ -83,12 +111,23 @@ class UserProfileBackup:
             if merged != original:
                 path.parent.mkdir(parents=True, exist_ok=True)
                 atomic_save(merged, path)
+        if self.activity_file is not None:
+            recovered = self._sanitize_activity(remote.get("activity", []))
+            current = self._read_activity()
+            combined = {(v["uid"], v["action"], v["timestamp"]): v for v in recovered}
+            for entry in current:
+                combined[(entry["uid"], entry["action"], entry["timestamp"])] = entry
+            restored = sorted(combined.values(), key=lambda v: v["timestamp"])
+            if restored != current:
+                self.activity_file.parent.mkdir(parents=True, exist_ok=True)
+                atomic_save(restored, self.activity_file)
 
     def _snapshot(self):
         return {
             "version": 1,
             "users": self._validate("users", self._read(self.files["users"])),
             "stats": self._validate("stats", self._read(self.files["stats"])),
+            "activity": self._read_activity(),
         }
 
     async def _remote(self, client):
