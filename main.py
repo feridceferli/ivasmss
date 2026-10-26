@@ -85,7 +85,7 @@ USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
-user_backup = UserProfileBackup(USER_DATA_FILE, STATS_FILE)
+user_backup = UserProfileBackup(USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE)
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397, 1667507073, 8431489105, 8727114055, 2130079556]
@@ -1449,6 +1449,7 @@ def add_otp_received(uid):
         stats[uid] = {"numbers_taken": [], "otps_received": []}
     stats[uid]["otps_received"].append(datetime.now().isoformat())
     save_stats(stats)
+    user_backup.changed()
 
 
 def get_user_stats(uid):
@@ -1509,8 +1510,8 @@ def log_global_activity(uid, action, details):
             "time": now.strftime("%H:%M:%S"),
         }
     )
-    with open(ACTIVITY_LOGS_FILE, "w") as f:
-        json.dump(logs, f, indent=4)
+    atomic_save(logs, ACTIVITY_LOGS_FILE)
+    user_backup.changed()
 
 
 def get_global_system_stats():
@@ -1563,9 +1564,10 @@ async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE
             except:
                 continue
         if today_count > 0:
-            name = user_data_all.get(uid_str, {}).get("full_name")
+            profile = user_data_all.get(uid_str, {})
+            name = (str(profile.get("first_name") or "") + " " + str(profile.get("last_name") or "")).strip() or profile.get("full_name")
             if not name:
-                name = user_data_all.get(uid_str, {}).get("username")
+                name = profile.get("username")
             if not name:
                 name = f"User {uid_str}"
             user_today_counts.append((uid_str, today_count, html.escape(name)))
@@ -5357,7 +5359,7 @@ async def miniapp_profile_api(request):
 
 
 async def miniapp_leaderboard_api(request):
-    """Read-only, aggregate number-usage leaderboard; no OTP or phone contents."""
+    """Read-only OTP receipt counts, never code text or phone numbers."""
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
     tg_user, err = _miniapp_auth(request)
@@ -5376,7 +5378,7 @@ async def miniapp_leaderboard_api(request):
         try:
             amount = sum(
                 datetime.fromisoformat(ts) >= today
-                for ts in stats.get("numbers_taken", [])
+                for ts in stats.get("otps_received", [])
                 if isinstance(ts, str)
             )
         except (ValueError, TypeError):
@@ -5384,11 +5386,14 @@ async def miniapp_leaderboard_api(request):
         if amount <= 0:
             continue
         profile = user_map.get(str(identifier), {})
-        name = (str(profile.get("first_name") or profile.get("username") or "İstifadəçi")
-                .strip()[:48])
+        name = " ".join(str(profile.get(k) or "").strip() for k in ("first_name", "last_name")).strip()
+        name = name or str(profile.get("full_name") or "").strip()
+        name = name or ("@" + str(profile.get("username") or "").lstrip("@")
+                        if profile.get("username") else "İstifadəçi")
+        name = name[:100]
         rows.append({"name": name, "count": amount})
     rows.sort(key=lambda item: item["count"], reverse=True)
-    return _miniapp_cors(web.json_response({"metric": "today_numbers", "leaders": rows[:10]}))
+    return _miniapp_cors(web.json_response({"metric": "today_otps", "leaders": rows[:10]}))
 
 
 async def miniapp_my_numbers_api(request):
