@@ -195,34 +195,45 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
                                      "https://www.bbc.co.uk/news/robot", NOW + 7210))
         return FakeRssClient({WORLD: feed(entries)})
 
-    async def test_silent_baseline_and_no_repeat_before_two_hours(self):
+    async def test_first_story_is_sent_and_ten_minute_cooldown_applies(self):
         bot = FakeBot()
         args = dict(bot=bot, group_id="-10012345", state_file=self.path,
-                    client=self.client_for())
-        first = await news.publish_world_news(now=NOW, **args)
-        self.assertEqual(first, "initialized")
-        self.assertEqual(bot.messages, [])
+                    client=self.client_for(),
+                    translate=lambda stories: async_az_translation(stories))
+        # Initial sourced item is sent immediately; a silent baseline would
+        # make users think the news system is broken.
+        self.assertEqual(await news.publish_world_news(now=NOW, **args), "sent")
+        self.assertEqual(len(bot.messages), 1)
+        self.assertEqual(bot.messages[0]["chat_id"], -10012345)
         self.assertEqual(await news.publish_world_news(now=NOW + 100, **args),
                          "cooldown")
+        self.assertEqual(len(bot.messages), 1)
+        # Once due, the same article is not re-sent.
+        self.assertEqual(await news.publish_world_news(now=NOW + 601, **args),
+                         "nothing_new")
+        self.assertEqual(len(bot.messages), 1)
 
     async def test_new_news_is_group_only_and_deduplicated(self):
         bot = FakeBot()
         await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
-            client=self.client_for(), now=NOW)
+            client=self.client_for(), now=NOW,
+            translate=lambda stories: async_az_translation(stories))
         next_client = self.client_for(first=True, second=True)
         result = await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
             client=next_client, now=NOW + 7300,
             translate=lambda stories: async_az_translation(stories))
         self.assertEqual(result, "sent")
-        self.assertEqual(len(bot.messages), 1)
-        self.assertEqual(bot.messages[0]["chat_id"], -10012345)
-        self.assertIn("Alimlər sualtı robot", bot.messages[0]["text"])
-        self.assertIn("BBC World", bot.messages[0]["text"])
-        self.assertNotIn("utm_", bot.messages[0]["text"])
-        self.assertEqual(bot.messages[0]["parse_mode"], "HTML")
-        self.assertTrue(bot.messages[0]["disable_web_page_preview"])
+        self.assertEqual(len(bot.messages), 2,
+                         "First digest and first unseen follow-up are both delivered")
+        self.assertEqual(bot.messages[-1]["chat_id"], -10012345)
+        self.assertIn("Alimlər sualtı robot", bot.messages[-1]["text"])
+        self.assertIn("BBC World", bot.messages[-1]["text"])
+        self.assertNotIn("utm_", bot.messages[-1]["text"])
+        self.assertEqual(bot.messages[-1]["parse_mode"], "HTML")
+        self.assertTrue(bot.messages[-1]["disable_web_page_preview"])
+        self.assertEqual(len(bot.messages), 2)
         self.assertEqual(await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
             client=next_client, now=NOW + 7400), "cooldown")
@@ -230,7 +241,8 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
     async def test_failed_telegram_delivery_preserves_state(self):
         await news.publish_world_news(
             bot=FakeBot(), group_id="-10012345", state_file=self.path,
-            client=self.client_for(), now=NOW)
+            client=self.client_for(), now=NOW,
+            translate=lambda stories: async_az_translation(stories))
         original = Path(self.path).read_text(encoding="utf-8")
         client = self.client_for(first=True, second=True)
         result = await news.publish_world_news(
@@ -303,7 +315,8 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
         bot = FakeBot()
         await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
-            client=self.client_for(), now=NOW)
+            client=self.client_for(), now=NOW,
+            translate=lambda stories: async_az_translation(stories))
         before = Path(self.path).read_text(encoding="utf-8")
         later = self.client_for(first=False, second=True)
         unavailable = await news.publish_world_news(
@@ -311,15 +324,17 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
             client=later, now=NOW + 7300,
             translate=lambda stories: async_unavailable_translation())
         self.assertEqual(unavailable, "translation_unavailable")
-        self.assertFalse(bot.messages)
+        self.assertEqual(len(bot.messages), 1,
+                         "Failed translation must not create a new post")
         self.assertEqual(Path(self.path).read_text(encoding="utf-8"), before)
         self.assertEqual(await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
             client=later, now=NOW + 7330,
             translate=lambda stories: async_az_translation(stories)), "sent")
-        self.assertNotIn("https://", bot.messages[0]["text"])
-        self.assertNotIn("<a ", bot.messages[0]["text"])
-        self.assertNotIn("underwater robot", bot.messages[0]["text"])
+        self.assertEqual(len(bot.messages), 2)
+        self.assertNotIn("https://", bot.messages[-1]["text"])
+        self.assertNotIn("<a ", bot.messages[-1]["text"])
+        self.assertNotIn("underwater robot", bot.messages[-1]["text"])
 
     async def test_bad_free_translation_is_skipped(self):
         story = {"id": "x", "title": "Scientists create a new space robot",
