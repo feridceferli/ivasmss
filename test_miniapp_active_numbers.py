@@ -30,12 +30,18 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         self.active = {}
         self.ctx = {
             "time": time,
+            "re": re,
+            "NUMBER_WAIT_SECONDS": 180,
             "active_numbers": self.active,
+            "miniapp_orders": {},
+            "miniapp_history": {},
+            "active_number_remaining": lambda info: info.get("remaining", 180),
             "normalize_number": lambda x: re.sub(r"\D", "", str(x or "")),
         }
         self.safe_order = isolated_function("_safe_order", self.ctx)
+        self.cancel_number = isolated_function("cancel_active_number", self.ctx)
         self.order = {
-            "id": "demo-owned",
+            "id": "a" * 16,
             "label": "Aktiv sifariş",
             "number_masked": "+994 50 *** ** 12",
             "full_number": "+994502110012",
@@ -45,26 +51,43 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         }
 
     def test_owner_sees_full_number_without_stars(self):
-        self.active["994502110012"] = {"uid": 125}
+        self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16}
         value = self.safe_order(125, self.order)
         self.assertEqual(value["number"], "+994502110012")
         self.assertEqual(value["number_masked"], "+994502110012")
         self.assertNotIn("*", value["number"])
 
     def test_other_account_cannot_see_full_number(self):
-        self.active["994502110012"] = {"uid": 125}
+        self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16}
         value = self.safe_order(333, self.order)
         self.assertNotIn("number", value)
         self.assertNotIn("full_number", value)
         self.assertIn("*", value["number_masked"])
 
     def test_expired_or_inactive_order_not_unmasked(self):
-        self.active["994502110012"] = {"uid": 125}
-        self.order["created_at"] = time.time() - 3602
+        self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16}
+        self.order["created_at"] = time.time() - 182
         self.assertNotIn("number", self.safe_order(125, self.order))
         self.order["created_at"] = time.time()
         self.order["status"] = "Ləğv edildi"
         self.assertNotIn("number", self.safe_order(125, self.order))
+
+    def test_expired_provider_lease_does_not_reveal_number(self):
+        self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16, "remaining": 0}
+        self.assertNotIn("number", self.safe_order(125, self.order))
+
+    def test_cancel_requires_correct_owner_and_current_lease(self):
+        self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16}
+        self.assertFalse(self.cancel_number(333, "a" * 16))
+        self.assertFalse(self.cancel_number(125, "b" * 16))
+        self.assertIn("994502110012", self.active)
+        self.assertTrue(self.cancel_number(125, "a" * 16))
+        self.assertNotIn("994502110012", self.active)
+        self.assertFalse(self.cancel_number(125, "a" * 16))
+
+    def test_cancel_rejects_expired_allocation(self):
+        self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16, "remaining": 0}
+        self.assertFalse(self.cancel_number(125, "a" * 16))
 
     def test_demo_order_never_yields_copyable_number(self):
         self.order.pop("full_number")
@@ -77,7 +100,8 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         code = ast.get_source_segment(SOURCE, dashboard)
         self.assertIn('int(info.get("uid", 0)) != uid', code)
         self.assertIn('"number": "+" + normalize_number(number)', code)
-        self.assertIn('if age >= 3600:', code)
+        self.assertIn('remaining = active_number_remaining(info, now)', code)
+        self.assertIn('"id": info.get("lease_id", "")', code)
 
     def test_miniapp_copy_action_only_for_full_numbers(self):
         self.assertIn('async function copyPhoneNumber(number, showFeedback = true)', JS)
@@ -86,7 +110,9 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         self.assertIn('if (validNumber)', JS)
         self.assertIn('copyPhoneNumber(fullNumber)', JS)
         self.assertIn('order.number || ""', JS)
-        self.assertIn('app.js?v=20261026-otp-celebration', HTML)
+        self.assertIn('app.js?v=20261026-three-minute-orders', HTML)
+        self.assertIn('async function cancelNumberOrder', JS)
+        self.assertIn('action: "cancel"', JS)
         self.assertNotIn('.innerHTML', JS)
 
 
