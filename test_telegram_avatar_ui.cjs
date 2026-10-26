@@ -11,7 +11,7 @@ const css = fs.readFileSync("docs/miniapp-modern.css", "utf8");
 assert.match(html, /id="user-avatar"/);
 assert.match(html, /id="profile-avatar"/);
 assert.match(html, /refreshTelegramAvatar\(\)/);
-assert.match(html, /app\.js\?v=20261026-admin-hub/);
+assert.match(html, /app\.js\?v=20261026-otp-celebration/);
 assert.match(css, /\.avatar img,\.profile-avatar img/);
 assert.match(app, /"\/api\/avatar"/);
 assert.doesNotMatch(app, /api\.telegram\.org\/file\/bot/);
