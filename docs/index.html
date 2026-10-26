@@ -639,6 +639,12 @@
                     <button class="action-small" onclick="adminSendGroupNotice()">📨 Bildirişi göndər</button>
                 </div>
                 <div class="card" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">📦 Number Archive — Yedəkləmə statusu</h4>
+                    <p class="notice-mini">GitHub-a özəl nömrə arxivinin sinxronizasiya vəziyyəti. Yalnız admin görə bilər.</p>
+                    <p id="admin-archive-status" class="notice-mini" role="status" aria-live="polite">Arxiv vəziyyəti yüklənir...</p>
+                    <button class="action-small" onclick="loadAdminTools()">🔄 Arxiv statusunu yenilə</button>
+                </div>
+                <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 8px">🧪 Təhlükəsiz test alətləri</h4>
                     <p id="admin-test-status" class="notice-mini">WhatsApp bağlantısı və arxiv vəziyyəti yoxlanır...</p>
                     <div class="quick-actions">
