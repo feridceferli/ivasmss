@@ -2083,7 +2083,6 @@ async def monitor_loop(app):
                             f"💬 <b>{html.escape(congratulations)}</b>\n\n"
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(str(country_name))}</code></blockquote>\n"
                             f"<blockquote>📱 SERVICE: <code>{html.escape(str(service_name))}</code></blockquote>\n"
-                            "🔒 Kod və nömrə yalnız istifadəçiyə göndərildi."
                         )
                         
                         # DÜZƏLDİLMİŞ BÖLGƏ: URL formatı tam yazıldı
