@@ -4,6 +4,7 @@ No bot token or Telegram login payload is exposed to browsers. Pending challenge
 live only in this application instance; sessions are HMAC authenticated and expire.
 """
 import base64
+import binascii
 import hashlib
 import hmac
 import json
@@ -104,5 +105,5 @@ class WebsiteLogin:
             if not (now < body.get("exp", 0) <= now + self.SESSION_TTL + 60):
                 return None
             return self._profile(body)
-        except (ValueError, TypeError, UnicodeDecodeError, KeyError, OverflowError):
+        except (ValueError, TypeError, UnicodeDecodeError, KeyError, OverflowError, binascii.Error):
             return None
