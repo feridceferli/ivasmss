@@ -118,6 +118,8 @@ class MiniAppCountryIsoRegressionTests(unittest.IsolatedAsyncioTestCase):
             "quote_range": quote_range,
             "PricingError": PricingError,
             "get_number_from_api": self.allocate,
+            "assign_active_number": lambda uid, number, rng: "a" * 16,
+            "NUMBER_WAIT_SECONDS": 180,
             "normalize_number": lambda number: re.sub(r"\D", "", str(number)),
             "add_number_taken": lambda uid, count: None,
             "active_numbers": {},
