@@ -109,6 +109,7 @@ class MiniAppCountryIsoRegressionTests(unittest.IsolatedAsyncioTestCase):
             "_miniapp_cors": lambda value: value,
             "_miniapp_auth": lambda request: ({"id": 77}, None),
             "is_user_banned": lambda uid: False,
+            "is_admin": lambda uid: False,
             "is_az_range": lambda rid: str(rid).startswith("994"),
             "az_range_allowed": lambda uid: True,
             "az_catalog_lookup": lambda **kwargs: {"name": "Nar"},
