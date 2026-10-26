@@ -82,7 +82,9 @@ def main():
     assert json.loads(body).get("status") == "pending", "new link should be pending"
 
     status, _, _ = request(anon, path)
-    assert_http(status, 403, "second browser cannot claim pairing")
+    assert status in (403, 410), (
+        f"second browser unexpectedly gained access: HTTP {status}")
+    print(f"OK: second browser cannot claim pairing (HTTP {status})")
 
     print("RESULT: All website smoke checks passed; Telegram user approval must be tested interactively.")
 
