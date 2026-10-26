@@ -986,6 +986,12 @@ async function loadAdminTools() {
                 /yeniləndi|yenidir/i.test(detail) ? "✅ " + detail :
                 "ℹ️ " + detail;
         }
+        const userBackup = adminTools.user_backup || {};
+        const userBackupStatus = document.getElementById("admin-user-backup-status");
+        if (userBackupStatus) {
+            const detail = userBackup.status || "Yedəkləmə vəziyyəti məlum deyil.";
+            userBackupStatus.textContent = "👥 İstifadəçilər (ID, balans, nömrə sayı): " + detail;
+        }
         status.textContent = "📡 WhatsApp: " + (wa.status === "configured" ? "✅ Ayarlanıb" : "⚠️ Ayarlanmayıb") +
             (wa.test_recipient ? " · " + wa.test_recipient : "") +
             " · 📥 Arxiv: " + (archive.status || "naməlum") +
@@ -995,6 +1001,8 @@ async function loadAdminTools() {
         status.textContent = "⚠️ Admin alətləri: " + err.message;
         const archiveStatus = document.getElementById("admin-archive-status");
         if (archiveStatus) archiveStatus.textContent = "⚠️ Arxiv statusu alınmadı: " + err.message;
+        const userBackupStatus = document.getElementById("admin-user-backup-status");
+        if (userBackupStatus) userBackupStatus.textContent = "⚠️ İstifadəçi yedəyi yoxlanmadı.";
     }
 }
 
