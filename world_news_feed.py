@@ -10,6 +10,7 @@ import hashlib
 import html
 import json
 import os
+import random
 import re
 import time
 import xml.etree.ElementTree as ET
@@ -23,8 +24,8 @@ import httpx
 from data_storage import atomic_save, data_path
 
 MYMEMORY_ENDPOINT = "https://api.mymemory.translated.net/get"
-NEWS_INTERVAL = 2 * 60 * 60  # Group digest every two hours, if new stories exist.
-POLL_INTERVAL = 10 * 60
+NEWS_INTERVAL = 10 * 60  # Default digest cadence.
+POLL_INTERVAL = 60  # Check every minute for a precise ten-minute cadence.
 MAX_AGE = 36 * 60 * 60
 MAX_FEED_BYTES = 220_000
 STATE_FILE = "world_news_digest_state.json"
@@ -34,8 +35,11 @@ SOURCES = (
     ("BBC Technology", "https://feeds.bbci.co.uk/news/technology/rss.xml", ("bbc.co.uk", "bbc.com")),
     ("The Guardian", "https://www.theguardian.com/world/rss", ("theguardian.com",)),
     ("AzadlıqRadiosu", "https://www.azadliq.org/api/z_bjtl-vomx-tpevvrqq", ("azadliq.org",)),
+    ("Yeni Sabah Maraqlı", "https://yenisabah.az/rss/category/diger", ("yenisabah.az",)),
+    ("Yeni Sabah Şou", "https://yenisabah.az/rss/category/sou", ("yenisabah.az",)),
+    ("Ayna Maraqlı", "https://www.ayna.az/rss/category/maraqli", ("ayna.az",)),
 )
-AZ_SOURCES = frozenset(("AzadlıqRadiosu",))
+AZ_SOURCES = frozenset(("AzadlıqRadiosu", "Yeni Sabah Maraqlı", "Yeni Sabah Şou", "Ayna Maraqlı"))
 POSITIVE_TERMS = ("science", "space", "technology", "robot", "discovery", "discover",
                   "research", "innovation", "animal", "wildlife", "planet",
                   "moon", "ocean", "archaeolog", "culture", "art", "unusual",
@@ -46,7 +50,7 @@ SENSITIVE_TERMS = ("kill", "massacre", "bomb", "attack", "dead", "death", "war",
 
 
 def load_news_settings():
-    result = {"enabled": True, "interval_minutes": 120}
+    result = {"enabled": True, "interval_minutes": 10}
     try:
         with open(SETTINGS_FILE, encoding="utf-8") as stream:
             data = json.load(stream)
@@ -178,14 +182,13 @@ async def fetch_recent_news(client=None, now=None):
 
 
 def choose_headlines(candidates, seen_ids, limit=2):
-    chosen = []
-    for entry in candidates:
-        if entry["id"] in seen_ids or entry["score"] < 0:
-            continue
-        chosen.append(entry)
-        if len(chosen) == limit:
-            break
-    return chosen
+    # Sample from the top-quality fresh Azerbaijani stories instead of always
+    # using the newest item; local-language items need no translation API.
+    available = [item for item in candidates
+                 if item["id"] not in seen_ids and item["score"] >= 0]
+    local = [item for item in available if item.get("language") == "az"]
+    pool = local if local else available
+    return random.sample(pool[:30], min(limit, len(pool)))
 
 
 def _source_excerpt(story):
@@ -373,10 +376,9 @@ def _read_state(file):
 
 async def publish_world_news(*, bot, group_id, now=None, state_file=None,
                              client=None, translate=None):
-    """Post at most once/2h, only if fresh unseen articles are available.
+    """Post an interesting verified Azerbaijani digest at most every 10 minutes.
 
-    First snapshot is silent to prevent deployment/restart spam. A failed
-    Telegram send never marks the headlines as seen.
+    Never invent headlines, repeat consumed items or mark failed deliveries seen.
     """
     settings = load_news_settings()
     if not settings["enabled"]:
@@ -398,7 +400,7 @@ async def publish_world_news(*, bot, group_id, now=None, state_file=None,
     # initialization could permanently suppress all recent headlines.
 
     seen = set(prior.get("seen_ids", []))
-    selected = choose_headlines(candidates, seen, limit=2)
+    selected = choose_headlines(candidates, seen, limit=1)
     if not selected:
         return "nothing_new"
 
@@ -406,7 +408,18 @@ async def publish_world_news(*, bot, group_id, now=None, state_file=None,
                   else await translate_headlines(selected))
     valid_stories = [story for story in selected if translated.get(story["id"])]
     if not valid_stories:
-        return "translation_unavailable"
+        # Another article may be in Azerbaijani even when an English
+        # translation provider is down or rate-limited.
+        remaining = [item for item in candidates if item["id"] not in seen
+                     and item["id"] not in {s["id"] for s in selected}
+                     and item.get("language") == "az" and item["score"] >= 0]
+        if remaining:
+            fallback = choose_headlines(remaining, seen, limit=1)
+            translations = await translate_headlines(fallback)
+            valid_stories = [item for item in fallback if translations.get(item["id"])]
+            translated.update(translations)
+        if not valid_stories:
+            return "translation_unavailable"
     message = compose_news_digest(valid_stories, translated)
     try:
         await bot.send_message(chat_id=int(group_id), text=message,
