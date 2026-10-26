@@ -29,20 +29,20 @@ const container = {
 const sandbox = {
   state: {azApproved: true},
   navigator: {clipboard: {async writeText(text) { clipboard.push(text); }}},
-  document: {getElementById() {return container; }},
+  document: {getElementById() {return container; }, querySelectorAll() {return []; }},
   alertUser(text) {feedback.push(text);},
   switchTab(tab) {events.push("tab:" + tab);},
   async fetchDashboard() {events.push("dashboard");},
   node(tag, text, klass) {
     return {
-      tag, text, klass, children: [],
+      tag, text, klass, children: [], dataset: {},
       appendChild(child) {this.children.push(child);},
       setAttribute() {},
       addEventListener() {}
     };
   },
   clearAndText() {throw new Error("Unexpected empty order list");},
-  window: {confirm: () => true},
+  window: {confirm: () => true, setInterval() {return 1;}},
   api: async (url, opts) => {
     if (url === "/api/get-number") {
       assert.equal(opts.body.range, "447700");
