@@ -43,10 +43,15 @@ AZ_SOURCES = frozenset(("AzadlıqRadiosu", "Yeni Sabah Maraqlı", "Yeni Sabah Ş
 POSITIVE_TERMS = ("science", "space", "technology", "robot", "discovery", "discover",
                   "research", "innovation", "animal", "wildlife", "planet",
                   "moon", "ocean", "archaeolog", "culture", "art", "unusual",
-                  "first", "invent", "nature", "museum", "environment")
+                  "first", "invent", "nature", "museum", "environment",
+                  "maraqlı", "əyləncə", "gülməli", "qəribə", "kəşf", "alim",
+                  "kosmos", "robot", "heyvan", "təbiət", "film", "musiqi",
+                  "festival", "şou", "texnologiya", "oyun", "rekord")
 SENSITIVE_TERMS = ("kill", "massacre", "bomb", "attack", "dead", "death", "war",
                    "hostage", "rape", "shoot", "explosion", "disaster", "genocide",
-                   "suicide", "famine", "victim")
+                   "suicide", "famine", "victim", "qətl", "ölüm", "müharibə",
+                   "partlayış", "təcavüz", "ölüb", "öldür", "hücum", "fəlakət",
+                   "qəza", "şəhid", "itki")
 
 
 def load_news_settings():
