@@ -1,0 +1,26 @@
+/* Website account-link modal, never shown inside a signed Telegram Mini App */
+body.web-login-pending > .container { filter: blur(6px); pointer-events: none; user-select: none; }
+.web-login-overlay { position: fixed; z-index: 10000; inset: 0; display: grid; place-items: center;
+    background: rgba(6,11,25,.92); padding: 22px; overflow: auto; }
+.web-login-card { width: min(100%, 420px); border: 1px solid rgba(148,163,184,.26);
+    border-radius: 26px; padding: 28px 25px; color: #eef3ff; text-align: center;
+    background: linear-gradient(153deg,#1a2b47,#10192e 63%,#141b31);
+    box-shadow: 0 32px 90px rgba(0,0,0,.5); }
+.web-login-symbol { width: 62px; height:62px; margin: 0 auto 18px; display:grid; place-items:center;
+    border-radius: 18px; background: linear-gradient(135deg,#4b83ef,#8655cf); font-size:36px; }
+.web-login-eyebrow { color: #a6b7dc; font-size:12px; font-weight:800; letter-spacing:2px; }
+.web-login-card h1 { font-size: 25px; line-height:1.2; margin:14px 0; }
+.web-login-card p { color: #a9b8d2; line-height:1.6; font-size:14px; }
+.web-login-steps { display:flex; flex-direction:column; gap:8px; margin:22px 0; text-align:left; }
+.web-login-steps span { padding:11px 13px; border-radius:11px; background:rgba(255,255,255,.055);
+    border:1px solid rgba(255,255,255,.065); font-size:13px; }
+#web-login-start { display:block; width:100%; padding:15px 14px; background:#4789f8;
+    color:white; border:0; border-radius:12px; font-weight:800; font-size:15px; cursor:pointer; }
+#web-login-start:disabled { opacity:.6; cursor:wait; }
+#web-login-bot-link { display:block; color:#99c5ff; font-size:14px; margin-top:13px; }
+#web-login-bot-link[hidden] { display:none; }
+#web-login-message { min-height:40px; font-size:13px; margin:17px 0 10px; }
+#web-login-message[data-error="true"] { color:#ff9b9b; }
+.web-login-card small { display:block; color:#889bb9; font-size:11px; line-height:1.6; }
+.web-logout-button { background:rgba(255,255,255,.09); color:inherit; border:1px solid rgba(255,255,255,.25);
+    border-radius:8px; padding:8px 12px; cursor:pointer; font-size:12px; }
