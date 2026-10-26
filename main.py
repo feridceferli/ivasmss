@@ -5358,6 +5358,26 @@ async def miniapp_profile_api(request):
     }))
 
 
+async def miniapp_activity_history_api(request):
+    """Return only the authenticated user's non-sensitive archived events."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = str(tg_user["id"])
+    if is_user_banned(int(uid)):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    try:
+        events = user_backup._read_activity()
+    except (ValueError, RuntimeError, OSError):
+        return _miniapp_cors(web.json_response({"error": "history_unavailable"}, status=503))
+    own = [{"action": e["action"], "timestamp": e["timestamp"]}
+           for e in events if e["uid"] == uid]
+    own.sort(key=lambda item: item["timestamp"], reverse=True)
+    return _miniapp_cors(web.json_response({"history": own[:100]}))
+
+
 async def miniapp_leaderboard_api(request):
     """Read-only OTP receipt counts, never code text or phone numbers."""
     if request.method == "OPTIONS":
@@ -5971,6 +5991,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
     server.router.add_route("*", "/api/withdrawals", miniapp_withdrawals_api)
     server.router.add_route("*", "/api/leaderboard", miniapp_leaderboard_api)
+    server.router.add_route("*", "/api/activity-history", miniapp_activity_history_api)
     server.router.add_route("GET", "/api/my-numbers", miniapp_my_numbers_api)
     server.router.add_route("OPTIONS", "/api/my-numbers", miniapp_my_numbers_api)
     server.router.add_route("*", "/api/countries", miniapp_countries_api)
