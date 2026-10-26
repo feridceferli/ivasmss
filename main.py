@@ -30,6 +30,7 @@ from urllib.parse import parse_qsl
 import httpx
 import random
 import string
+import secrets
 from datetime import datetime, timedelta
 from telegram import (
     Update,
@@ -141,7 +142,45 @@ client_async = httpx.AsyncClient(
 
 active_numbers = {}
 last_range = {}
+# Local OTP waiting window; does not cancel the external provider's allocation.
+NUMBER_WAIT_SECONDS = 180
 CHECK_INTERVAL = 2
+
+
+def active_number_remaining(info, now=None):
+    timestamp = info.get("timestamp")
+    if not isinstance(timestamp, datetime):
+        return 0
+    age = max(0, int(((now or datetime.now()) - timestamp).total_seconds()))
+    return max(0, NUMBER_WAIT_SECONDS - age)
+
+
+def assign_active_number(uid, number, range_display):
+    lease_id = secrets.token_hex(8)
+    active_numbers[normalize_number(number)] = {
+        "uid": int(uid), "range": str(range_display),
+        "timestamp": datetime.now(), "lease_id": lease_id,
+    }
+    return lease_id
+
+
+def cancel_active_number(uid, lease_id):
+    """Only the assigned user can cancel this particular unexpired order."""
+    if not isinstance(lease_id, str) or not re.fullmatch(r"[0-9a-f]{16}", lease_id):
+        return False
+    for number, info in list(active_numbers.items()):
+        if (info.get("lease_id") != lease_id or
+                int(info.get("uid", 0)) != int(uid) or
+                active_number_remaining(info) <= 0):
+            continue
+        del active_numbers[number]
+        for order in miniapp_orders.get(int(uid), []):
+            if order.get("id") == lease_id and order.get("status") == "Aktiv":
+                order["status"] = "Ləğv edildi"
+                miniapp_history.setdefault(int(uid), []).append(_safe_order(uid, order))
+        return True
+    return False
+
 
 # ==================== SERVICE CACHE ====================
 _services_cache = {"services": {}, "timestamp": 0}
@@ -2019,7 +2058,9 @@ async def monitor_loop(app):
                         continue
                     num = normalize_number(number)
                     sms_key = f"{num}_{full_sms[:50]}"
-                    if num in active_numbers and sms_key not in paid_keys_set:
+                    if (num in active_numbers and
+                            active_number_remaining(active_numbers[num]) > 0 and
+                            sms_key not in paid_keys_set):
                         sent_otps.add(key)
                         details = active_numbers[num]
                         uid = details["uid"]
@@ -2144,7 +2185,7 @@ async def monitor_loop(app):
                     entry = active_numbers[num_key]
                     if "timestamp" not in entry:
                         entry["timestamp"] = current_time
-                    elif (current_time - entry["timestamp"]).total_seconds() > 3600:
+                    elif active_number_remaining(entry, current_time) == 0:
                         del active_numbers[num_key]
             else:
                 monitor_diagnostics["state"] = "upstream_error"
@@ -2326,11 +2367,7 @@ async def fast_allocate_number(query, context, rid, service, range_display):
     clean_num = normalize_number(num)
     add_number_taken(uid, 1)
     last_range[uid] = rid
-    active_numbers[clean_num] = {
-        "uid": uid,
-        "range": range_display,
-        "timestamp": datetime.now(),
-    }
+    lease_id = assign_active_number(uid, clean_num, range_display)
     save_number_range_info(uid, clean_num, range_display)
     country_flag, country_name = get_country_info(clean_num)
     text = (
@@ -2339,7 +2376,7 @@ async def fast_allocate_number(query, context, rid, service, range_display):
         f"<blockquote>📶 RANGE: <code>{range_display}</code></blockquote>\n"
         f"<blockquote>📱 SERVICE: <code>{service.upper()}</code></blockquote>\n"
         f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-        f"<b>📩 SMS STATUS: ⏳ WAITING...</b>"
+        f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
     )
     keyboard = InlineKeyboardMarkup(
         [
@@ -2416,11 +2453,7 @@ async def process_auto_number(update, context, range_text):
         clean_num = normalize_number(num)
         add_number_taken(uid, 1)
         last_range[uid] = rid
-        active_numbers[clean_num] = {
-            "uid": uid,
-            "range": range_text,
-            "timestamp": datetime.now(),
-        }
+        lease_id = assign_active_number(uid, clean_num, range_text)
         save_number_range_info(uid, clean_num, range_text)
         country_flag, country_name = get_country_info(clean_num)
         final_text = (
@@ -2428,7 +2461,7 @@ async def process_auto_number(update, context, range_text):
             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {country_name}</code></blockquote>\n"
             f"<blockquote>📶 RANGE: <code>{range_text}</code></blockquote>\n\n"
             f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-            f"<b>📩 SMS STATUS: ⏳ WAITING...</b>"
+            f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
         )
         keyboard = InlineKeyboardMarkup(
             [
@@ -2485,11 +2518,7 @@ async def process_numbers(update_or_query, context, range_text, count, service="
             await status_msg.edit_text("❌ NO NUMBERS FOUND. TRY A VALID RANGE.")
             return
         clean_num = normalize_number(num)
-        active_numbers[clean_num] = {
-            "uid": uid,
-            "range": range_text,
-            "timestamp": datetime.now(),
-        }
+        lease_id = assign_active_number(uid, clean_num, range_text)
         save_number_range_info(uid, clean_num, range_text)
         country_flag, country_name = get_country_info(clean_num)
         final_text = (
@@ -2498,7 +2527,7 @@ async def process_numbers(update_or_query, context, range_text, count, service="
             f"<blockquote>📶 RANGE: <code>{range_text}</code></blockquote>\n"
             f"{f'<blockquote>📱 SERVICE: <code>{service.upper()}</code></blockquote>' if service else ''}\n"
             f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-            f"<b>📩 SMS STATUS: ⏳ WAITING...</b>"
+            f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
         )
         svc = service if service else "CUSTOM"
         keyboard = InlineKeyboardMarkup(
@@ -4954,11 +4983,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
         clean_num = normalize_number(num)
-        active_numbers[clean_num] = {
-            "uid": uid,
-            "range": rid,
-            "timestamp": datetime.now(),
-        }
+        lease_id = assign_active_number(uid, clean_num, rid)
         add_number_taken(uid, 1)
         save_number_range_info(uid, clean_num, rid)
         flag, cname = get_country_info(clean_num)
@@ -4968,7 +4993,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             f"<blockquote>📶 RANGE: <code>{rid}</code></blockquote>\n"
             f"<blockquote>📱 SERVICE: <code>{service.upper()}</code></blockquote>\n"
             f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-            f"<b>📩 SMS STATUS: ⏳ WAITING...</b>"
+            f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
         )
         new_keyboard = InlineKeyboardMarkup(
             [
@@ -6310,11 +6335,7 @@ async def miniapp_get_number_api(request):
     range_display = rid + "XXX"
     
     # Aktif numaralara ekliyoruz
-    active_numbers[clean_num] = {
-        "uid": uid,
-        "range": range_display,
-        "timestamp": datetime.now(),
-    }
+    lease_id = assign_active_number(uid, clean_num, range_display)
     save_number_range_info(uid, clean_num, range_display)
     
     # Mini App sipariş listesine ekliyoruz
