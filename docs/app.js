@@ -2,7 +2,7 @@
    All country/range metadata comes from the same Render backend as the bot.
    No referral gate, no invented stock, no secrets in the browser.
 */
-const tg = window.Telegram.WebApp;
+const tg = window.Telegram?.WebApp || { initData: "", expand() {} };
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
@@ -54,6 +54,7 @@ function alertUser(message) {
 function getAuthHeaders() {
     return {
         "X-Telegram-Init-Data": tg.initData || "",
+        "X-Website-Request": tg.initData ? "0" : "1",
         "Content-Type": "application/json"
     };
 }
@@ -61,13 +62,17 @@ function getAuthHeaders() {
 async function api(path, options = {}) {
     const res = await fetch(API_BASE + path, {
         method: options.method || "GET",
+        credentials: "same-origin",
         headers: getAuthHeaders(),
         ...(options.body ? { body: JSON.stringify(options.body) } : {})
     });
     let data = {};
     try { data = await res.json(); } catch (_) { /* unavailable */ }
     if (!res.ok) {
-        if (res.status === 401) state.authFailed = true;
+        if (res.status === 401) {
+            state.authFailed = true;
+            window.websiteAuth?.requireLogin();
+        }
         throw new Error(data.message || ({
             unauthorized: "Mini App-i Telegram botunun içindən açın.",
             banned: "Hesab məhdudlaşdırılıb.",
@@ -1441,6 +1446,7 @@ async function adminAzPermission(approve, directId = null) {
 }
 
 document.addEventListener("DOMContentLoaded", async () => {
+    if (window.websiteAuth && !(await window.websiteAuth.ensureAuthenticated())) return;
     const serviceSearch = document.getElementById("service-search");
     if (serviceSearch) serviceSearch.addEventListener("input", () => {
         state.serviceQuery = serviceSearch.value;
