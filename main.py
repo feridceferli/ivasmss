@@ -5581,17 +5581,18 @@ async def miniapp_dashboard(request):
     for number, info in list(active_numbers.items()):
         if int(info.get("uid", 0)) != uid:
             continue
-        ts = info.get("timestamp") or now
-        age = max(0, int((now - ts).total_seconds()))
-        if age >= 3600:
+        remaining = active_number_remaining(info, now)
+        if remaining <= 0:
             continue
+        ts = info["timestamp"]
         orders.append({
+            "id": info.get("lease_id", ""),
             "label": "Aktiv sifariş",
             "number": "+" + normalize_number(number),
             "number_masked": "+" + normalize_number(number),
             "range": str(info.get("range", "—")),
             "status": "SMS gözlənilir",
-            "remaining_seconds": max(0, 3600 - age),
+            "remaining_seconds": remaining,
             "created_at": ts.timestamp(),
         })
 
@@ -5630,11 +5631,11 @@ def _safe_order(uid, order):
     result = {
         "id": order["id"], "label": order["label"],
         "number_masked": order["number_masked"], "range": order["range"],
-        "status": order["status"], "remaining_seconds": max(0, 3600 - age),
+        "status": order["status"], "remaining_seconds": max(0, NUMBER_WAIT_SECONDS - age),
         "created_at": order["created_at"],
     }
     digits = normalize_number(order.get("full_number") or "")
-    if digits and order.get("status") == "Aktiv" and age < 3600:
+    if digits and order.get("status") == "Aktiv" and age < NUMBER_WAIT_SECONDS:
         assigned = active_numbers.get(digits)
         if assigned and int(assigned.get("uid", 0)) == int(uid):
             result["number"] = "+" + digits
@@ -5647,7 +5648,12 @@ async def miniapp_orders_api(request):
     if not tg_user: return _miniapp_cors(web.json_response({"error":"unauthorized","reason":err}, status=401))
     uid=int(tg_user["id"])
     if request.method == "GET":
-        active=[_safe_order(uid,o) for o in miniapp_orders.get(uid,[]) if o["status"]=="Aktiv"]
+        active=[_safe_order(uid,o) for o in miniapp_orders.get(uid,[])
+                if o["status"]=="Aktiv"
+                and time.time() - o["created_at"] < NUMBER_WAIT_SECONDS
+                and (not o.get("full_number") or (
+                    active_numbers.get(normalize_number(o["full_number"]), {}).get("lease_id") == o["id"]
+                    and active_numbers.get(normalize_number(o["full_number"]), {}).get("uid") == uid))]
         active.sort(key=lambda order: order.get("created_at", 0), reverse=True)
         history=miniapp_history.get(uid,[])[-20:][::-1]
         return _miniapp_cors(web.json_response({"orders":active,"history":history}))
@@ -5661,10 +5667,19 @@ async def miniapp_orders_api(request):
         return _miniapp_cors(web.json_response({"ok":True,"order":_safe_order(uid,order)}))
     if action=="cancel":
         oid=str(body.get("id",""))
+        if cancel_active_number(uid, oid):
+            return _miniapp_cors(web.json_response({"ok":True,
+                "message":"Sifariş ləğv edildi. Provayder ödənişi geri qaytarılmır."}))
+        # Sandbox orders are synthetic and may be cancelled independently.
         for o in miniapp_orders.get(uid,[]):
-            if o["id"]==oid and o["status"]=="Aktiv":
-                o["status"]="Ləğv edildi"; miniapp_history.setdefault(uid,[]).append(_safe_order(uid,o)); return _miniapp_cors(web.json_response({"ok":True}))
-        return _miniapp_cors(web.json_response({"error":"not_found"},status=404))
+            if (o.get("id")==oid and oid.startswith("T") and
+                    o["status"]=="Aktiv" and
+                    time.time() - o["created_at"] < NUMBER_WAIT_SECONDS):
+                o["status"]="Ləğv edildi"
+                miniapp_history.setdefault(uid,[]).append(_safe_order(uid,o))
+                return _miniapp_cors(web.json_response({"ok":True}))
+        return _miniapp_cors(web.json_response({"error":"not_found",
+            "message":"Sifariş tapılmadı və ya vaxtı bitib."},status=404))
     return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
 
 async def miniapp_test_sms(request):
@@ -6363,14 +6378,14 @@ async def miniapp_get_number_api(request):
     
     # Mini App sipariş listesine ekliyoruz
     order = {
-        "id": f"ord_{int(time.time())}",
+        "id": lease_id,
         "label": service.upper(),
         "number_masked": "+" + mask_number(clean_num),
         "full_number": num,
         "range": range_display,
         "status": "Aktiv",
         "created_at": time.time(),
-        "remaining_seconds": 3600
+        "remaining_seconds": NUMBER_WAIT_SECONDS
     }
     miniapp_orders.setdefault(uid, []).append(order)
 
