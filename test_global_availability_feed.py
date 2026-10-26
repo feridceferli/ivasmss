@@ -54,10 +54,12 @@ class SnapshotTests(unittest.TestCase):
     def test_notice_contains_aggregates_not_credentials(self):
         snap = availability_snapshot(SAMPLE, country_prefix)
         notice = compose_availability_notice(snap, country_name_lookup=country_name)
-        for label in ("GLOBAL FEED", "Ölkə kodları", "Xidmət/range",
-                      "SMS/OTP", "994"):
+        for label in ("GLOBAL FEED", "Ölkə kodları", "Xidmət/range", "994"):
             self.assertIn(label, notice)
-        for sensitive in ("99450211", "447700", "199900"):
+        # Group feed is public metadata: never expose SMS/OTP details, numbers,
+        # or the removed explanatory disclaimer text.
+        for sensitive in ("99450211", "447700", "199900",
+                          "SMS/OTP", "/liveaccess", "OTP kodları"):
             self.assertNotIn(sensitive, notice)
         self.assertLess(len(notice), 1600)
 
