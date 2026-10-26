@@ -98,6 +98,7 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
             "load_number_prices": lambda: self.settings,
             "is_az_range": lambda rid: rid.startswith("994"),
             "az_range_allowed": lambda uid: int(uid or 0) == 77,
+            "is_admin": lambda uid: False,
             "_number_purchase_locks": {},
             "get_user": lambda uid: self.users[str(uid)],
             "load_data": load, "save_data": save,
