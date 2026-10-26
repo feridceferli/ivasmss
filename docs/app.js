@@ -780,6 +780,54 @@ async function fetchActivityHistory() {
     }
 }
 
+// Poll the authenticated user's own inbox, never displaying codes in popups.
+// The first snapshot is a baseline: reopening the app must not replay old OTPs.
+const otpCelebrations = [
+    "🎉 Təbriklər, qərdəş! Səndən əla xəbər var!",
+    "💚 Ürəyimsən, sağ ol qaqaş!",
+    "🔥 Nömrəvi ala, qaqaş! Uğurlar!",
+    "🥳 Xoş gəldin, nəfəs! Yeni OTP gəldi!",
+    "🤝 Öpürəm, brat! İşlər yolundadır!",
+    "🚀 Halaldı sənə, qardaş! Bir uğur da gəldi!",
+    "🎊 Qəşəng gedirsən, qaqa! Təbriklər!",
+    "✨ Əhsən, dostum! Hər şey əladır!"
+];
+let otpSeenEvents = null;
+let otpWatchBusy = false;
+let otpCheerIndex = 0;
+function incomingEventId(item) {
+    return String(item.event_id || [
+        item.service || "", item.number || "", item.time || "", item.message || ""
+    ].join("|"));
+}
+async function checkNewOtpNotifications() {
+    if (otpWatchBusy || state.authFailed || document.hidden) return;
+    otpWatchBusy = true;
+    try {
+        const data = await api("/api/incoming-sms");
+        const rows = Array.isArray(data.sms_list) ? data.sms_list : [];
+        const ids = new Set(rows.map(incomingEventId));
+        if (otpSeenEvents !== null) {
+            const fresh = rows.filter(item => !otpSeenEvents.has(incomingEventId(item)));
+            if (fresh.length) {
+                const latest = fresh[0];
+                const cheer = String(latest.congratulations || "").trim() ||
+                    otpCelebrations[otpCheerIndex++ % otpCelebrations.length];
+                toast("✅ Yeni OTP gəldi! " + cheer, "success");
+                if (typeof tg.HapticFeedback?.notificationOccurred === "function") {
+                    tg.HapticFeedback.notificationOccurred("success");
+                }
+                if (state.activeTab === "history") fetchIncomingSms();
+            }
+        }
+        otpSeenEvents = ids;
+    } catch (_) {
+        // Offline polling must not interrupt other Mini App interactions.
+    } finally {
+        otpWatchBusy = false;
+    }
+}
+
 async function fetchIncomingSms() {
     fetchActivityHistory();
     const container = document.getElementById("sms-list-container");
@@ -1359,6 +1407,8 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     await fetchPrices();
     await Promise.all([fetchDashboard(), fetchServices(), fetchCountries(), fetchOrders()]);
+    await checkNewOtpNotifications();
+    window.setInterval(checkNewOtpNotifications, 10000);
     if (state.isAdmin) renderAdminPrices();
     if (state.authFailed) {
         setStatus("⚠️ Mini App-i Telegram-un içindən, botun düyməsi ilə açın.");
