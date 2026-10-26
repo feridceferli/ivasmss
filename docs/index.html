@@ -209,6 +209,14 @@
         .admin-user-line { display:flex; gap:6px; align-items:center; justify-content:space-between;
             margin:6px 0; padding:8px; border-radius:9px; background:rgba(255,255,255,.045); }
         .admin-user-line span { overflow-wrap:anywhere; min-width:0; font-size:12px; }
+        .admin-nav-grid { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:9px; margin-top:14px; }
+        .admin-nav-grid .action-small { white-space:normal; min-height:52px; text-align:center; overflow-wrap:anywhere; }
+        .admin-user-line { flex-wrap:wrap; padding:12px 4px; border-bottom:1px solid rgba(255,255,255,.10); }
+        .admin-user-identity { display:flex; flex-direction:column; align-items:flex-start; gap:3px; flex:1 1 175px; }
+        .admin-user-identity strong { font-size:14px; overflow-wrap:anywhere; }
+        .admin-user-identity small { opacity:.8; font-size:12px; overflow-wrap:anywhere; }
+        #tab-admin [id^="admin-"][id$="-section"] { scroll-margin-top:95px; }
+
         .full-phone-number { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 17px; letter-spacing: .3px; user-select: all; overflow-wrap: anywhere; }
         .copy-phone-button { margin-top: 4px; font-weight: 700; }
         .az-price-note { font-size:13px; line-height:1.55; padding:10px 12px; background:rgba(245,158,11,.09); border:1px solid rgba(245,158,11,.28); border-radius:10px; margin:10px 0; }
@@ -520,7 +528,23 @@
         </section>
 
         <div id="tab-admin" class="tab-content" hidden>
-            <div class="card">
+            <div class="card" id="admin-overview">
+                <h4>🧭 Admin idarəetmə mərkəzi</h4>
+                <p class="notice-mini">Bölməni seçərək birbaşa idarəetmə alətlərinə keçin. Səlahiyyətlər serverdə yoxlanılır.</p>
+                <div class="admin-nav-grid">
+                    <button class="action-small" onclick="adminJump('admin-users-section')">👥 İstifadəçilər</button>
+                    <button class="action-small" onclick="adminJump('admin-system-section')">⚙️ Sistem</button>
+                    <button class="action-small" onclick="adminJump('admin-channels-section')">🔗 Kanallar</button>
+                    <button class="action-small" onclick="adminJump('admin-fake-otp-section')">⚡ Fake OTP (test)</button>
+                    <button class="action-small" onclick="adminJump('admin-notice-section')">🛠 Bildirişlər</button>
+                    <button class="action-small" onclick="adminJump('admin-test-section')">🧪 Test alətləri</button>
+                    <button class="action-small" onclick="adminJump('admin-price-section')">💰 Qiymətlər</button>
+                    <button class="action-small" onclick="adminJump('admin-balance-section')">💳 Balans</button>
+                    <button class="action-small" onclick="adminJump('admin-news-section')">🌍 Xəbərlər</button>
+                    <button class="action-small" onclick="adminJump('admin-archive-section')">📦 Arxiv</button>
+                </div>
+            </div>
+            <div class="card" id="admin-users-section">
                 <h4 style="margin:0 0 8px">⚙️ Admin idarəetməsi</h4>
                 <p class="notice-mini">Yalnız təsdiqlənmiş bot adminləri üçün. +994 giriş icazələri serverdə yoxlanır.</p>
                 <div class="catalog-tools">
@@ -534,8 +558,9 @@
                 <p id="admin-result" class="notice-mini"></p>
                 <button class="action-small" onclick="fetchAdminUsers()">🔄 İstifadəçiləri yenilə</button>
                 <div id="admin-system-status" class="notice-mini" style="margin-top:12px"></div>
+                <input id="admin-user-search" class="admin-input" type="search" placeholder="🔎 Ad, soyad, @username və ya ID axtar" aria-label="İstifadəçi axtar" oninput="filterAdminUsers()" style="margin-top:12px;width:100%">
                 <div id="admin-users-list" class="catalog-scroll" style="margin-top:12px"></div>
-                <section class="card admin-price-panel" aria-labelledby="pricing-heading">
+                <section id="admin-price-section" class="card admin-price-panel" aria-labelledby="pricing-heading">
                     <h4 id="pricing-heading">💰 Ölkə və nömrə qiymətləri</h4>
                     <p class="notice-mini">Qiymətlər AZN ilədir. “Pulsuz” = 0 AZN. Yalnız uğurlu ayrılmış nömrələr üçün balansdan çıxılır. Eyni +kodlu ölkələrdə qiymətlər fərqlidirsə, həmin range üçün ayrıca qiymət qoyun.</p>
                     <p id="admin-prices-status" class="notice-mini" role="status">Qiymətlər yüklənir...</p>
@@ -576,7 +601,7 @@
                     </div>
                 </section>
                 <div class="card" style="margin-top:12px">
-                    <h4 style="margin:0 0 8px">⚙️ Sistem konfiqurasiyası</h4>
+                    <h4 id="admin-system-section" style="margin:0 0 8px">⚙️ Sistem konfiqurasiyası</h4>
                     <div class="catalog-tools">
                         <label class="notice-mini" for="cfg-min-withdraw">Minimum çıxarış</label>
                         <input class="admin-input" type="number" inputmode="numeric" min="1" max="100000" id="cfg-min-withdraw" placeholder="Minimum">
@@ -587,7 +612,7 @@
                     <button class="action-small" onclick="saveAdminSettings()">💾 Parametrləri saxla</button>
                 </div>
                 <div class="card" style="margin-top:12px">
-                    <h4 style="margin:0 0 8px">🔗 Tələb olunan kanallar</h4>
+                    <h4 id="admin-channels-section" style="margin:0 0 8px">🔗 Tələb olunan kanallar</h4>
                     <div id="admin-channels-list" class="catalog-scroll"></div>
                     <div class="catalog-tools">
                         <input id="admin-channel-link" class="admin-input" type="url" placeholder="https://t.me/kanal" aria-label="Telegram kanal keçidi">
@@ -595,6 +620,12 @@
                     </div>
                     <input id="admin-channel-chat-id" class="admin-input" type="text" inputmode="numeric" placeholder="Chat ID (özəl qruplar üçün)" aria-label="Kanalın Chat ID-si">
                     <button class="action-small" onclick="adminAddChannel()" style="margin-top:8px">➕ Kanal əlavə et</button>
+                </div>
+                <div class="card" id="admin-fake-otp-section" style="margin-top:12px">
+                    <h4>⚡ Fake OTP — test rejimi</h4>
+                    <p class="notice-mini">Bu bölmə yalnız sintetik sınaq mesajlarına aiddir; real OTP-lər burada göstərilmir.</p>
+                    <p id="admin-demo-status" class="notice-mini" role="status">Test rejimi yoxlanır...</p>
+                    <p class="notice-mini">Bu rejimin dəyişiklikləri hələlik Telegram botunun ⚡ FAKE OTP düyməsindən edilir.</p>
                 </div>
                 <div class="card" style="margin-top:12px">
                     <h4 style="margin:0 0 8px">✨ Pulsuz AI paylaşımları</h4>
@@ -617,7 +648,7 @@
                     <p class="notice-mini">Real AI-ni aktivləşdirmək üçün Render → Environment hissəsinə <code>GROQ_API_KEY</code> əlavə edin. Nümunə heç kimə göndərilmir; real elan yalnız kataloq dəyişəndə göndərilir.</p>
                 </div>
                 <div class="card" style="margin-top:12px">
-                    <h4 style="margin:0 0 8px">🌍 Dünyadan maraqlı xəbərlər</h4>
+                    <h4 id="admin-news-section" style="margin:0 0 8px">🌍 Dünyadan maraqlı xəbərlər</h4>
                     <p class="notice-mini">Dünya xəbərləri AzadlıqRadiosunun Azərbaycan dilli RSS axınından və BBC/Guardian mənbələrindən götürülür. Seçdiyiniz dəqiqə aralığında ən çox 2 qısa Azərbaycan xülasəsi paylaşılır. Link göstərilmir; yalnız mənbənin adı yazılır. Tərcümə servisləri limitə düşsə də Azərbaycan dilli xəbərlər işləyir.</p>
                     <label class="price-free-check" for="world-news-enabled">
                         <input id="world-news-enabled" type="checkbox"> 🌐 Qısa dünya xəbərlərini avtomatik paylaş
@@ -633,20 +664,20 @@
                     <p class="notice-mini">Nümunə baxışı heç kimə göndərilmir. Xəbər mənbələri əlçatan deyilsə, bot uydurma xəbər paylaşmır. Avtomatik xəbərlər yalnız konfiqurasiya edilmiş qrupa gedir.</p>
                 </div>
                 <div class="card" style="margin-top:12px">
-                    <h4 style="margin:0 0 8px">📢 QRUPA BİLDİRİŞ</h4>
+                    <h4 id="admin-notice-section" style="margin:0 0 8px">📢 QRUPA BİLDİRİŞ</h4>
                     <p class="notice-mini">Yalnız konfiqurasiya edilmiş məlumat qrupuna. OTP, şəxsi nömrələr və şifrələri daxil etməyin. 90 saniyə limit var.</p>
                     <textarea id="admin-group-notice" class="admin-input" rows="3" maxlength="600" placeholder="Qrup üçün yenilik və ya məlumat"></textarea>
                     <button class="action-small" onclick="adminSendGroupNotice()">📨 Bildirişi göndər</button>
                 </div>
                 <div class="card" style="margin-top:12px">
-                    <h4 style="margin:0 0 8px">📦 Number Archive — Yedəkləmə statusu</h4>
+                    <h4 id="admin-archive-section" style="margin:0 0 8px">📦 Number Archive — Yedəkləmə statusu</h4>
                     <p class="notice-mini">GitHub-a özəl nömrə arxivinin sinxronizasiya vəziyyəti. Yalnız admin görə bilər.</p>
                     <p id="admin-archive-status" class="notice-mini" role="status" aria-live="polite">Arxiv vəziyyəti yüklənir...</p>
                     <p id="admin-user-backup-status" class="notice-mini" role="status" aria-live="polite">👥 İstifadəçi ID, balans və nömrə statistikası yüklənir...</p>
                     <button class="action-small" onclick="loadAdminTools()">🔄 Arxiv statusunu yenilə</button>
                 </div>
                 <div class="card" style="margin-top:12px">
-                    <h4 style="margin:0 0 8px">🧪 Təhlükəsiz test alətləri</h4>
+                    <h4 id="admin-test-section" style="margin:0 0 8px">🧪 Təhlükəsiz test alətləri</h4>
                     <p id="admin-test-status" class="notice-mini">WhatsApp bağlantısı və arxiv vəziyyəti yoxlanır...</p>
                     <div class="quick-actions">
                         <button class="action-small" onclick="loadAdminTools()">🔄 Statusu yenilə</button>
@@ -655,7 +686,7 @@
                     <p class="notice-mini">WhatsApp testi yalnız Render-də əvvəlcədən təyin olunmuş test alıcısına bir sabit mesaj göndərir. Ən azı 5 dəqiqə interval var.</p>
                 </div>
                 <div class="card" style="margin-top:12px">
-                    <h4 style="margin:0 0 6px">💰 İstifadəçi balansını dəyiş</h4>
+                    <h4 id="admin-balance-section" style="margin:0 0 6px">💰 İstifadəçi balansını dəyiş</h4>
                     <p class="notice-mini">Yalnız qeydiyyatlı istifadəçinin ID-si və məbləğ (AZN).</p>
                     <div class="catalog-tools">
                         <input id="admin-balance-id" class="admin-input" inputmode="numeric" placeholder="Telegram ID" aria-label="Balans istifadəçi ID">
@@ -668,7 +699,7 @@
         </div>
     </div>
 
-    <script src="app.js?v=20261026-user-backup"></script>
+    <script src="app.js?v=20261026-admin-hub"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 <div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>
