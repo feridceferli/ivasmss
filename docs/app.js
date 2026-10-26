@@ -687,6 +687,48 @@ async function copyPhoneNumber(number, showFeedback = true) {
     return copied;
 }
 
+let activeOrderTimer = null;
+let activeOrderRefreshBusy = false;
+function formatOrderTime(seconds) {
+    const value = Math.max(0, Math.ceil(Number(seconds) || 0));
+    return String(Math.floor(value / 60)).padStart(2, "0") + ":" +
+           String(value % 60).padStart(2, "0");
+}
+function startActiveOrderTimer() {
+    if (activeOrderTimer) return;
+    activeOrderTimer = window.setInterval(async () => {
+        if (state.activeTab !== "active") return;
+        let expired = false;
+        document.querySelectorAll("[data-order-expires]").forEach(element => {
+            const remaining = Math.max(0, Math.ceil(
+                (Number(element.dataset.orderExpires) - Date.now()) / 1000
+            ));
+            element.textContent = "⏳ Qalan vaxt: " + formatOrderTime(remaining);
+            if (!remaining) expired = true;
+        });
+        if (expired && !activeOrderRefreshBusy) {
+            activeOrderRefreshBusy = true;
+            try { await fetchOrders(); }
+            finally { activeOrderRefreshBusy = false; }
+        }
+    }, 1000);
+}
+async function cancelNumberOrder(orderId, button) {
+    if (!orderId) return;
+    if (!window.confirm("Bu nömrəni ləğv edək? Provayder ödənişi geri qaytarılmır.")) return;
+    button.disabled = true;
+    try {
+        await api("/api/orders", {method: "POST", body: {
+            action: "cancel", id: String(orderId)
+        }});
+        toast("✅ Nömrənin gözlənilməsi ləğv edildi.", "success");
+        await fetchOrders();
+    } catch (error) {
+        button.disabled = false;
+        alertUser("Ləğv mümkün olmadı: " + error.message);
+    }
+}
+
 async function fetchOrders() {
     const container = document.getElementById("active-orders-container");
     try {
@@ -736,6 +778,10 @@ async function fetchOrders() {
             card.appendChild(numberText);
             card.appendChild(node("p", "Range: " + (order.range || "—") +
                 " · " + (order.status || "Aktiv"), "notice-mini"));
+            const remaining = Math.max(0, Number(order.remaining_seconds ?? 0));
+            const timer = node("p", "⏳ Qalan vaxt: " + formatOrderTime(remaining), "notice-mini");
+            timer.dataset.orderExpires = String(Date.now() + remaining * 1000);
+            card.appendChild(timer);
             if (validNumber) {
                 const button = node("button", "📋 Kopyala", "action-small copy-phone-button");
                 button.type = "button";
@@ -745,8 +791,16 @@ async function fetchOrders() {
             } else {
                 card.appendChild(node("p", "Tam nömrə bu sifarişdə mövcud deyil.", "notice-mini"));
             }
+            if (order.id && remaining > 0) {
+                const cancel = node("button", "❌ Ləğv et", "action-small");
+                cancel.type = "button";
+                cancel.setAttribute("aria-label", display + " sifarişini ləğv et");
+                cancel.addEventListener("click", () => cancelNumberOrder(order.id, cancel));
+                card.appendChild(cancel);
+            }
             container.appendChild(card);
         });
+        startActiveOrderTimer();
     } catch (err) {
         clearAndText(container, "Aktiv nömrələr yüklənmədi. " + err.message);
     }
