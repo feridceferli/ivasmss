@@ -5584,7 +5584,19 @@ async def miniapp_admin_api(request):
     if request.method=="GET":
         rows=[]
         for user_id,data in list(users.items())[-100:]:
-            rows.append({"id":user_id,"name":data.get("full_name") or data.get("username") or "İstifadəçi","balance":format_balance(data.get("balance",0)),"banned":is_user_banned(user_id),"az_approved":az_range_allowed(user_id)})
+            first_name = str(data.get("first_name") or "").strip()
+            last_name = str(data.get("last_name") or "").strip()
+            full_name = (first_name + " " + last_name).strip() or str(data.get("full_name") or "").strip()
+            username = str(data.get("username") or "").strip().lstrip("@")
+            display_name = full_name or ("@" + username if username else "Adsız istifadəçi")
+            rows.append({
+                "id": user_id, "name": display_name[:180],
+                "first_name": first_name[:100], "last_name": last_name[:100],
+                "username": username[:100],
+                "balance": format_balance(data.get("balance", 0)),
+                "total_numbers": len(load_stats().get(user_id, {}).get("numbers_taken", [])),
+                "banned": is_user_banned(user_id), "az_approved": az_range_allowed(user_id),
+            })
         cfg=load_system_config()
         return _miniapp_cors(web.json_response({
             "user_count": len(users), "users": rows,
