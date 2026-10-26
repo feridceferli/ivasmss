@@ -5409,7 +5409,7 @@ def validate_telegram_init_data(init_data: str, max_age: int = 86400):
 
 def _miniapp_cors(resp):
     resp.headers["Access-Control-Allow-Origin"] = "https://feridceferli.github.io"
-    resp.headers["Access-Control-Allow-Headers"] = "X-Telegram-Init-Data, Content-Type"
+    resp.headers["Access-Control-Allow-Headers"] = "X-Telegram-Init-Data, X-Website-Request, Content-Type"
     resp.headers["Access-Control-Allow-Methods"] = "GET, POST, OPTIONS"
     resp.headers["Vary"] = "Origin"
     return resp
