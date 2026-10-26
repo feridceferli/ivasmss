@@ -41,10 +41,25 @@
         document.body.appendChild(wrap);
         $("web-login-start").addEventListener("click", beginLogin);
         document.body.classList.add("web-login-pending");
+        try {
+            const saved = JSON.parse(sessionStorage.getItem("webLoginChallenge") || "null");
+            if (saved && Date.now() - saved.at < 600000 && saved.token && saved.bot_url) {
+                challenge = saved;
+                const link = $("web-login-bot-link");
+                link.href = saved.bot_url;
+                link.hidden = false;
+                $("web-login-start").disabled = true;
+                $("web-login-start").textContent = "Telegram-da təsdiq gözlənilir...";
+                setMessage("Botda təsdiqlədikdən sonra sayt avtomatik açılacaq.");
+                pollTimer = setTimeout(pollStatus, 1000);
+            }
+        } catch (_) { sessionStorage.removeItem("webLoginChallenge"); }
     }
 
     async function beginLogin() {
         const button = $("web-login-start");
+        // Open a tab directly from the click so Safari does not block Telegram.
+        const popup = window.open("about:blank", "_blank");
         button.disabled = true;
         setMessage("Təhlükəsiz giriş bağlantısı hazırlanır...");
         if (pollTimer) clearTimeout(pollTimer);
@@ -57,16 +72,18 @@
             });
             if (!res.ok) throw new Error("Server bağlantısı açıla bilmədi.");
             challenge = await res.json();
+            sessionStorage.setItem("webLoginChallenge", JSON.stringify({
+                token: challenge.token, bot_url: challenge.bot_url, at: Date.now()
+            }));
             const link = $("web-login-bot-link");
             link.href = challenge.bot_url;
             link.hidden = false;
-            button.textContent = "↗ Telegram-da təsdiqlə";
-            button.disabled = false;
-            button.onclick = () => window.open(challenge.bot_url, "_blank", "noopener,noreferrer");
-            setMessage("Bot açıldıqdan sonra «Sayta girişi təsdiqlə» düyməsinə toxunun. Sayt burada avtomatik yenilənəcək.");
-            window.open(challenge.bot_url, "_blank", "noopener,noreferrer");
+            button.textContent = "Telegram-da təsdiq gözlənilir...";
+            setMessage("Botda «Sayta girişi təsdiqlə» düyməsinə toxunun. Sayt avtomatik yenilənəcək.");
+            if (popup && !popup.closed) popup.location.href = challenge.bot_url;
             pollTimer = setTimeout(pollStatus, 1200);
         } catch (err) {
+            if (popup && !popup.closed) popup.close();
             button.disabled = false;
             setMessage(err.message || "Giriş xətası baş verdi.", true);
         }
@@ -80,6 +97,7 @@
                 credentials: "same-origin", cache: "no-store"
             });
             if (res.status === 410) {
+                sessionStorage.removeItem("webLoginChallenge");
                 challenge = null;
                 setMessage("Giriş linkinin müddəti bitib. Yenidən cəhd edin.", true);
                 resetButton();
@@ -88,6 +106,7 @@
             if (!res.ok) throw new Error("Giriş təsdiqlənmədi.");
             const data = await res.json();
             if (data.status === "connected") {
+                sessionStorage.removeItem("webLoginChallenge");
                 setMessage("✅ Hesab bağlandı. Panel açılır...");
                 window.location.reload();
                 return;
@@ -101,7 +120,6 @@
     function resetButton() {
         const button = $("web-login-start");
         if (!button) return;
-        button.onclick = null;
         button.disabled = false;
         button.textContent = "✈ Telegram hesabımı bağla";
         const link = $("web-login-bot-link");
@@ -140,6 +158,7 @@
                 });
                 if (res.ok) {
                     const data = await res.json();
+                    sessionStorage.removeItem("webLoginChallenge");
                     addLogoutButton(data.user);
                     return true;
                 }
