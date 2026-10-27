@@ -41,10 +41,12 @@ def _label(uid, profile):
     return name[:90]
 
 
-def otp_leaderboards(stats_map, user_map, *, now=None):
-    """Return complete daily and all-time rankings from previously saved stats.
+def otp_leaderboards(stats_map, user_map, *, now=None, activity=None):
+    """Rank historical OTP records, including archived free-service receipts.
 
-    Today resets at 00:00 Asia/Baku. All-time never resets.
+    Some legacy versions saved free OTPs only to activity history, not stats.
+    Compare each calendar day's stat and activity counts, taking the larger
+    rather than summing to avoid double counting when both sources overlap.
     """
     reference = now or datetime.now(timezone.utc)
     if reference.tzinfo is None:
@@ -57,18 +59,49 @@ def otp_leaderboards(stats_map, user_map, *, now=None):
         stats_map = {}
     if not isinstance(user_map, dict):
         user_map = {}
-    for uid, stat in stats_map.items():
-        if not str(uid).isdecimal() or not isinstance(stat, dict):
+
+    # Activity archive is metadata-only and can include older free receipts.
+    from collections import defaultdict
+    activity_days = defaultdict(lambda: defaultdict(int))
+    if isinstance(activity, list):
+        for event in activity:
+            if not isinstance(event, dict):
+                continue
+            if event.get("action") not in ("OTP_RECEIVED", "OTP_RECEIVED_FREE"):
+                continue
+            uid = str(event.get("uid") or "")
+            day = _day(event.get("timestamp"))
+            if uid.isdecimal() and day is not None:
+                activity_days[uid][day] += 1
+
+    for uid in set(str(k) for k in stats_map) | set(activity_days):
+        if not uid.isdecimal():
             continue
+        stat = stats_map.get(uid, {})
+        if not isinstance(stat, dict):
+            stat = {}
         timestamps = stat.get("otps_received", [])
         if not isinstance(timestamps, list):
-            continue
-        lifetime = len(timestamps)
+            timestamps = []
+        stat_days = defaultdict(int)
+        unparsed = 0
+        for stamp in timestamps:
+            day = _day(stamp)
+            if day is None:
+                # Preserve historical total counters even for old timestamps
+                # written by a previous bot version.
+                unparsed += 1
+            else:
+                stat_days[day] += 1
+        events = activity_days.get(uid, {})
+        lifetime = unparsed + sum(
+            max(stat_days.get(day, 0), events.get(day, 0))
+            for day in (stat_days.keys() | events.keys())
+        )
         if not lifetime:
             continue
-        daily = sum(_day(ts) == date for ts in timestamps)
-        profile = user_map.get(str(uid), {})
-        row = {"name": _label(uid, profile), "count": lifetime}
+        daily = max(stat_days.get(date, 0), events.get(date, 0))
+        row = {"name": _label(uid, user_map.get(uid, {})), "count": lifetime}
         all_time.append(row)
         total_otp += lifetime
         if daily:
