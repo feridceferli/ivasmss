@@ -1,6 +1,7 @@
 import asyncio
 from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
+from otp_leaderboard import otp_leaderboards, leaderboard_page
 from user_backup import UserProfileBackup
 from range_collection import RangeCollector
 from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
@@ -1588,60 +1589,116 @@ def get_global_system_stats():
     return today_n, today_o, seven_n, seven_o, total_n, total_o
 
 
-# ==================== LEADERBOARD ====================
+# ==================== OTP LEADERBOARDS ====================
+def get_otp_leaderboard_snapshot():
+    """Daily and lifetime OTP counts from the existing backed-up statistics."""
+    return otp_leaderboards(load_stats(), load_data(USER_DATA_FILE))
+
+
+def _leaderboard_lines(entries, start=0):
+    if not entries:
+        return ["Hələ OTP qeydi yoxdur."]
+    result = []
+    for rank, entry in enumerate(entries, start + 1):
+        medal = ("🥇" if rank == 1 else "🥈" if rank == 2 else
+                 "🥉" if rank == 3 else f"{rank}.")
+        result.append(
+            f"{medal} <b>{html.escape(entry['name'])}</b> — "
+            f"<b>{entry['count']}</b> OTP"
+        )
+    return result
+
+
+def _leaderboard_markup(page=0, *, all_page=False, has_more=False):
+    if all_page:
+        buttons = []
+        if page > 0:
+            buttons.append(InlineKeyboardButton(
+                "◀️ Əvvəlki", callback_data=f"otp_leaders_all:{page - 1}"
+            ))
+        if has_more:
+            buttons.append(InlineKeyboardButton(
+                "Növbəti ▶️", callback_data=f"otp_leaders_all:{page + 1}"
+            ))
+        rows = [buttons] if buttons else []
+        rows.append([InlineKeyboardButton("🏆 Gündəlik liderlər",
+                                          callback_data="otp_leaders_today")])
+        return InlineKeyboardMarkup(rows)
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton("📜 Bütün dövrlər üzrə siyahı",
+                              callback_data="otp_leaders_all:0")],
+        [InlineKeyboardButton("🔄 Yenilə", callback_data="otp_leaders_today")],
+    ])
+
+
+def _leaderboard_today_text(snapshot):
+    rows = [
+        f"🏆 <b>GÜNDƏLİK OTP LİDERLƏRİ — {snapshot['date']}</b>",
+        "🕛 Bakı vaxtı (UTC+4)",
+        f"📊 Bugün: {snapshot['today_users']} istifadəçi, "
+        f"{snapshot['today_otps']} OTP",
+        "",
+    ]
+    rows.extend(_leaderboard_lines(snapshot["daily"][:10]))
+    rows.extend([
+        "", "━━━━━━━━━━━━━━━━━━━━",
+        f"🌍 <b>İndiyədək:</b> {snapshot['total_users']} istifadəçi / "
+        f"{snapshot['total_otps']} OTP",
+        "📜 Bütün istifadəçiləri görmək üçün aşağıdakı düyməni seçin.",
+    ])
+    return "\n".join(rows)
+
+
+def _leaderboard_all_text(snapshot, page=0):
+    page = min(max(0, page), max(0, (len(snapshot["all_time"]) - 1) // 20))
+    start = page * 20
+    rows = [
+        "🏅 <b>BÜTÜN DÖVRLƏR ÜZRƏ OTP ALANLAR</b>",
+        f"👥 {snapshot['total_users']} istifadəçi • "
+        f"🔑 {snapshot['total_otps']} OTP",
+        f"📄 Səhifə {page + 1}", "",
+    ]
+    rows.extend(_leaderboard_lines(snapshot["all_time"][start:start + 20], start))
+    return "\n".join(rows), page, start + 20 < len(snapshot["all_time"])
+
+
 async def leaderboard_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     if is_user_banned(uid):
         await update.effective_message.reply_text(
-            "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(uid)
-        )
+            "🚫 Hesabınız məhdudlaşdırılıb.", reply_markup=main_keyboard(uid))
         return
-    stats_data = load_stats()
-    today_midnight = get_date_reset_time()
-    user_data_all = load_data(USER_DATA_FILE)
-    user_today_counts = []
-    for uid_str, user_stats in stats_data.items():
-        otps_received = user_stats.get("otps_received", [])
-        today_count = 0
-        for ts in otps_received:
-            try:
-                dt = datetime.fromisoformat(ts)
-                if dt >= today_midnight:
-                    today_count += 1
-            except:
-                continue
-        if today_count > 0:
-            profile = user_data_all.get(uid_str, {})
-            name = (str(profile.get("first_name") or "") + " " + str(profile.get("last_name") or "")).strip() or profile.get("full_name")
-            if not name:
-                name = profile.get("username")
-            if not name:
-                name = f"User {uid_str}"
-            user_today_counts.append((uid_str, today_count, html.escape(name)))
-    user_today_counts.sort(key=lambda x: x[1], reverse=True)
-    top10 = user_today_counts[:10]
-    if not top10:
-        msg = (
-            "<b>🏆 TOP 10 OTP LEADERBOARD 🏆</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━\n\n"
-            '❌ Hələ heç kim OTP almayıb.\n'
-        )
-    else:
-        msg = "<b>🏆 TOP 10 OTP RECEIVERS (TODAY) 🏆</b>\n━━━━━━━━━━━━━━━━━━━━\n\n"
-        for idx, (uid_str, count, name) in enumerate(top10, 1):
-            if idx == 1:
-                medal = "🥇"
-            elif idx == 2:
-                medal = "🥈"
-            elif idx == 3:
-                medal = "🥉"
-            else:
-                medal = f"{idx}️⃣"
-            msg += f"{medal} <b>{name}</b>\n   🔑 <code>{count}</code> OTPs\n\n"
-        msg += '━━━━━━━━━━━━━━━━━━━━\n📊 <i>Hər gün gecə saat 12-də sıfırlanır</i>'
+    snapshot = get_otp_leaderboard_snapshot()
     await update.effective_message.reply_text(
-        msg, parse_mode="HTML", reply_markup=main_keyboard(uid)
+        _leaderboard_today_text(snapshot),
+        parse_mode="HTML",
+        reply_markup=_leaderboard_markup(),
     )
+
+
+async def otp_leaderboard_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    query = update.callback_query
+    if not query or not update.effective_user:
+        return
+    await query.answer()
+    if is_user_banned(update.effective_user.id):
+        await query.edit_message_text("🚫 Hesabınız məhdudlaşdırılıb.")
+        return
+    snapshot = get_otp_leaderboard_snapshot()
+    data = str(query.data or "")
+    if data == "otp_leaders_today":
+        await query.edit_message_text(
+            _leaderboard_today_text(snapshot), parse_mode="HTML",
+            reply_markup=_leaderboard_markup())
+        return
+    try:
+        page = int(data.rsplit(":", 1)[1])
+    except (ValueError, IndexError):
+        return
+    body, page, more = _leaderboard_all_text(snapshot, page)
+    await query.edit_message_text(
+        body, parse_mode="HTML",
+        reply_markup=_leaderboard_markup(page, all_page=True, has_more=more))
 
 
 # ==================== GET NUMBER — SERVICE SELECTION ====================
@@ -2084,6 +2141,8 @@ async def monitor_loop(app):
                             )
                             update_country_otp_count(num)
                         else:
+                            # Free-service receipts must count toward OTP leaders too.
+                            add_otp_received(uid)
                             log_global_activity(
                                 uid,
                                 "OTP_RECEIVED_FREE",
@@ -2633,6 +2692,7 @@ async def perform_otp_search(update, context, target_num):
                             add_otp_received(uid)
                             payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
                         else:
+                            add_otp_received(uid)
                             payment_status = (
                                 '⚠️ Bu OTP üçün pul əlavə edilməyib (Telegram/WhatsApp)'
                             )
@@ -5582,41 +5642,32 @@ async def miniapp_activity_history_api(request):
 
 
 async def miniapp_leaderboard_api(request):
-    """Read-only OTP receipt counts, never code text or phone numbers."""
+    """Read-only OTP counts; both daily and full history, no codes or numbers."""
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
+    if request.method != "GET":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
     tg_user, err = _miniapp_auth(request)
     if not tg_user:
         return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
     uid = int(tg_user["id"])
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    today = get_date_reset_time()
-    stat_map = load_stats()
-    user_map = load_data(USER_DATA_FILE)
-    rows = []
-    for identifier, stats in stat_map.items():
-        if not isinstance(stats, dict):
-            continue
-        try:
-            amount = sum(
-                datetime.fromisoformat(ts) >= today
-                for ts in stats.get("otps_received", [])
-                if isinstance(ts, str)
-            )
-        except (ValueError, TypeError):
-            continue
-        if amount <= 0:
-            continue
-        profile = user_map.get(str(identifier), {})
-        name = " ".join(str(profile.get(k) or "").strip() for k in ("first_name", "last_name")).strip()
-        name = name or str(profile.get("full_name") or "").strip()
-        name = name or ("@" + str(profile.get("username") or "").lstrip("@")
-                        if profile.get("username") else "İstifadəçi")
-        name = name[:100]
-        rows.append({"name": name, "count": amount})
-    rows.sort(key=lambda item: item["count"], reverse=True)
-    return _miniapp_cors(web.json_response({"metric": "today_otps", "leaders": rows[:10]}))
+
+    period = str(request.query.get("period", "today"))
+    if period not in ("today", "all"):
+        return _miniapp_cors(web.json_response({"error": "invalid_period"}, status=400))
+    try:
+        offset = int(request.query.get("offset", "0"))
+        limit = int(request.query.get("limit", "50" if period == "all" else "10"))
+    except (TypeError, ValueError):
+        return _miniapp_cors(web.json_response({"error": "invalid_pagination"}, status=400))
+    if offset < 0 or offset > 1000000 or limit < 1 or limit > 50:
+        return _miniapp_cors(web.json_response({"error": "invalid_pagination"}, status=400))
+    board = get_otp_leaderboard_snapshot()
+    return _miniapp_cors(web.json_response(
+        leaderboard_page(board, period=period, offset=offset, limit=limit)
+    ))
 
 
 async def miniapp_my_numbers_api(request):
@@ -6147,6 +6198,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(website_login_callback, pattern=r"^website:[A-Za-z0-9_-]{32}$"))
+    app.add_handler(CallbackQueryHandler(otp_leaderboard_callback, pattern=r"^otp_leaders_(?:today|all:[0-9]+)$"))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
