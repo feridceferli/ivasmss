@@ -951,23 +951,79 @@ async function saveProfileLanguage() {
     } catch (err) { alertUser(err.message); }
 }
 
+let otpLifetimeOffset = 0;
+let otpLifetimeLoading = false;
+let otpLifetimeHasMore = false;
+const OTP_LEADERBOARD_PAGE_SIZE = 50;
+
+function renderOtpLeaderRows(container, leaders, offset = 0) {
+    leaders.forEach((leader, index) => {
+        const rank = offset + index + 1;
+        const marker = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : "🏅";
+        const row = node("div", null, "admin-user-line");
+        row.appendChild(node("span", rank + ". " + marker + " " + (leader.name || "İstifadəçi")));
+        row.appendChild(node("b", String(leader.count || 0) + " OTP"));
+        container.appendChild(row);
+    });
+}
+
 async function fetchLeaderboard() {
-    const container = document.getElementById("leaderboard-list");
+    const todayNode = document.getElementById("leaderboard-list");
+    const todaySummary = document.getElementById("leaderboard-today-summary");
+    const allNode = document.getElementById("leaderboard-all-list");
+    const allSummary = document.getElementById("leaderboard-all-summary");
+    const moreButton = document.getElementById("leaderboard-all-more");
+    moreButton.hidden = true;
+    otpLifetimeOffset = 0;
+    otpLifetimeHasMore = false;
     try {
-        const data = await api("/api/leaderboard");
-        container.replaceChildren();
+        const [today, all] = await Promise.all([
+            api("/api/leaderboard?period=today&limit=10"),
+            api("/api/leaderboard?period=all&limit=" + OTP_LEADERBOARD_PAGE_SIZE + "&offset=0")
+        ]);
+        todayNode.replaceChildren();
+        const daily = Array.isArray(today.leaders) ? today.leaders : [];
+        todaySummary.textContent = "📅 " + (today.date || "Bu gün") +
+            " · Bakı vaxtı · " + (today.summary?.today_users || 0) + " istifadəçi · " +
+            (today.summary?.today_otps || 0) + " OTP";
+        if (daily.length) renderOtpLeaderRows(todayNode, daily);
+        else clearAndText(todayNode, "Bu gün hələ OTP qeydi yoxdur.");
+
+        allNode.replaceChildren();
+        const lifetime = Array.isArray(all.leaders) ? all.leaders : [];
+        allSummary.textContent = "👥 " + (all.summary?.total_users || 0) + " istifadəçi · " +
+            "🔑 " + (all.summary?.total_otps || 0) + " OTP";
+        if (lifetime.length) renderOtpLeaderRows(allNode, lifetime);
+        else clearAndText(allNode, "Hələ OTP alan istifadəçi qeydə alınmayıb.");
+        otpLifetimeOffset = lifetime.length;
+        otpLifetimeHasMore = Boolean(all.has_more);
+        moreButton.hidden = !otpLifetimeHasMore;
+    } catch (err) {
+        clearAndText(todayNode, err.message);
+        clearAndText(allNode, err.message);
+    }
+}
+
+async function loadMoreOtpLeaders() {
+    if (!otpLifetimeHasMore || otpLifetimeLoading) return;
+    const button = document.getElementById("leaderboard-all-more");
+    const container = document.getElementById("leaderboard-all-list");
+    otpLifetimeLoading = true;
+    button.disabled = true;
+    try {
+        const data = await api("/api/leaderboard?period=all&limit=" +
+            OTP_LEADERBOARD_PAGE_SIZE + "&offset=" + otpLifetimeOffset);
         const leaders = Array.isArray(data.leaders) ? data.leaders : [];
-        if (!leaders.length) {
-            clearAndText(container, "Bu gün OTP statistikası yoxdur.");
-            return;
-        }
-        leaders.forEach((leader, index) => {
-            const row = node("div", null, "admin-user-line");
-            row.appendChild(node("span", (index + 1) + ". 🏅 " + (leader.name || "İstifadəçi")));
-            row.appendChild(node("b", String(leader.count || 0) + " OTP"));
-            container.appendChild(row);
-        });
-    } catch (err) { clearAndText(container, err.message); }
+        renderOtpLeaderRows(container, leaders, otpLifetimeOffset);
+        otpLifetimeOffset += leaders.length;
+        otpLifetimeHasMore = Boolean(data.has_more);
+        button.hidden = !otpLifetimeHasMore;
+    } catch (err) {
+        alertUser("Lider siyahısı yüklənmədi: " + err.message);
+    } finally {
+        otpLifetimeLoading = false;
+        button.disabled = false;
+    }
 }
 
 async function downloadOwnNumbers() {
