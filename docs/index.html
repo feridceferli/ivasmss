@@ -402,10 +402,17 @@
         <div id="tab-leaderboard" class="tab-content">
             <div class="card">
                 <h4 style="margin:0 0 10px">🏆 Gündəlik OTP liderləri</h4>
-                <p class="notice-mini">Gün ərzində alınan OTP sayına əsaslanan statistikadır. Şəxsi nömrələr və kodlar göstərilmir.</p>
+                <p class="notice-mini" id="leaderboard-today-summary">Bakı vaxtı ilə bu gün ən çox OTP alanlar · Top 10</p>
                 <button class="action-small" onclick="fetchLeaderboard()">🔄 Yenilə</button>
                 <div id="leaderboard-list" class="catalog-scroll" style="margin-top:12px"></div>
             </div>
+            <div class="card">
+                <h4 style="margin:0 0 10px">🌍 Bütün dövrlər üzrə OTP alanlar</h4>
+                <p class="notice-mini" id="leaderboard-all-summary">İndiyədək qeydə alınmış istifadəçilər və OTP sayı</p>
+                <div id="leaderboard-all-list" class="catalog-scroll" style="margin-top:12px"></div>
+                <button id="leaderboard-all-more" class="action-small" onclick="loadMoreOtpLeaders()" hidden>📜 Daha çox göstər</button>
+            </div>
+            <p class="notice-mini">Yalnız istifadəçi adları və OTP sayları göstərilir. SMS mətnləri, nömrələr və kodlar paylaşılmır.</p>
         </div>
 
         <div id="tab-profile" class="tab-content">
