@@ -1591,8 +1591,14 @@ def get_global_system_stats():
 
 # ==================== OTP LEADERBOARDS ====================
 def get_otp_leaderboard_snapshot():
-    """Daily and lifetime OTP counts from the existing backed-up statistics."""
-    return otp_leaderboards(load_stats(), load_data(USER_DATA_FILE))
+    """Daily and lifetime OTP counts from private stats and archived events."""
+    try:
+        archived_events = user_backup._read_activity()
+    except (ValueError, RuntimeError, OSError):
+        archived_events = []
+    return otp_leaderboards(
+        load_stats(), load_data(USER_DATA_FILE), activity=archived_events
+    )
 
 
 def _leaderboard_lines(entries, start=0):
