@@ -618,37 +618,101 @@ async function selectService(service, country = null, range = null, countryIso =
         return;
     }
     if (!quote.free && !window.confirm(
-        "Bu nömrənin qiyməti " + (quote.cents / 100).toFixed(2) +
-        " AZN-dir. Uğurlu ayrılma zamanı balansınızdan çıxılacaq. Davam edilsin?"
+        "Bir nömrənin qiyməti " + (quote.cents / 100).toFixed(2) +
+        " AZN-dir. 5 variant göstəriləcək, yalnız seçdiyiniz 1 nömrə üçün " +
+        "balansınızdan ödəniş tutulacaq. Davam edilsin?"
     )) return;
-    // A separate authenticated API request is made only on an explicit click.
     try {
         const data = await api("/api/get-number", {
             method: "POST",
-            body: { service, country, range, ...(countryIso ? {country_iso: countryIso} : {}),
-                    expected_price_cents: quote.cents }
+            body: {mode: "preview", service, country, range,
+                   ...(countryIso ? {country_iso: countryIso} : {}),
+                   expected_price_cents: quote.cents}
         });
-        if (!data.success) {
-            alertUser(data.message || "Hazırda bu range üzrə nömrə yoxdur.");
+        if (!data.success || !Array.isArray(data.options) || !data.options.length) {
+            alertUser(data.message || "Bu diapazonda nömrə tapılmadı.");
             return;
         }
-        // The API may return bare digits or a +country-code number.
-        // Only a successfully allocated number is eligible for copying.
+        showNumberChoices(data, quote.cents);
+    } catch (error) {
+        alertUser("Nömrə variantları alına bilmədi: " + error.message);
+    }
+}
+
+let pendingNumberSelection = null;
+
+function closeNumberChoices() {
+    const overlay = document.getElementById("number-choices-overlay");
+    if (overlay) overlay.hidden = true;
+    pendingNumberSelection = null;
+}
+
+function showNumberChoices(data, priceCents) {
+    const overlay = document.getElementById("number-choices-overlay");
+    const list = document.getElementById("number-choices-list");
+    const desc = document.getElementById("number-choices-description");
+    if (!overlay || !list || !desc) {
+        alertUser("Nömrə seçimi pəncərəsi tapılmadı. Səhifəni yeniləyin.");
+        return;
+    }
+    list.replaceChildren();
+    pendingNumberSelection = {
+        token: String(data.choice_token || ""),
+        priceCents,
+        expiresAt: Date.now() + Math.max(1, Number(data.expires_in) || 90) * 1000
+    };
+    const options = data.options.slice(0, 5);
+    desc.textContent = options.length + " real nömrə təklif edildi · 90 saniyə ərzində " +
+        "birini seçin. Yalnız seçilən nömrə hesabınıza yazılır.";
+    options.forEach((item, index) => {
+        const number = String(item.number || "");
+        if (!/^\+\d{4,15}$/.test(number)) return;
+        const button = node("button", null, "number-choice-button");
+        button.type = "button";
+        button.appendChild(node("span", (index + 1) + ". 📱 " + number));
+        button.appendChild(node("b", "Seç"));
+        button.addEventListener("click", () => selectOfferedNumber(index));
+        list.appendChild(button);
+    });
+    overlay.hidden = false;
+}
+
+async function selectOfferedNumber(index) {
+    const offer = pendingNumberSelection;
+    if (!offer || Date.now() > offer.expiresAt) {
+        closeNumberChoices();
+        alertUser("90 saniyəlik seçim müddəti bitib. Yeni nömrələr istəyin.");
+        return;
+    }
+    const buttons = document.querySelectorAll("#number-choices-list button");
+    buttons.forEach(button => { button.disabled = true; });
+    try {
+        const data = await api("/api/get-number", {
+            method: "POST",
+            body: {
+                mode: "select",
+                choice_token: offer.token,
+                choice_index: index,
+                expected_price_cents: offer.priceCents
+            }
+        });
+        if (!data.success) throw new Error(data.message || "Seçim təsdiqlənmədi.");
+        closeNumberChoices();
         const digits = String(data.number || "").replace(/\D/g, "");
         const fullNumber = "+" + digits;
         const copied = /^\+\d{4,15}$/.test(fullNumber)
             ? await copyPhoneNumber(fullNumber, false)
             : false;
-        // Keep the number visible even when Telegram's WebView blocks clipboard access.
         switchTab("active");
         await fetchOrders();
         await fetchDashboard();
         alertUser(copied
-            ? "✅ Nömrə alındı və avtomatik kopyalandı: " + fullNumber
-            : "✅ Nömrə alındı: " + (digits ? fullNumber : String(data.number || "")) +
-              "\n📋 Avtomatik kopyalama mümkün olmadı. Aktivlər bölməsində Kopyala düyməsinə toxunun.");
-    } catch (err) {
-        alertUser(err.message);
+            ? "✅ Seçdiyiniz nömrə aktivləşdirildi və kopyalandı: " + fullNumber
+            : "✅ Seçdiyiniz nömrə aktivləşdirildi: " + fullNumber +
+              "\n📋 Aktivlər bölməsində Kopyala düyməsi var.");
+    } catch (error) {
+        alertUser("Seçim alınmadı: " + error.message);
+        buttons.forEach(button => { button.disabled = false; });
     }
 }
 
