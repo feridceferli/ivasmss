@@ -164,6 +164,7 @@ class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
             "client_async": SimpleNamespace(post=self.post),
             "BASE_URL": "https://example.invalid",
             "_number_purchase_locks": {},
+            "ensure_whatsapp_referral_access": lambda uid, service: None,
             "load_number_prices": lambda: {},
             "quote_range": lambda rid, settings, iso=None: {"cents": 0, "price": "0.00"},
             "USER_DATA_FILE": "users.json",
