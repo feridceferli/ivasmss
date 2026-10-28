@@ -325,6 +325,9 @@
                 <h4 style="margin: 0 0 10px 0;">🌍 Mövcud Xidmətlər və Ölkələr</h4>
                 <p class="notice-mini">Xidməti seçin → ölkə kodunu və range-i seçin → həmin range-dən nömrə almağa cəhd edin. Nömrə mövcudluğu API-dən asılıdır.</p>
                 <div class="service-search-wrap"><input id="service-search" type="search" placeholder="🔎 Xidmət axtar..." aria-label="Xidmətlər üzrə axtarış" autocomplete="off"></div>
+                <div id="wa-referral-service-info" class="wa-referral-notice" hidden>
+                    🔒 WhatsApp üçün dəvət tələbi aktivdir. Statusunuzu <button class="action-small" type="button" onclick="switchTab('profile')">Profilim</button> bölməsində görün.
+                </div>
                 <div class="services-grid" id="services-grid-container">
                     <p class="hint">Xidmətlər yüklənir...</p>
                 </div>
@@ -458,8 +461,22 @@
                     <p id="profile-name" class="notice-mini">Hesab yüklənir...</p>
                     <p id="profile-stats" class="notice-mini">Statistika yüklənir...</p>
                 </div>
+                <div class="card wa-referral-card" id="wa-referral-card">
+                    <h4 style="margin:0 0 8px">🎁 WhatsApp dəvətləri</h4>
+                    <p id="wa-referral-status" class="notice-mini">Dəvət məlumatları yüklənir...</p>
+                    <div class="wa-referral-progress" role="progressbar" aria-label="WhatsApp dəvət sayı" aria-valuemin="0" aria-valuemax="5" aria-valuenow="0">
+                        <div id="wa-referral-progress-bar"></div>
+                    </div>
+                    <p id="wa-referral-detail" class="notice-mini">Dostlarınız bu botu ilk dəfə dəvət linkinizlə açdıqda sayılır.</p>
+                    <div class="catalog-tools">
+                        <input id="wa-referral-link" class="admin-input" type="text" readonly
+                               aria-label="Şəxsi dəvət linki" placeholder="Link hazırlanır...">
+                        <button class="action-small" type="button" onclick="copyWhatsappReferralLink()">📋 Linki kopyala</button>
+                    </div>
+                    <p class="notice-mini">Dəvətlər yalnız yeni Telegram hesablarına görə hesablanır. Digər xidmətlər üçün dəvət tələbi yoxdur.</p>
+                </div>
                 <div class="catalog-tools">
-                    <select id="profile-language" class="admin-input" aria-label="Dil seç">
+                    <select id="profile-language' class="admin-input" aria-label="Dil seç">
                         <option value="az">🇦🇿 Azərbaycan dili</option>
                         <option value="tr">🇹🇷 Türkçe</option>
                         <option value="en">🇬🇧 English</option>
@@ -573,6 +590,7 @@
                 <p class="notice-mini">Bölməni seçərək birbaşa idarəetmə alətlərinə keçin. Səlahiyyətlər serverdə yoxlanılır.</p>
                 <div class="admin-nav-grid">
                     <button class="action-small" onclick="adminJump('admin-users-section')">👥 İstifadəçilər</button>
+                    <button class="action-small" onclick="adminJump('admin-wa-referral-section')">🎁 WhatsApp dəvətləri</button>
                     <button class="action-small" onclick="adminJump('admin-system-section')">⚙️ Sistem</button>
                     <button class="action-small" onclick="adminJump('admin-channels-section')">🔗 Kanallar</button>
                     <button class="action-small" onclick="adminJump('admin-fake-otp-section')">⚡ Fake OTP (test)</button>
@@ -640,8 +658,18 @@
                         <button class="action-small" onclick="saveAdminDefaultPrice()">💾 Standart qiyməti saxla</button>
                     </div>
                 </section>
+                <div class="card" id="admin-wa-referral-section" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">🎁 WhatsApp dəvət məhdudiyyəti</h4>
+                    <p class="notice-mini">Aktiv olduqda yalnız WhatsApp nömrələri üçün 5 təsdiqlənmiş dəvət tələb olunur. Digər xidmətlər dəyişmir. Admin hesabları məhdudiyyətdən azaddır.</p>
+                    <label class="price-free-check" for="admin-wa-referral-enabled">
+                        <input id="admin-wa-referral-enabled" type="checkbox">
+                        🔐 WhatsApp üçün 5 dəvət məhdudiyyətini aktivləşdir
+                    </label>
+                    <p id="admin-wa-referral-status" class="notice-mini">Parametr yüklənir...</p>
+                    <button class="action-small" onclick="saveWhatsappReferralSettings()">💾 Dəvət parametrini saxla</button>
+                </div>
                 <div class="card" style="margin-top:12px">
-                    <h4 id="admin-system-section" style="margin:0 0 8px">⚙️ Sistem konfiqurasiyası</h4>
+                    <h4 id="admin-system-section' style="margin:0 0 8px">⚙️ Sistem konfiqurasiyası</h4>
                     <div class="catalog-tools">
                         <label class="notice-mini" for="cfg-min-withdraw">Minimum çıxarış</label>
                         <input class="admin-input" type="number" inputmode="numeric" min="1" max="100000" id="cfg-min-withdraw" placeholder="Minimum">
@@ -783,7 +811,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261026-three-minute-orders-website-choose-five-alert-safe-20261028"></script>
+    <script src="app.js?v=20261026-three-minute-orders-website-choose-five-alert-safe-20261028-referral"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
