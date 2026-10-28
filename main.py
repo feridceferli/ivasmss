@@ -2534,72 +2534,96 @@ async def show_active_numbers(update, context):
 
 
 # ==================== WORKER & API ====================
+async def offer_numbers_to_bot(message, uid, rid, service="CUSTOM", range_display=None):
+    """Show real provider options as individually selectable inline buttons."""
+    rid = re.sub(r"\D", "", str(rid))
+    range_display = range_display or rid + "XXX"
+    try:
+        offer = await prepare_number_choices(uid, rid, service)
+    except PricingError as exc:
+        await message.edit_text("❌ " + html.escape(str(exc)), parse_mode="HTML")
+        return
+    if not offer:
+        await message.edit_text(
+            "❌ Bu diapazondan hazırda nömrə tapılmadı. Başqa range seçin.")
+        return
+    lines = [
+        "📱 <b>5 NÖMRƏDƏN BİRİNİ SEÇ</b>",
+        f"📶 Range: <code>{html.escape(str(range_display))}</code>",
+        f"✅ {len(offer['numbers'])} fərqli nömrə tapıldı.",
+        "⏳ Seçim 90 saniyə aktivdir.",
+        "💰 Yalnız seçdiyiniz 1 nömrə üçün hesabınızdan ödəniş tutulacaq.",
+        "",
+    ]
+    buttons = []
+    for i, item in enumerate(offer["numbers"]):
+        number = item["number"]
+        lines.append(f"{i + 1}. <code>{html.escape(number)}</code>")
+        buttons.append([InlineKeyboardButton(
+            f"📱 {i + 1}. {number} — SEÇ",
+            callback_data=f"num_choose_{offer['token']}_{i}",
+        )])
+    buttons.append([InlineKeyboardButton(
+        "◀️ Xidmətlər", callback_data="back_services"
+    )])
+    await message.edit_text(
+        "\n".join(lines), parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
 async def fast_allocate_number(query, context, rid, service, range_display):
     uid = query.from_user.id
     if is_az_range(rid) and not az_range_allowed(uid):
         await query.message.reply_text(AZ_ACCESS_DENIED)
         return
     if is_user_banned(uid):
-        await query.message.edit_text("🚫 YOU ARE BANNED 🚫")
+        await query.message.edit_text("🚫 Hesabınız məhdudlaşdırılıb.")
         return
+    await query.message.edit_text("🔍 5 nömrə variantı axtarılır...")
+    await offer_numbers_to_bot(query.message, uid, rid, service, range_display)
+
+
+async def number_choice_callback(update, context):
+    query = update.callback_query
+    if not query or not update.effective_user:
+        return
+    await query.answer()
+    uid = update.effective_user.id
+    payload = str(query.data or "")
     try:
-        num, country = await get_number_from_api(rid, requester_id=uid)
-    except Exception as e:
-        await query.message.edit_text(f"❌ Server error: {str(e)[:100]}")
+        token, index = payload.removeprefix("num_choose_").rsplit("_", 1)
+        index = int(index)
+        selected = await confirm_number_choice(uid, token, index)
+    except PricingError as exc:
+        await query.message.reply_text("❌ " + str(exc))
         return
-    if not num:
-        await query.message.edit_text(
-            '❌ <b>Nömrə tapılmadı.</b>\n\n'
-            '<blockquote>⚠️ Bu diapazonda hazırda nömrə yoxdur və ya server məşğuldur.\n'
-            'Başqa diapazonu sınayın.</blockquote>',
-            parse_mode="HTML",
-            reply_markup=InlineKeyboardMarkup(
-                [
-                    [
-                        InlineKeyboardButton(
-                            "🔙 BACK", callback_data="back_services", style="danger"
-                        )
-                    ]
-                ]
-            ),
-        )
+    except (ValueError, TypeError):
+        await query.message.reply_text("❌ Seçim düzgün deyil.")
         return
-    clean_num = normalize_number(num)
-    add_number_taken(uid, 1)
-    last_range[uid] = rid
-    lease_id = assign_active_number(uid, clean_num, range_display)
-    save_number_range_info(uid, clean_num, range_display)
-    country_flag, country_name = get_country_info(clean_num)
-    text = (
-        f"✅ <b>YOUR NUMBER</b> ✅\n\n"
-        f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(country_name)}</code></blockquote>\n"
-        f"<blockquote>📶 RANGE: <code>{range_display}</code></blockquote>\n"
-        f"<blockquote>📱 SERVICE: <code>{service.upper()}</code></blockquote>\n"
-        f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-        f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
+    rid = re.sub(r"\D", "", selected["range"])
+    service = selected["service"]
+    country_flag, country_name = get_country_info(normalize_number(selected["number"]))
+    number = html.escape(selected["number"])
+    await query.message.edit_text(
+        f"✅ <b>SEÇDİYİNİZ NÖMRƏ AKTİVLƏŞDİ</b>\n\n"
+        f"🌍 {country_flag} {html.escape(str(country_name))}\n"
+        f"📶 Range: <code>{html.escape(selected['range'])}</code>\n"
+        f"📱 Xidmət: <b>{html.escape(service)}</b>\n"
+        f"📞 Nömrə: <code>{number}</code>\n"
+        f"⏳ OTP gözləmə müddəti: 03:00",
+        parse_mode="HTML",
+        reply_markup=InlineKeyboardMarkup([
+            [InlineKeyboardButton(
+                "🔄 Yenə 5 nömrə göstər",
+                callback_data=f"same_range_{rid}_{service}")],
+            [InlineKeyboardButton(
+                "❌ Ləğv et",
+                callback_data=f"cancel_number_{selected['lease_id']}")],
+            [InlineKeyboardButton(
+                "📋 Aktiv nömrələr", callback_data="menu_active_numbers")],
+        ]),
     )
-    keyboard = InlineKeyboardMarkup(
-        [
-            [
-                InlineKeyboardButton(
-                    "🔄 SAME RANGE",
-                    callback_data=f"same_range_{rid}_{service}",
-                    style="success",
-                )
-            ],
-            [
-                InlineKeyboardButton(
-                    "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
-                )
-            ],
-            [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
-            [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
-        ]
-    )
-    try:
-        await query.message.edit_text(text, parse_mode="HTML", reply_markup=keyboard)
-    except Exception as e:
-        print(f"fast_allocate edit error: {e}")
 
 
 async def worker():
@@ -2630,62 +2654,18 @@ async def worker():
 
 async def process_auto_number(update, context, range_text):
     uid = update.effective_user.id
+    if is_user_banned(uid):
+        await update.effective_message.reply_text("🚫 Hesabınız məhdudlaşdırılıb.")
+        return
     if is_az_range(range_text) and not az_range_allowed(uid):
         await update.effective_message.reply_text(AZ_ACCESS_DENIED)
         return
-    chat_id = update.effective_chat.id
-    if is_user_banned(uid):
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="🚫 YOU ARE BANNED 🚫",
-            reply_markup=main_keyboard(uid),
-        )
-        return
-    status_msg = await context.bot.send_message(chat_id=chat_id, text="🔍 SEARCHING...")
-    rid = re.sub(r"[^0-9]", "", range_text)
+    rid = re.sub(r"\D", "", str(range_text))
     if not rid:
-        await status_msg.edit_text("❌ INVALID RANGE! Send numbers only.")
+        await update.effective_message.reply_text("❌ Düzgün diapazon göndərin.")
         return
-    try:
-        num, country = await get_number_from_api(rid, requester_id=uid)
-        if not num:
-            await status_msg.edit_text("❌ NO NUMBERS FOUND. TRY A VALID RANGE.")
-            return
-        clean_num = normalize_number(num)
-        add_number_taken(uid, 1)
-        last_range[uid] = rid
-        lease_id = assign_active_number(uid, clean_num, range_text)
-        save_number_range_info(uid, clean_num, range_text)
-        country_flag, country_name = get_country_info(clean_num)
-        final_text = (
-            f"✅ <b>YOUR NUMBER DETAILS</b> ✅\n\n"
-            f"<blockquote>🌍 COUNTRY: <code>{country_flag} {country_name}</code></blockquote>\n"
-            f"<blockquote>📶 RANGE: <code>{range_text}</code></blockquote>\n\n"
-            f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-            f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
-        )
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🔄 SAME RANGE",
-                        callback_data=f"same_range_{rid}_CUSTOM",
-                        style="success",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
-                    )
-                ],
-                [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
-            [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
-            ]
-        )
-        await status_msg.edit_text(final_text, parse_mode="HTML", reply_markup=keyboard)
-    except Exception as e:
-        print(f"Auto Number Error: {e}")
-        await status_msg.edit_text(f"❌ Error: {str(e)}")
+    msg = await update.effective_message.reply_text("🔍 5 nömrə variantı axtarılır...")
+    await offer_numbers_to_bot(msg, uid, rid, "CUSTOM", range_text)
 
 
 async def process_numbers(update_or_query, context, range_text, count, service=""):
@@ -2696,64 +2676,17 @@ async def process_numbers(update_or_query, context, range_text, count, service="
         uid = update_or_query.effective_user.id
         chat_id = update_or_query.effective_chat.id
     if is_user_banned(uid):
-        await context.bot.send_message(
-            chat_id=chat_id,
-            text="🚫 YOU ARE BANNED 🚫",
-            reply_markup=main_keyboard(uid),
-        )
+        await context.bot.send_message(chat_id=chat_id, text="🚫 Hesabınız məhdudlaşdırılıb.")
         return
     if is_az_range(range_text) and not az_range_allowed(uid):
         await context.bot.send_message(chat_id=chat_id, text=AZ_ACCESS_DENIED)
         return
-    status_msg = await context.bot.send_message(
-        chat_id=chat_id, text="🔍 SEARCHING . . ."
-    )
-    rid = re.sub(r"[^0-9]", "", range_text)
+    rid = re.sub(r"\D", "", str(range_text))
     if not rid:
-        await status_msg.edit_text("❌ INVALID RANGE!")
+        await context.bot.send_message(chat_id=chat_id, text="❌ Düzgün diapazon göndərin.")
         return
-    try:
-        add_number_taken(uid, count)
-        last_range[uid] = rid
-        num, country = await get_number_from_api(rid, requester_id=uid)
-        if not num:
-            await status_msg.edit_text("❌ NO NUMBERS FOUND. TRY A VALID RANGE.")
-            return
-        clean_num = normalize_number(num)
-        lease_id = assign_active_number(uid, clean_num, range_text)
-        save_number_range_info(uid, clean_num, range_text)
-        country_flag, country_name = get_country_info(clean_num)
-        final_text = (
-            f"✅ <b>YOUR NUMBER DETAILS</b> ✅\n\n"
-            f"<blockquote>🌍 COUNTRY: <code>{country_flag} {country_name}</code></blockquote>\n"
-            f"<blockquote>📶 RANGE: <code>{range_text}</code></blockquote>\n"
-            f"{f'<blockquote>📱 SERVICE: <code>{service.upper()}</code></blockquote>' if service else ''}\n"
-            f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-            f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
-        )
-        svc = service if service else "CUSTOM"
-        keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🔄 SAME RANGE",
-                        callback_data=f"same_range_{rid}_{svc}",
-                        style="success",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
-                    )
-                ],
-                [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
-            [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
-            ]
-        )
-        await status_msg.edit_text(final_text, parse_mode="HTML", reply_markup=keyboard)
-    except Exception as e:
-        print(f"Process Number Error: {e}")
-        await status_msg.edit_text(f"❌ System Error: {str(e)}")
+    msg = await context.bot.send_message(chat_id=chat_id, text="🔍 5 nömrə variantı axtarılır...")
+    await offer_numbers_to_bot(msg, uid, rid, service or "CUSTOM", range_text)
 
 
 async def perform_otp_search(update, context, target_num):
@@ -5178,80 +5111,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # SAME RANGE (fixed)
+    # SAME RANGE — five choices every time
     if data.startswith("same_range_"):
-        parts = data.split("_")
-        if len(parts) < 3:
-            await query.answer("Invalid same range data.", show_alert=True)
+        parts = data.split("_", 3)
+        if len(parts) < 3 or not parts[2].isdigit():
+            await query.message.reply_text("❌ Range düzgün deyil.")
             return
         rid = parts[2]
-        if is_az_range(rid) and not az_range_allowed(uid):
-            await query.message.reply_text(AZ_ACCESS_DENIED)
-            return
         service = parts[3] if len(parts) > 3 else "CUSTOM"
-        try:
-            await query.message.edit_reply_markup(reply_markup=None)
-        except:
-            pass
-        try:
-            num, country = await get_number_from_api(rid, requester_id=uid)
-        except Exception as e:
-            await query.message.reply_text(
-                f"❌ Server error: {str(e)[:100]}", reply_markup=main_keyboard(uid)
-            )
-            return
-        if not num:
-            await query.message.reply_text(
-                "❌ <b>Hal-hazırda bu diapazonda Nömrələr yoxdur!</b>\n\n"
-                "<blockquote>⚠️ Xahiş edirəm başqa bir sıra seçin və ya sonra yenidən cəhd edin.</blockquote>",
-                parse_mode="HTML",
-                reply_markup=InlineKeyboardMarkup(
-                    [
-                        [
-                            InlineKeyboardButton(
-                                "◀️ BACK TO SERVICES",
-                                callback_data="back_services",
-                                style="danger",
-                            )
-                        ]
-                    ]
-                ),
-            )
-            return
-        clean_num = normalize_number(num)
-        lease_id = assign_active_number(uid, clean_num, rid)
-        add_number_taken(uid, 1)
-        save_number_range_info(uid, clean_num, rid)
-        flag, cname = get_country_info(clean_num)
-        text = (
-            f"✅ <b>YOUR NEW NUMBER FROM SAME RANGE</b> ✅\n\n"
-            f"<blockquote>🌍 COUNTRY: <code>{flag} {cname}</code></blockquote>\n"
-            f"<blockquote>📶 RANGE: <code>{rid}</code></blockquote>\n"
-            f"<blockquote>📱 SERVICE: <code>{service.upper()}</code></blockquote>\n"
-            f"<blockquote>📞 NUMBER: <code>{num}</code></blockquote>\n\n"
-            f"<b>📩 SMS STATUS: ⏳ WAITING... (03:00)</b>"
-        )
-        new_keyboard = InlineKeyboardMarkup(
-            [
-                [
-                    InlineKeyboardButton(
-                        "🔄 SAME RANGE",
-                        callback_data=f"same_range_{rid}_{service}",
-                        style="success",
-                    )
-                ],
-                [
-                    InlineKeyboardButton(
-                        "📢 OTP GROUP", url="https://t.me/betrunaz", style="primary"
-                    )
-                ],
-                [InlineKeyboardButton("❌ LƏĞV ET", callback_data=f"cancel_number_{lease_id}", style="danger")],
-            [InlineKeyboardButton("◀️ BACK", callback_data="back_to_services")],
-            ]
-        )
-        await query.message.reply_text(
-            text, parse_mode="HTML", reply_markup=new_keyboard
-        )
+        await fast_allocate_number(query, context, rid, service, rid + "XXX")
         return
 
     # WITHDRAW
@@ -6327,6 +6195,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(website_login_callback, pattern=r"^website:[A-Za-z0-9_-]{32}$"))
     app.add_handler(CallbackQueryHandler(otp_leaderboard_callback, pattern=r"^otp_leaders_(?:today|all:[0-9]+)$"))
+    app.add_handler(CallbackQueryHandler(number_choice_callback, pattern=r"^num_choose_[A-Za-z0-9_-]{16}_[0-4]$"))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
