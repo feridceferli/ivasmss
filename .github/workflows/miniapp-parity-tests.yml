@@ -6,6 +6,7 @@ on:
       - main.py
       - number_choices.py
       - test_number_choices.py
+      - test_number_choice_integration.py
       - otp_leaderboard.py
       - test_otp_leaderboard.py
       - free_ai_posts.py
@@ -43,6 +44,7 @@ on:
       - main.py
       - number_choices.py
       - test_number_choices.py
+      - test_number_choice_integration.py
       - otp_leaderboard.py
       - test_otp_leaderboard.py
       - free_ai_posts.py
@@ -109,4 +111,4 @@ jobs:
       - name: Check Python syntax
         run: python -m py_compile main.py number_choices.py web_login.py otp_leaderboard.py world_country_codes.py number_pricing.py free_ai_posts.py global_availability_feed.py world_news_feed.py
       - name: Test Mini App parity, safe rendering and +994 permissions
-        run: python -m unittest -v test_number_choices test_otp_leaderboard test_web_login test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing test_free_ai_posts test_global_availability_feed test_world_news_feed
+        run: python -m unittest -v test_number_choices test_number_choice_integration test_otp_leaderboard test_web_login test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing test_free_ai_posts test_global_availability_feed test_world_news_feed
