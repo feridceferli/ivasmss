@@ -107,6 +107,31 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
                 7, offer["token"], 0, expected_price_cents=100)
         self.assertEqual(self.users["7"]["balance"], 9.0)
 
+    async def test_admin_can_request_twice_without_waiting(self):
+        self.env["is_admin"] = lambda uid: int(uid) == 7
+        first = await self.env["prepare_number_choices"](
+            7, "447700", "wa", "GB", expected_price_cents=100)
+        self.assertEqual(len(first["numbers"]), 5)
+        # Refresh provider's fake responses for the second immediate request.
+        items = iter([
+            SimpleNamespace(
+                raise_for_status=lambda: None,
+                json=lambda value=value: {
+                    "meta": {"code": 200},
+                    "data": {"full_number": value, "country": "UK"},
+                },
+            )
+            for value in ("44770000006", "44770000007", "44770000008",
+                          "44770000009", "44770000010")
+        ])
+        self.env["client_async"].post.side_effect = lambda *a, **k: next(items)
+        second = await self.env["prepare_number_choices"](
+            7, "447700", "wa", "GB", expected_price_cents=100)
+        self.assertEqual(len(second["numbers"]), 5)
+        self.assertNotEqual(first["token"], second["token"])
+        self.assertIsNone(self.env["number_choices"].get(7, first["token"], 0))
+        self.assertEqual(self.users["7"]["balance"], 10.0)
+
     async def test_foreign_user_cannot_take_options(self):
         offer = await self.env["prepare_number_choices"](7, "447700", "wa", "GB", 100)
         with self.assertRaises(PricingError):
