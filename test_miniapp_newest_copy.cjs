@@ -44,9 +44,20 @@ const sandbox = {
   clearAndText() {throw new Error("Unexpected empty order list");},
   window: {confirm: () => true, setInterval() {return 1;}},
   api: async (url, opts) => {
-    if (url === "/api/get-number") {
+    if (url === "/api/get-number" && opts.body.mode === "preview") {
       assert.equal(opts.body.range, "447700");
-      return {success: true, number: "447700123456"};
+      return {
+        success: true, choice_token: "AAAAAAAAAAAAAAAA",
+        options: [{number: "+447700123456"}, {number: "+447700123457"},
+                  {number: "+447700123458"}, {number: "+447700123459"},
+                  {number: "+447700123460"}],
+        expires_in: 90
+      };
+    }
+    if (url === "/api/get-number" && opts.body.mode === "select") {
+      assert.equal(opts.body.choice_token, "AAAAAAAAAAAAAAAA");
+      assert.equal(opts.body.choice_index, 0);
+      return {success: true, number: "+447700123456"};
     }
     if (url === "/api/orders") return {orders: [
       {id: "old", number: "+447700000001", range: "44", created_at: 100, status: "Aktiv"},
@@ -63,6 +74,9 @@ vm.runInContext(code, sandbox);
 
 (async () => {
   await sandbox.selectService("wa", "44", "447700", "GB");
+  assert.deepEqual(clipboard, [], "No phone is activated before a choice");
+  assert.equal(container.children.length, 5, "Show five selectable offers");
+  await sandbox.selectOfferedNumber(0);
   assert.deepEqual(clipboard, ["+447700123456"],
     "Successful allocation should attempt copying the full +number once");
   assert.ok(feedback.some(s => s.includes("avtomatik kopyalandı")),
