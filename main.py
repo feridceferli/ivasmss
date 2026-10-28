@@ -30,6 +30,7 @@ import time
 from urllib.parse import parse_qsl
 from pathlib import Path
 from web_login import WebsiteLogin
+from number_choices import number_choices
 import httpx
 import random
 import string
@@ -899,6 +900,127 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
                     old = round(float(users[uid].get("balance", 0.0)) * 100)
                     users[uid]["balance"] = round((old + charge) / 100, 2)
                     save_data(users, USER_DATA_FILE)
+
+
+
+# ==================== SELECT ONE OF FIVE PROVIDER NUMBERS ====================
+async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
+                                 expected_price_cents=None):
+    """Fetch up to five actual provider allocations, but charge none yet.
+
+    /getnum allocates on each call and has no documented reservation/release API.
+    Therefore these previews can consume provider inventory; unselected
+    candidates cannot be guaranteed releasable. Enforce user cooldown.
+    """
+    rid = re.sub(r"\D", "", str(rid or ""))
+    uid = int(uid)
+    if not 1 <= len(rid) <= 10 or (is_az_range(rid) and not az_range_allowed(uid)):
+        raise PricingError("invalid_range", "Bu diapazon üçün icazə yoxdur.")
+    if is_user_banned(uid):
+        raise PricingError("banned", "Hesabınız məhdudlaşdırılıb.")
+    lock = _number_purchase_locks.setdefault(str(uid), asyncio.Lock())
+    async with lock:
+        quote = quote_range(rid, load_number_prices(), country_iso or None)
+        if (not is_admin(uid) and expected_price_cents is not None
+                and (type(expected_price_cents) is not int
+                     or quote["cents"] != expected_price_cents)):
+            raise PricingError("price_changed", "Qiymət dəyişib. Yenidən təsdiqləyin.")
+        if not is_admin(uid) and quote["cents"]:
+            user = get_user(uid)
+            if round(float(user.get("balance", 0)) * 100) < quote["cents"]:
+                raise PricingError("insufficient_balance", "Bir nömrə üçün balans kifayət etmir.")
+        if not number_choices.reserve_request(uid):
+            raise PricingError("preview_cooldown",
+                               "Yeni seçim üçün 30 saniyə gözləyin.")
+        candidates = []
+        used = set()
+        for _ in range(number_choices.MAX_CHOICES):
+            try:
+                response = await client_async.post(
+                    f"{BASE_URL}/getnum", json={"rid": rid})
+                response.raise_for_status()
+                payload = response.json()
+                if payload.get("meta", {}).get("code") != 200:
+                    break
+                record = payload.get("data") or {}
+                value = str(record.get("full_number") or "")
+                clean = normalize_number(value)
+                if (not re.fullmatch(r"\d{4,15}", clean)
+                        or not clean.startswith(rid)):
+                    continue
+                if (clean in used or clean in active_numbers
+                        or any(number_choices.get(offer["uid"], token, index)
+                               and number_choices.get(offer["uid"], token, index)["number"].lstrip("+") == clean
+                               for token, offer in list(number_choices._offers.items())
+                               for index in range(len(offer["numbers"])))):
+                    continue
+                used.add(clean)
+                candidates.append({"number": clean, "country": record.get("country") or ""})
+            except (httpx.HTTPError, ValueError, KeyError, TypeError) as exc:
+                print("[number-options] provider request failed: " + type(exc).__name__)
+                break
+        return number_choices.create(uid, rid, service, country_iso, candidates)
+
+
+async def confirm_number_choice(uid, token, index, expected_price_cents=None):
+    """Only the authenticated owner can pay for and activate one exact choice."""
+    uid = int(uid)
+    lock = _number_purchase_locks.setdefault(str(uid), asyncio.Lock())
+    async with lock:
+        option = number_choices.get(uid, token, index)
+        if option is None:
+            raise PricingError("choice_expired",
+                               "Seçimin vaxtı bitib. Yenidən 5 nömrə istəyin.")
+        rid = option["rid"]
+        if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
+            raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
+        quote = quote_range(rid, load_number_prices(), option["iso"] or None)
+        if (not is_admin(uid) and expected_price_cents is not None
+                and (type(expected_price_cents) is not int
+                     or quote["cents"] != expected_price_cents)):
+            raise PricingError("price_changed", "Qiymət dəyişib. Seçim yenilənməlidir.")
+        charge = 0 if is_admin(uid) else quote["cents"]
+        user = get_user(uid)
+        if charge and round(float(user.get("balance", 0)) * 100) < charge:
+            raise PricingError("insufficient_balance", "Balans kifayət etmir.")
+        selected = option["number"]
+        normalized = normalize_number(selected)
+        if normalized in active_numbers and active_number_remaining(active_numbers[normalized]) > 0:
+            raise PricingError("already_active", "Bu nömrə artıq aktivdir.")
+        # Keep existing archive semantics: only the final chosen number is stored.
+        try:
+            await asyncio.to_thread(number_archive.record, selected)
+        except Exception:
+            raise PricingError("archive_unavailable", "Arxiv hazır deyil. Yenidən yoxlayın.")
+        if number_choices.consume(uid, token, index) is None:
+            raise PricingError("choice_expired", "Seçim artıq istifadə olunub.")
+        if charge:
+            data = load_data(USER_DATA_FILE)
+            record = data.get(str(uid), user)
+            cents = round(float(record.get("balance", 0)) * 100)
+            if cents < charge:
+                raise PricingError("insufficient_balance", "Balans kifayət etmir.")
+            record["balance"] = round((cents - charge) / 100, 2)
+            data[str(uid)] = record
+            save_data(data, USER_DATA_FILE)
+        add_number_taken(uid, 1)
+        last_range[uid] = rid
+        range_display = rid + "XXX"
+        lease_id = assign_active_number(uid, normalized, range_display)
+        save_number_range_info(uid, normalized, range_display)
+        order = {
+            "id": lease_id, "label": option["service"].upper(),
+            "number_masked": "+" + mask_number(normalized),
+            "full_number": selected, "range": range_display,
+            "status": "Aktiv", "created_at": time.time(),
+            "remaining_seconds": NUMBER_WAIT_SECONDS,
+        }
+        miniapp_orders.setdefault(uid, []).append(order)
+        return {
+            "success": True, "number": selected,
+            "masked_number": order["number_masked"], "service": order["label"],
+            "range": range_display, "lease_id": lease_id
+        }
 
 
 # ==================== CHECK IF USER IS ADMIN ====================
