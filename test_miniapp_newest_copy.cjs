@@ -79,7 +79,7 @@ vm.runInContext(code, sandbox);
   await sandbox.selectOfferedNumber(0);
   assert.deepEqual(clipboard, ["+447700123456"],
     "Successful allocation should attempt copying the full +number once");
-  assert.ok(feedback.some(s => s.includes("avtomatik kopyalandı")),
+  assert.ok(feedback.some(s => s.includes("aktivləşdirildi və kopyalandı")),
     "Success notice should clearly confirm copying");
   await sandbox.fetchOrders();
   const displayed = container.children.map(card => card.children[0]?.text);
