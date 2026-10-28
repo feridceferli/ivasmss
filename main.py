@@ -104,6 +104,7 @@ NUMBER_PRICES_FILE = data_path("number_prices.json")
 USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
+ACTIVE_LEASES_FILE = data_path("active_leases.json")
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
@@ -121,6 +122,7 @@ user_backup = UserProfileBackup(
         "fake_otp_config": FAKE_OTP_CONFIG_FILE,
         "world_news_settings": data_path("world_news_settings.json"),
         "ai_post_settings": data_path("ai_post_settings.json"),
+        "active_leases": ACTIVE_LEASES_FILE,
     },
 )
 
@@ -190,12 +192,81 @@ def active_number_remaining(info, now=None):
     return max(0, NUMBER_WAIT_SECONDS - age)
 
 
+def _persist_active_leases():
+    """Save short-lived user allocations; never store OTP/SMS contents here."""
+    records = {}
+    for number, info in active_numbers.items():
+        if active_number_remaining(info) <= 0:
+            continue
+        stamp = info.get("timestamp")
+        if not isinstance(stamp, datetime):
+            continue
+        records[normalize_number(number)] = {
+            "uid": int(info.get("uid", 0)),
+            "range": str(info.get("range", ""))[:32],
+            "timestamp": stamp.isoformat(),
+            "lease_id": str(info.get("lease_id", "")),
+        }
+    atomic_save(records, ACTIVE_LEASES_FILE)
+    try:
+        asyncio.get_running_loop()
+        user_backup.changed()
+    except RuntimeError:
+        pass
+
+
+def _restore_active_leases():
+    """Reconstruct only unexpired, user-owned allocations after a deploy."""
+    try:
+        with open(ACTIVE_LEASES_FILE, encoding="utf-8") as stream:
+            items = json.load(stream)
+    except FileNotFoundError:
+        return 0
+    except (OSError, ValueError, TypeError):
+        raise RuntimeError("Cannot safely restore active number leases")
+    if not isinstance(items, dict):
+        raise RuntimeError("Invalid active number lease snapshot")
+    restored = 0
+    for number, value in items.items():
+        if (not re.fullmatch(r"\d{7,15}", str(number))
+                or not isinstance(value, dict)):
+            continue
+        try:
+            uid = int(value["uid"])
+            stamp = datetime.fromisoformat(value["timestamp"])
+            lease_id = str(value["lease_id"])
+            rid = str(value["range"])
+        except (KeyError, ValueError, TypeError):
+            continue
+        if (uid <= 0 or stamp.tzinfo is not None
+                or not re.fullmatch(r"[0-9a-f]{16}", lease_id)
+                or len(rid) > 32):
+            continue
+        record = {"uid": uid, "range": rid,
+                  "timestamp": stamp, "lease_id": lease_id}
+        if active_number_remaining(record) <= 0:
+            continue
+        active_numbers[number] = record
+        order = {
+            "id": lease_id, "label": "Aktiv sifariş",
+            "number_masked": "+" + mask_number(number),
+            "full_number": "+" + number,
+            "range": rid, "status": "Aktiv",
+            "created_at": stamp.timestamp(),
+            "remaining_seconds": active_number_remaining(record),
+        }
+        miniapp_orders.setdefault(uid, []).append(order)
+        restored += 1
+    return restored
+
+
 def assign_active_number(uid, number, range_display):
     lease_id = secrets.token_hex(8)
     active_numbers[normalize_number(number)] = {
         "uid": int(uid), "range": str(range_display),
         "timestamp": datetime.now(), "lease_id": lease_id,
     }
+    _persist_active_leases()
     return lease_id
 
 
@@ -209,6 +280,7 @@ def cancel_active_number(uid, lease_id):
                 active_number_remaining(info) <= 0):
             continue
         del active_numbers[number]
+        _persist_active_leases()
         for order in miniapp_orders.get(int(uid), []):
             if order.get("id") == lease_id and order.get("status") == "Aktiv":
                 order["status"] = "Ləğv edildi"
@@ -6281,6 +6353,9 @@ async def post_init(application):
             await user_backup.restore(client)
     except Exception as exc:
         print(f"[user-backup] Initial restore unavailable: {type(exc).__name__}", flush=True)
+    # Recover an ongoing three-minute allocation if the instance was replaced.
+    restored_count = _restore_active_leases()
+    print(f"[startup] Restored {restored_count} unexpired active leases", flush=True)
     application.bot_data["user_backup_task"] = asyncio.create_task(user_backup.run())
     await asyncio.to_thread(number_archive.import_legacy, load_range_db())
     application.bot_data["number_archive_task"] = asyncio.create_task(number_archive.run())
