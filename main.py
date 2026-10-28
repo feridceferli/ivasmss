@@ -32,6 +32,14 @@ from urllib.parse import parse_qsl
 from pathlib import Path
 from web_login import WebsiteLogin
 from number_choices import number_choices
+from whatsapp_referrals import (
+    SETTINGS_FILE as WA_REFERRAL_SETTINGS_FILE,
+    load_settings as load_wa_referral_settings,
+    save_settings as save_wa_referral_settings,
+    record_first_referral, confirm_referral,
+    progress as wa_referral_progress, is_whatsapp, requires_invites,
+    referral_param,
+)
 import httpx
 import random
 import string
@@ -100,6 +108,7 @@ number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
     news_file=data_path(WORLD_NEWS_STATE_FILE),
+    referral_file=WA_REFERRAL_SETTINGS_FILE,
 )
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
@@ -837,7 +846,7 @@ _number_purchase_locks = {}
 
 
 async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
-                              expected_price_cents=None):
+                              expected_price_cents=None, service=""):
     """Allocate with a server-controlled AZN price and refund failed requests.
 
     This shared entry point covers bot and Mini App allocations. Region prices
@@ -849,8 +858,10 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
     if requester_id is None:
         raise PricingError("unauthorized", "Nömrə almaq üçün hesab tələb olunur.")
     uid = str(requester_id)
+    ensure_whatsapp_referral_access(requester_id, service)
     lock = _number_purchase_locks.setdefault(uid, asyncio.Lock())
     async with lock:
+        ensure_whatsapp_referral_access(requester_id, service)
         quote = quote_range(digits, load_number_prices(), country_iso)
         # A paid purchase must never change price after the user's approval.
         # Check again while holding the user purchase lock, not just in the API.
@@ -908,6 +919,66 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
 
 
 
+# ==================== WHATSAPP-ONLY FIVE-REFERRAL ACCESS ====================
+_referral_bot_username = ""
+
+
+def ensure_whatsapp_referral_access(uid, service):
+    """Always check server-side, including after a preview is issued."""
+    if uid is None:
+        raise PricingError("unauthorized", "Nömrə üçün Telegram hesabı tələb olunur.")
+    if requires_invites(
+        load_data(USER_DATA_FILE), uid, service, load_wa_referral_settings(),
+        is_admin=is_admin(int(uid)),
+    ):
+        current = wa_referral_progress(load_data(USER_DATA_FILE), uid, enabled=True)
+        raise PricingError(
+            "wa_referrals_required",
+            "WhatsApp nömrəsi üçün 5 dəvət lazımdır. "
+            f"İndi: {current['count']}/5. Dəvət linkinizi Profil bölməsindən və ya /referral komandası ilə alın.",
+        )
+
+
+async def whatsapp_referral_public_info(uid, bot):
+    global _referral_bot_username
+    if not _referral_bot_username:
+        try:
+            info = await bot.get_me()
+            candidate = str(getattr(info, "username", "") or "").lstrip("@")
+            if re.fullmatch(r"[A-Za-z0-9_]{5,32}", candidate):
+                _referral_bot_username = candidate
+        except TelegramError:
+            pass
+    return wa_referral_progress(
+        load_data(USER_DATA_FILE), uid,
+        enabled=load_wa_referral_settings()["enabled"],
+        is_admin=is_admin(int(uid)),
+        bot_username=_referral_bot_username,
+    )
+
+
+async def referral_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    uid = update.effective_user.id
+    if is_user_banned(uid):
+        await update.effective_message.reply_text("🚫 Hesabınız məhdudlaşdırılıb.")
+        return
+    progress = await whatsapp_referral_public_info(uid, context.bot)
+    status = ("✅ WhatsApp açıqdır." if progress["unlocked"]
+              else f"🔒 WhatsApp üçün {progress['remaining']} dəvət qalıb.")
+    enabled = "Aktiv" if progress["enabled"] else "Deaktiv"
+    link = html.escape(progress["invite_link"]) if progress["invite_link"] else "Link hələ əlçatan deyil."
+    await update.effective_message.reply_text(
+        f"🎁 <b>WHATSAPP DƏVƏT SİSTEMİ</b>\n"
+        f"⚙️ Admin ayarı: <b>{enabled}</b>\n"
+        f"👥 Təsdiqlənmiş dəvətlər: <b>{progress['count']}/5</b>\n"
+        f"{status}\n\n"
+        f"🔗 Dəvət linkiniz:\n<code>{link}</code>\n\n"
+        "Dəvət etdiyiniz şəxs ilk dəfə bu linklə /start etməli, "
+        "tələb olunan kanallara qoşulmalıdır. Hər Telegram ID yalnız bir dəfə sayılır.",
+        parse_mode="HTML",
+    )
+
+
 # ==================== SELECT ONE OF FIVE PROVIDER NUMBERS ====================
 async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
                                  expected_price_cents=None):
@@ -925,6 +996,7 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
         raise PricingError("banned", "Hesabınız məhdudlaşdırılıb.")
     lock = _number_purchase_locks.setdefault(str(uid), asyncio.Lock())
     async with lock:
+        ensure_whatsapp_referral_access(uid, service)
         quote = quote_range(rid, load_number_prices(), country_iso or None)
         if (not is_admin(uid) and expected_price_cents is not None
                 and (type(expected_price_cents) is not int
@@ -977,6 +1049,7 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
             raise PricingError("choice_expired",
                                "Seçimin vaxtı bitib. Yenidən 5 nömrə istəyin.")
         rid = option["rid"]
+        ensure_whatsapp_referral_access(uid, option["service"])
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
         quote = quote_range(rid, load_number_prices(), option["iso"] or None)
@@ -4700,8 +4773,17 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid_str = str(uid)
     existing_data = load_data(USER_DATA_FILE)
     is_new_user = uid_str not in existing_data
+    # Invite attribution is recorded only for genuinely new Telegram IDs.
+    # If required-channel verification is pending, do not award credit yet.
+    referral = referral_param(context.args[0]) if context.args else None
     if is_new_user:
-        get_user(uid)
+        registered = False
+        if referral:
+            registered = record_first_referral(existing_data, uid, referral)
+        if registered:
+            save_data(existing_data, USER_DATA_FILE)
+        else:
+            get_user(uid)
 
     # /start verən istifadəçinin əsas profil məlumatlarını saxla / yenilə.
     # Beləliklə admin paneldə yalnız ID yox, ad və username də görünür.
@@ -4736,6 +4818,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             )
             return
 
+    # Successful channel checks confirm any first-visit pending invitation.
+    db = load_data(USER_DATA_FILE)
+    if confirm_referral(db, uid):
+        save_data(db, USER_DATA_FILE)
     args = context.args
     if args and str(args[0]).startswith("connect_"):
         # A browser can link an account only after its Telegram owner approves here.
@@ -5619,6 +5705,7 @@ async def miniapp_profile_api(request):
         "support_url": SUPPORT_LINK,
         "developer_url": DEVELOPER_LINK,
         "az_approved": az_range_allowed(uid),
+        "whatsapp_referrals": await whatsapp_referral_public_info(uid, request.app["telegram_bot"]),
     }))
 
 
@@ -5753,6 +5840,7 @@ async def miniapp_dashboard(request):
 
     user = get_user(uid)
     stats = get_user_stats(uid)
+    referrals = await whatsapp_referral_public_info(uid, request.app["telegram_bot"])
     now = datetime.now()
     orders = []
     for number, info in list(active_numbers.items()):
@@ -5791,6 +5879,7 @@ async def miniapp_dashboard(request):
             "last7d_numbers": stats.get("last7d_numbers", 0),
         },
         "support_url": SUPPORT_LINK,
+        "whatsapp_referrals": referrals,
         "orders": orders,
     }))
 
@@ -6015,6 +6104,7 @@ async def miniapp_admin_tools_api(request):
             "user_backup": {"status": str(user_backup.status)[:250], "ready": user_backup.ready},
             "ai_posts": public_ai_status(),
             "world_news": public_news_status(),
+            "whatsapp_referrals": load_wa_referral_settings(),
         }
 
     if request.method == "GET":
@@ -6028,6 +6118,13 @@ async def miniapp_admin_tools_api(request):
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
     action = body.get("action")
+    if action == "wa_referral_settings":
+        if type(body.get("enabled")) is not bool:
+            return _miniapp_cors(web.json_response(
+                {"error": "invalid_referral_settings"}, status=400))
+        save_wa_referral_settings(body["enabled"])
+        user_backup.changed()
+        return _miniapp_cors(web.json_response({"ok": True, **snapshot()}))
     if action == "world_news_settings":
         try:
             save_news_settings(body.get("enabled"), body.get("interval_minutes"))
@@ -6187,6 +6284,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
     app.add_handler(CommandHandler("start", start))
+    app.add_handler(CommandHandler("referral", referral_command))
     app.add_handler(CommandHandler("menu", legacy_menu_command))
     app.add_handler(CommandHandler("az_access", az_access_command))
     app.add_handler(CommandHandler("az_request", az_request_command))
@@ -6377,6 +6475,7 @@ async def miniapp_services_api(request):
         ),
         "az_approved": az_range_allowed(uid),
         "az_catalog": az_range_catalog(services),
+        "whatsapp_referrals": await whatsapp_referral_public_info(uid, request.app["telegram_bot"]),
     }))
 
 
@@ -6494,6 +6593,15 @@ async def miniapp_get_number_api(request):
         return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
 
     mode = body.get("mode")
+    if is_whatsapp(service) and mode != "select":
+        try:
+            ensure_whatsapp_referral_access(uid, service)
+        except PricingError as exc:
+            return _miniapp_cors(web.json_response({
+                "error": exc.code, "message": str(exc),
+                "whatsapp_referrals": await whatsapp_referral_public_info(
+                    uid, request.app["telegram_bot"]),
+            }, status=403))
     if mode == "select":
         token = str(body.get("choice_token") or "")
         index = body.get("choice_index")
@@ -6506,7 +6614,8 @@ async def miniapp_get_number_api(request):
                 uid, token, index,
                 expected_price_cents=body.get("expected_price_cents"))
         except PricingError as exc:
-            status = (402 if exc.code == "insufficient_balance"
+            status = (403 if exc.code == "wa_referrals_required"
+                      else 402 if exc.code == "insufficient_balance"
                       else 410 if exc.code == "choice_expired"
                       else 409 if exc.code in ("price_changed", "already_active")
                       else 400)
@@ -6603,9 +6712,10 @@ async def miniapp_get_number_api(request):
             rid, requester_id=uid,
             country_iso=country_iso,
             expected_price_cents=expected_cents,
+            service=service,
         )
     except PricingError as exc:
-        status = 402 if exc.code == "insufficient_balance" else 429 if exc.code == "preview_cooldown" else 409 if exc.code in ("ambiguous_country_price", "price_changed") else 400
+        status = 403 if exc.code == "wa_referrals_required" else 402 if exc.code == "insufficient_balance" else 429 if exc.code == "preview_cooldown" else 409 if exc.code in ("ambiguous_country_price", "price_changed") else 400
         return _miniapp_cors(web.json_response(
             {"error": exc.code, "message": str(exc)}, status=status))
     if not num:
