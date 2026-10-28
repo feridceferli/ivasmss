@@ -929,7 +929,7 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
             user = get_user(uid)
             if round(float(user.get("balance", 0)) * 100) < quote["cents"]:
                 raise PricingError("insufficient_balance", "Bir nömrə üçün balans kifayət etmir.")
-        if not number_choices.reserve_request(uid):
+        if not number_choices.reserve_request(uid, exempt=is_admin(uid)):
             raise PricingError("preview_cooldown",
                                "Yeni seçim üçün 30 saniyə gözləyin.")
         candidates = []
