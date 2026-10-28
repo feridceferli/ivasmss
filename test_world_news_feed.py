@@ -200,18 +200,17 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
         args = dict(bot=bot, group_id="-10012345", state_file=self.path,
                     client=self.client_for(),
                     translate=lambda stories: async_az_translation(stories))
-        # Initial sourced item is sent immediately; a silent baseline would
-        # make users think the news system is broken.
-        self.assertEqual(await news.publish_world_news(now=NOW, **args), "sent")
-        self.assertEqual(len(bot.messages), 1)
-        self.assertEqual(bot.messages[0]["chat_id"], -10012345)
+        # Startup seeds all current RSS entries without falsely treating them
+        # as new after a Render restart.
+        self.assertEqual(await news.publish_world_news(now=NOW, **args), "initialized")
+        self.assertEqual(len(bot.messages), 0)
         self.assertEqual(await news.publish_world_news(now=NOW + 100, **args),
                          "cooldown")
-        self.assertEqual(len(bot.messages), 1)
+        self.assertEqual(len(bot.messages), 0)
         # Once due, the same article is not re-sent.
         self.assertEqual(await news.publish_world_news(now=NOW + 601, **args),
                          "nothing_new")
-        self.assertEqual(len(bot.messages), 1)
+        self.assertEqual(len(bot.messages), 0)
 
     async def test_new_news_is_group_only_and_deduplicated(self):
         bot = FakeBot()
@@ -225,15 +224,15 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
             client=next_client, now=NOW + 7300,
             translate=lambda stories: async_az_translation(stories))
         self.assertEqual(result, "sent")
-        self.assertEqual(len(bot.messages), 2,
-                         "First digest and first unseen follow-up are both delivered")
+        self.assertEqual(len(bot.messages), 1,
+                         "Only the first genuinely new article is delivered")
         self.assertEqual(bot.messages[-1]["chat_id"], -10012345)
         self.assertIn("Alimlər sualtı robot", bot.messages[-1]["text"])
         self.assertIn("BBC World", bot.messages[-1]["text"])
         self.assertNotIn("utm_", bot.messages[-1]["text"])
         self.assertEqual(bot.messages[-1]["parse_mode"], "HTML")
         self.assertTrue(bot.messages[-1]["disable_web_page_preview"])
-        self.assertEqual(len(bot.messages), 2)
+        self.assertEqual(len(bot.messages), 1)
         self.assertEqual(await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
             client=next_client, now=NOW + 7400), "cooldown")
@@ -324,17 +323,80 @@ class NewsPublishingTests(unittest.IsolatedAsyncioTestCase):
             client=later, now=NOW + 7300,
             translate=lambda stories: async_unavailable_translation())
         self.assertEqual(unavailable, "translation_unavailable")
-        self.assertEqual(len(bot.messages), 1,
+        self.assertEqual(len(bot.messages), 0,
                          "Failed translation must not create a new post")
         self.assertEqual(Path(self.path).read_text(encoding="utf-8"), before)
         self.assertEqual(await news.publish_world_news(
             bot=bot, group_id="-10012345", state_file=self.path,
             client=later, now=NOW + 7330,
             translate=lambda stories: async_az_translation(stories)), "sent")
-        self.assertEqual(len(bot.messages), 2)
+        self.assertEqual(len(bot.messages), 1)
         self.assertNotIn("https://", bot.messages[-1]["text"])
         self.assertNotIn("<a ", bot.messages[-1]["text"])
         self.assertNotIn("underwater robot", bot.messages[-1]["text"])
+
+    async def test_republished_url_and_punctuation_only_changes_never_repost(self):
+        bot = FakeBot()
+        first = feed([make_item(
+            "Alimlər yeni kosmik robot layihəsini təqdim ediblər",
+            "https://www.bbc.co.uk/news/article-a", NOW - 120)])
+        second = feed([make_item(
+            "ALİMLƏR: Yeni kosmik robot layihəsini təqdim ediblər!",
+            "https://www.bbc.co.uk/news/article-b", NOW + 7100)])
+        # Baseline seeds an already published story. A changed article URL
+        # and punctuation/casing must not create another group notification.
+        self.assertEqual(await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=FakeRssClient({WORLD: first}), now=NOW), "initialized")
+        self.assertEqual(await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=FakeRssClient({WORLD: second}), now=NOW + 7200,
+            translate=lambda stories: async_az_translation(stories)),
+            "nothing_new")
+        self.assertFalse(bot.messages)
+
+    async def test_same_story_from_two_publishers_is_not_repeated(self):
+        bot = FakeBot()
+        original = feed([make_item(
+            "Space robot developed for exploring distant planets",
+            "https://www.bbc.co.uk/news/space-robots", NOW - 100)])
+        duplicate = feed([make_item(
+            "Space robot developed for exploring distant planets",
+            "https://www.theguardian.com/technology/space-robots", NOW + 7200)])
+        await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=FakeRssClient({WORLD: original}), now=NOW)
+        result = await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=FakeRssClient({GUARDIAN: duplicate}), now=NOW + 7300,
+            translate=lambda stories: async_az_translation(stories))
+        self.assertEqual(result, "nothing_new")
+        self.assertFalse(bot.messages)
+
+    async def test_new_story_is_persisted_with_title_and_no_replay_on_reopen(self):
+        sent = []
+        bot = FakeBot()
+        newer = self.client_for(first=True, second=True)
+        initialize = await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=self.client_for(), now=NOW,
+            on_state_change=lambda: sent.append("snapshot"))
+        self.assertEqual(initialize, "initialized")
+        self.assertEqual(len(sent), 1)
+        self.assertEqual(await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=newer, now=NOW + 7300,
+            translate=lambda stories: async_az_translation(stories),
+            on_state_change=lambda: sent.append("published")), "sent")
+        self.assertEqual(sent, ["snapshot", "published"])
+        stored = json.loads(Path(self.path).read_text(encoding="utf-8"))
+        self.assertEqual(len(stored["seen_ids"]), 2)
+        self.assertEqual(len(stored["seen_titles"]), 2)
+        self.assertEqual(await news.publish_world_news(
+            bot=bot, group_id="-10012345", state_file=self.path,
+            client=newer, now=NOW + 8000,
+            translate=lambda stories: async_az_translation(stories)), "nothing_new")
+        self.assertEqual(len(bot.messages), 1)
 
     async def test_bad_free_translation_is_skipped(self):
         story = {"id": "x", "title": "Scientists create a new space robot",
