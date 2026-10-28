@@ -21,9 +21,10 @@ log = logging.getLogger(__name__)
 
 
 class UserProfileBackup:
-    def __init__(self, users_file, stats_file, activity_file=None):
+    def __init__(self, users_file, stats_file, activity_file=None, news_file=None):
         self.files = {"users": Path(users_file), "stats": Path(stats_file)}
         self.activity_file = Path(activity_file) if activity_file else None
+        self.news_file = Path(news_file) if news_file else None
         self.status = "İstifadəçi bazasının yedəklənməsi başlayır."
         self.ready = False
         self._lock = asyncio.Lock()
@@ -92,6 +93,36 @@ class UserProfileBackup:
                 result.append({"uid": uid, "action": action, "timestamp": timestamp})
         return result
 
+    @staticmethod
+    def _sanitize_news(value):
+        """Only private, non-sensitive RSS fingerprints and normalized titles."""
+        if not isinstance(value, dict):
+            return {}
+        seen_ids = value.get("seen_ids", [])
+        seen_titles = value.get("seen_titles", [])
+        if not isinstance(seen_ids, list):
+            seen_ids = []
+        if not isinstance(seen_titles, list):
+            seen_titles = []
+        ids = [x for x in seen_ids if isinstance(x, str)
+               and re.fullmatch(r"[0-9a-f]{64}", x)]
+        titles = [x for x in seen_titles if isinstance(x, str)
+                  and 5 <= len(x) <= 180 and not re.search(r"[\x00-\x1f]", x)]
+        sent = value.get("last_sent", 0)
+        if type(sent) not in (int, float) or not 0 <= sent <= 1e12:
+            sent = 0
+        return {
+            "initialized": bool(value.get("initialized") or ids or titles),
+            "last_sent": sent,
+            "seen_ids": list(dict.fromkeys(ids))[-3000:],
+            "seen_titles": list(dict.fromkeys(titles))[-3000:],
+        }
+
+    def _read_news(self):
+        if self.news_file is None or not self.news_file.exists():
+            return {}
+        return self._sanitize_news(self._read(self.news_file))
+
     def _merge_restore(self, remote):
         if remote.get("version") != 1:
             raise ValueError("Unknown private backup version")
@@ -121,14 +152,39 @@ class UserProfileBackup:
             if restored != current:
                 self.activity_file.parent.mkdir(parents=True, exist_ok=True)
                 atomic_save(restored, self.activity_file)
+        if self.news_file is not None:
+            recovered = self._sanitize_news(remote.get("news", {}))
+            current = self._read_news()
+            if current or recovered:
+                # A server redeploy must not discard previously published RSS
+                # IDs/titles. Merge both sides, keeping the longer remembered
+                # history and most recent sent time.
+                merged = {
+                    "initialized": bool(current.get("initialized") or
+                                        recovered.get("initialized")),
+                    "last_sent": max(current.get("last_sent", 0),
+                                     recovered.get("last_sent", 0)),
+                    "seen_ids": list(dict.fromkeys(
+                        recovered.get("seen_ids", []) +
+                        current.get("seen_ids", [])))[-3000:],
+                    "seen_titles": list(dict.fromkeys(
+                        recovered.get("seen_titles", []) +
+                        current.get("seen_titles", [])))[-3000:],
+                }
+                if merged != current:
+                    self.news_file.parent.mkdir(parents=True, exist_ok=True)
+                    atomic_save(merged, self.news_file)
 
     def _snapshot(self):
-        return {
+        snapshot = {
             "version": 1,
             "users": self._validate("users", self._read(self.files["users"])),
             "stats": self._validate("stats", self._read(self.files["stats"])),
             "activity": self._read_activity(),
         }
+        if self.news_file is not None:
+            snapshot["news"] = self._read_news()
+        return snapshot
 
     async def _remote(self, client):
         token = os.environ.get("NUMBER_ARCHIVE_GITHUB_TOKEN", "").strip()
