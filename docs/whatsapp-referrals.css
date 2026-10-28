@@ -1,0 +1,21 @@
+/* WhatsApp referral invitation widget: additive for Mini App and website. */
+.wa-referral-card {border:1px solid rgba(125,151,255,.23)!important}
+.wa-referral-card h4 {margin:0 0 9px!important}
+.wa-referral-progress {height:10px;width:100%;overflow:hidden;border-radius:999px;
+  background:rgba(126,146,194,.15);border:1px solid rgba(118,141,187,.12);margin:13px 0}
+.wa-referral-progress > div {height:100%;width:0;border-radius:999px;
+  background:linear-gradient(90deg,#4b72d7,#55b9aa);transition:width .2s ease}
+.wa-referral-card .catalog-tools {align-items:stretch;margin-top:13px}
+.wa-referral-card .catalog-tools .admin-input {min-width:0;flex:1 1 65%;font-size:12px!important}
+.wa-referral-card .catalog-tools .action-small {min-height:44px;flex:0 0 auto}
+.wa-referral-notice {margin:0 0 14px;padding:12px 14px;line-height:1.5;font-size:12px;
+  border:1px solid rgba(248,188,88,.32);border-radius:12px;
+  background:rgba(248,188,88,.065);color:var(--text-color)}
+.wa-referral-notice .action-small {margin-left:5px}
+html.site-mode .wa-referral-card {background:#fefeff}
+html.site-mode .wa-referral-notice {background:#fff8e9;border-color:#efd6a1}
+html.site-mode .wa-referral-progress {background:#e8edfa}
+@media(max-width:460px){
+  .wa-referral-card .catalog-tools {flex-wrap:wrap}
+  .wa-referral-card .catalog-tools .action-small {flex:1 1 100%}
+}
