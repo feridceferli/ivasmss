@@ -55,6 +55,15 @@ class NumberChoiceTests(unittest.TestCase):
         self.clock.now += 60
         self.assertIsNone(self.store.get(5, issued["token"], 0))
 
+    def test_admin_exemption_allows_immediate_repeat_without_disabling_user_limit(self):
+        self.assertTrue(self.store.reserve_request(900, exempt=True))
+        self.assertTrue(self.store.reserve_request(900, exempt=True))
+        self.assertTrue(self.store.reserve_request(900))
+        self.assertFalse(self.store.reserve_request(900))
+        self.assertTrue(self.store.reserve_request(901, exempt=True))
+        self.assertTrue(self.store.reserve_request(901))
+        self.assertFalse(self.store.reserve_request(901))
+
     def test_new_session_invalidates_old_tokens(self):
         first = self.store.create(9, "44", "WA", "",
                                   [{"number": "44111111"}])
