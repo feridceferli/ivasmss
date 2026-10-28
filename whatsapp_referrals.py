@@ -5,6 +5,7 @@ not visits, message counts, IPs, or arbitrary IDs submitted by a web client.
 The gate defaults OFF until an administrator explicitly enables it.
 """
 import re
+import time
 from data_storage import atomic_save, data_path
 
 SETTINGS_FILE = data_path("whatsapp_referral_settings.json")
@@ -28,16 +29,17 @@ def load_settings():
         with open(SETTINGS_FILE, encoding="utf-8") as f:
             content = json.load(f)
         if isinstance(content, dict) and type(content.get("enabled")) is bool:
-            return {"enabled": content["enabled"], "required": REQUIRED}
+            return {"enabled": content["enabled"], "required": REQUIRED,
+                    "updated_at": float(content.get("updated_at", 0) or 0)}
     except (OSError, ValueError, TypeError):
         pass
-    return {"enabled": False, "required": REQUIRED}
+    return {"enabled": False, "required": REQUIRED, "updated_at": 0.0}
 
 
 def save_settings(enabled):
     if type(enabled) is not bool:
         raise ValueError("enabled must be a boolean")
-    result = {"enabled": enabled, "required": REQUIRED}
+    result = {"enabled": enabled, "required": REQUIRED, "updated_at": time.time()}
     atomic_save(result, SETTINGS_FILE)
     return result
 
