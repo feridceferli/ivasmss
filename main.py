@@ -11,6 +11,7 @@ from global_availability_feed import (
 from free_ai_posts import decorate_feed, load_ai_settings, save_ai_settings, public_ai_status
 from world_news_feed import (
     POLL_INTERVAL as WORLD_NEWS_POLL_INTERVAL,
+    STATE_FILE as WORLD_NEWS_STATE_FILE,
     publish_world_news, fetch_recent_news, choose_headlines,
     translate_headlines, compose_news_digest,
     load_news_settings, save_news_settings, public_news_status,
@@ -96,7 +97,10 @@ USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
-user_backup = UserProfileBackup(USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE)
+user_backup = UserProfileBackup(
+    USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
+    news_file=data_path(WORLD_NEWS_STATE_FILE),
+)
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397, 1667507073, 8431489105, 8727114055, 2130079556]
@@ -814,13 +818,14 @@ async def country_availability_loop(app):
             except Exception as exc:
                 print("[world-news] startup_probe_error=" +
                       type(exc).__name__, flush=True)
-        # Separate ten-minute RSS poll; only posts when fresh unread headlines
-        # and the two-hour news interval are satisfied. No user broadcasts.
+        # Separate RSS poll; publish only fresh unread headlines at the
+        # configured 10+ minute interval. The private backup persists history.
         if time.monotonic() - last_news_poll >= WORLD_NEWS_POLL_INTERVAL:
             last_news_poll = time.monotonic()
             try:
                 news_status = await publish_world_news(
-                    bot=app.bot, group_id=GLOBAL_FEED_GROUP_ID)
+                    bot=app.bot, group_id=GLOBAL_FEED_GROUP_ID,
+                    on_state_change=user_backup.changed)
                 if news_status != "cooldown":
                     print(f"[world-news] status={news_status}", flush=True)
             except Exception as exc:
