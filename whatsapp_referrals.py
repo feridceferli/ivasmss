@@ -33,7 +33,7 @@ def load_settings():
                     "updated_at": float(content.get("updated_at", 0) or 0)}
     except (OSError, ValueError, TypeError):
         pass
-    return {"enabled": False, "required": REQUIRED, "updated_at": 0.0}
+    return {"enabled": True, "required": REQUIRED, "updated_at": 0.0}
 
 
 def save_settings(enabled):
