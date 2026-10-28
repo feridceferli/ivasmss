@@ -13,6 +13,7 @@ import httpx
 
 from number_choices import NumberChoiceStore
 from number_pricing import PricingError
+from whatsapp_referrals import requires_invites
 
 
 ROOT = Path(__file__).resolve().parent
@@ -132,6 +133,41 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.assertNotEqual(first["token"], second["token"])
         self.assertIsNone(self.env["number_choices"].get(7, first["token"], 0))
         self.assertEqual(self.users["7"]["balance"], 10.0)
+
+    async def test_whatsapp_gate_before_provider_and_after_offer(self):
+        users = {"7": {"balance": 10.0, "user_id": "7"}}
+        settings = {"enabled": True}
+
+        def enforce(uid, service):
+            if requires_invites(users, uid, service, settings):
+                raise PricingError("wa_referrals_required", "5 dəvət lazımdır.")
+
+        self.env["ensure_whatsapp_referral_access"] = enforce
+        with self.assertRaises(PricingError) as denied:
+            await self.env["prepare_number_choices"](
+                7, "447700", "wa", "GB", 100)
+        self.assertEqual(denied.exception.code, "wa_referrals_required")
+        self.assertEqual(self.env["client_async"].post.await_count, 0)
+        self.record.assert_not_called()
+
+        # Different services remain unrestricted regardless of the toggle.
+        settings["enabled"] = False
+        offer = await self.env["prepare_number_choices"](
+            7, "447700", "wa", "GB", 100)
+        self.assertEqual(len(offer["numbers"]), 5)
+        settings["enabled"] = True
+        with self.assertRaises(PricingError):
+            await self.env["confirm_number_choice"](7, offer["token"], 0, 100)
+        self.record.assert_not_called()
+        self.assertEqual(self.users["7"]["balance"], 10.0)
+        self.assertIsNotNone(self.env["number_choices"].get(7, offer["token"], 0))
+
+        for i in range(20, 25):
+            users[str(i)] = {"user_id": str(i), "referred_by": "7"}
+        result = await self.env["confirm_number_choice"](7, offer["token"], 0, 100)
+        self.assertEqual(result["number"], "+44770000001")
+        self.assertEqual(self.users["7"]["balance"], 9.0)
+        self.record.assert_called_once()
 
     async def test_foreign_user_cannot_take_options(self):
         offer = await self.env["prepare_number_choices"](7, "447700", "wa", "GB", 100)
