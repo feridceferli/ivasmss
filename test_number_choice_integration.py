@@ -55,6 +55,7 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
             "PricingError": PricingError,
             "number_choices": NumberChoiceStore(),
             "_number_purchase_locks": {},
+            "ensure_whatsapp_referral_access": lambda uid, service: None,
             "USER_DATA_FILE": "users.json",
             "NUMBER_WAIT_SECONDS": 180,
             "number_archive": SimpleNamespace(record=self.record),
