@@ -46,9 +46,23 @@ function toast(message, kind = "info") {
     }, 3100);
 }
 function alertUser(message) {
+    // telegram-web-app.js is present on the public website too, even when
+    // it is NOT running as a Telegram Mini App. In that browser context,
+    // tg.showAlert exists but throws WebAppMethodUnsupported. A notice
+    // must never turn a successfully created order into a false error.
     toast(message, /uğurlu|kopyalandı|✅/i.test(String(message)) ? "success" : "info");
-    if (tg.showAlert) tg.showAlert(String(message));
-    else if (!document.getElementById("ui-toast")) window.alert(String(message));
+    if (tg.initData && typeof tg.showAlert === "function") {
+        try {
+            tg.showAlert(String(message));
+            return;
+        } catch (_) {
+            // Old Telegram clients and regular in-app browsers may not
+            // support Telegram's native alert method. Toast is sufficient.
+        }
+    }
+    if (!document.getElementById("ui-toast")) {
+        try { window.alert?.(String(message)); } catch (_) { /* no native dialog */ }
+    }
 }
 
 function getAuthHeaders() {
@@ -686,8 +700,12 @@ async function selectOfferedNumber(index) {
     }
     const buttons = document.querySelectorAll("#number-choices-list button");
     buttons.forEach(button => { button.disabled = true; });
+
+    // Once the backend confirms the purchase, UI/clipboard errors MUST NOT
+    // tell the user to retry. A retry could create an unwanted second order.
+    let data;
     try {
-        const data = await api("/api/get-number", {
+        data = await api("/api/get-number", {
             method: "POST",
             body: {
                 mode: "select",
@@ -697,23 +715,34 @@ async function selectOfferedNumber(index) {
             }
         });
         if (!data.success) throw new Error(data.message || "Seçim təsdiqlənmədi.");
-        closeNumberChoices();
-        const digits = String(data.number || "").replace(/\D/g, "");
-        const fullNumber = "+" + digits;
-        const copied = /^\+\d{4,15}$/.test(fullNumber)
-            ? await copyPhoneNumber(fullNumber, false)
-            : false;
-        switchTab("active");
-        await fetchOrders();
-        await fetchDashboard();
-        alertUser(copied
-            ? "✅ Seçdiyiniz nömrə aktivləşdirildi və kopyalandı: " + fullNumber
-            : "✅ Seçdiyiniz nömrə aktivləşdirildi: " + fullNumber +
-              "\n📋 Aktivlər bölməsində Kopyala düyməsi var.");
     } catch (error) {
         alertUser("Seçim alınmadı: " + error.message);
         buttons.forEach(button => { button.disabled = false; });
+        return;
     }
+
+    closeNumberChoices();
+    const digits = String(data.number || "").replace(/\D/g, "");
+    const fullNumber = "+" + digits;
+    let copied = false;
+    try {
+        if (/^\+\d{4,15}$/.test(fullNumber)) {
+            copied = await copyPhoneNumber(fullNumber, false);
+        }
+    } catch (_) {
+        // The number is already active; copying is optional.
+    }
+    try {
+        switchTab("active");
+        // Show the newly confirmed number even if one optional refresh fails.
+        await Promise.allSettled([fetchOrders(), fetchDashboard()]);
+    } catch (_) {
+        // Navigation failures cannot undo a completed server transaction.
+    }
+    alertUser(copied
+        ? "✅ Seçdiyiniz nömrə aktivləşdirildi və kopyalandı: " + fullNumber
+        : "✅ Seçdiyiniz nömrə aktivləşdirildi: " + fullNumber +
+          "\n📋 Aktivlər bölməsində Kopyala düyməsi var.");
 }
 
 async function copyPhoneNumber(number, showFeedback = true) {
