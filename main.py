@@ -109,6 +109,19 @@ user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
     news_file=data_path(WORLD_NEWS_STATE_FILE),
     referral_file=WA_REFERRAL_SETTINGS_FILE,
+    extra_files={
+        "system_config": SYSTEM_CONFIG_FILE,
+        "number_prices": NUMBER_PRICES_FILE,
+        "user_otp_rates": USER_OTP_RATE_FILE,
+        "required_channels": REQUIRED_CHANNELS_FILE,
+        "az_range_permissions": AZ_ACCESS_FILE,
+        "banned_users": BANNED_USERS_FILE,
+        "withdraw_requests": WITHDRAW_DATA_FILE,
+        "datarange": DATA_RANGE_FILE,
+        "fake_otp_config": FAKE_OTP_CONFIG_FILE,
+        "world_news_settings": data_path("world_news_settings.json"),
+        "ai_post_settings": data_path("ai_post_settings.json"),
+    },
 )
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
@@ -439,6 +452,17 @@ def get_country_by_prefix(prefix: str):
     return ("🌍", "Unknown")
 
 
+def _save_persistent_json(value, filename):
+    """Persist admin/user state atomically and queue private backup sync."""
+    atomic_save(value, filename)
+    try:
+        asyncio.get_running_loop()
+        user_backup.changed()
+    except RuntimeError:
+        # During module initialization no asynchronous sync is running yet.
+        pass
+
+
 # ==================== SYSTEM CONFIG ====================
 def load_system_config():
     if not os.path.exists(SYSTEM_CONFIG_FILE):
@@ -467,8 +491,7 @@ def load_system_config():
 
 
 def save_system_config(config):
-    with open(SYSTEM_CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
+    _save_persistent_json(config, SYSTEM_CONFIG_FILE)
 
 
 def update_min_withdraw(new_min):
@@ -518,8 +541,7 @@ def load_user_otp_rates():
 
 
 def save_user_otp_rates(data):
-    with open(USER_OTP_RATE_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    _save_persistent_json(data, USER_OTP_RATE_FILE)
 
 
 def get_user_otp_rate(user_id):
@@ -588,8 +610,7 @@ def load_fake_otp_config():
 
 
 def save_fake_otp_config(config):
-    with open(FAKE_OTP_CONFIG_FILE, "w") as f:
-        json.dump(config, f, indent=4)
+    _save_persistent_json(config, FAKE_OTP_CONFIG_FILE)
 
 
 def update_fake_otp_config(**kwargs):
@@ -616,8 +637,7 @@ def load_required_channels():
 
 
 def save_required_channels(data):
-    with open(REQUIRED_CHANNELS_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    _save_persistent_json(data, REQUIRED_CHANNELS_FILE)
 
 
 def add_required_channel(link, label=None, chat_id=None):
@@ -1208,8 +1228,7 @@ def load_withdraw_requests():
 
 
 def save_withdraw_requests(data):
-    with open(WITHDRAW_DATA_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    _save_persistent_json(data, WITHDRAW_DATA_FILE)
 
 
 def generate_payment_id():
@@ -1230,8 +1249,7 @@ def load_banned_users():
 
 
 def save_banned_users(banned_list):
-    with open(BANNED_USERS_FILE, "w") as f:
-        json.dump(banned_list, f, indent=4)
+    _save_persistent_json(banned_list, BANNED_USERS_FILE)
 
 
 def is_user_banned(uid):
@@ -1271,8 +1289,7 @@ def load_range_db():
 
 
 def save_range_db(data):
-    with open(DATA_RANGE_FILE, "w") as f:
-        json.dump(data, f, indent=4)
+    _save_persistent_json(data, DATA_RANGE_FILE)
 
 
 def save_number_range_info(uid, number, range_text):
@@ -1597,13 +1614,7 @@ def load_data(filename=USER_DATA_FILE):
 
 
 def save_data(data, filename=USER_DATA_FILE):
-    atomic_save(data, filename)
-    if str(filename) == str(USER_DATA_FILE):
-        try:
-            asyncio.get_running_loop()
-            user_backup.changed()
-        except RuntimeError:
-            pass
+    _save_persistent_json(data, filename)
 
 
 def load_number_prices():
@@ -1621,7 +1632,7 @@ def load_number_prices():
 
 
 def save_number_prices(settings):
-    save_data(settings, NUMBER_PRICES_FILE)
+    _save_persistent_json(settings, NUMBER_PRICES_FILE)
 
 
 def get_user(uid):
@@ -6130,6 +6141,7 @@ async def miniapp_admin_tools_api(request):
     if action == "world_news_settings":
         try:
             save_news_settings(body.get("enabled"), body.get("interval_minutes"))
+            user_backup.changed()
         except ValueError:
             return _miniapp_cors(web.json_response(
                 {"error": "invalid_news_settings"}, status=400))
@@ -6165,6 +6177,7 @@ async def miniapp_admin_tools_api(request):
     if action == "ai_settings":
         try:
             save_ai_settings(body.get("enabled"), body.get("style"))
+            user_backup.changed()
         except ValueError:
             return _miniapp_cors(web.json_response(
                 {"error": "invalid_ai_settings"}, status=400))
@@ -6258,9 +6271,8 @@ async def miniapp_admin_tools_api(request):
 
 
 async def post_init(application):
-    # Requested fixed cadence for the verified fun-news group feed.
-    save_news_settings(True, 10)
-    # Restore private user balances and usage counts before bot workers start.
+    # Preserve administrator-edited news settings across restarts.
+    # Restore users, referrals, permissions and preferences BEFORE workers start.
     # If remote backup is inaccessible, the backup worker will retry without
     # uploading an empty replacement over the existing archive.
     import httpx as _backup_httpx
