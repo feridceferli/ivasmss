@@ -100,6 +100,7 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
             "az_range_allowed": lambda uid: int(uid or 0) == 77,
             "is_admin": lambda uid: False,
             "_number_purchase_locks": {},
+            "ensure_whatsapp_referral_access": lambda uid, service: None,
             "get_user": lambda uid: self.users[str(uid)],
             "load_data": load, "save_data": save,
             "USER_DATA_FILE": "users.json",
