@@ -231,6 +231,14 @@
     </style>
     <link rel="stylesheet" href="miniapp-modern.css?v=20261025-prices">
     <link rel="stylesheet" href="web-login.css?v=20261027-website">
+    <!-- Website-only layout: Telegram WebApp keeps exactly its Mini App styles. -->
+    <script>
+        if (!window.Telegram?.WebApp?.initData) {
+            document.documentElement.classList.add("site-mode");
+        }
+    </script>
+    <style>.website-only{display:none!important}</style>
+    <link rel="stylesheet" href="website-desktop.css?v=20261028-site-v1">
 </head>
 <body>
     <div class="container">
@@ -240,6 +248,25 @@
                 <div><strong class="app-brand-title">AZE SMS PANEL</strong><span class="app-brand-caption">Telegram Mini App · Xidmətlər və nömrələr</span></div>
             </div>
             <span class="app-brand-tag">Mini App</span>
+        </header>
+        <header class="site-page-topbar website-only" aria-label="Veb panel başlığı">
+            <div class="site-topbar-start">
+                <button class="site-toolbar-button site-menu-toggle"
+                        type="button" id="site-menu-toggle" aria-controls="website-navigation"
+                        aria-expanded="false" aria-label="Menyunu aç">☰</button>
+                <div>
+                    <span class="site-header-kicker">AZE SMS PANEL / DASHBOARD</span>
+                    <h1 id="site-current-title">İdarəetmə paneli</h1>
+                    <span id="site-current-subtitle">Nömrələrinizi və xidmətlərinizi rahat idarə edin</span>
+                </div>
+            </div>
+            <div class="site-topbar-actions">
+                <span class="site-clock-badge" id="site-local-date">Bakı vaxtı</span>
+                <button type="button" class="site-toolbar-button"
+                        onclick="switchTab('leaderboard')">🏆 Liderlər</button>
+                <button type="button" class="site-toolbar-button primary"
+                        onclick="switchTab('active')">📱 Aktiv nömrələr</button>
+            </div>
         </header>
         <!-- Profil və Bakiye Kartı -->
         <div class="card profile-card">
@@ -258,7 +285,8 @@
 
         <!-- Naviqasiya Tabları -->
         <div id="status-strip" role="status">Məlumatlar yenilənir...</div>
-        <div class="tabs" role="tablist" aria-label="Mini App bölmələri">
+        <div class="site-nav-label website-only" aria-hidden="true">BÖLMƏLƏR</div>
+        <nav id="website-navigation" class="tabs" role="tablist" aria-label="Mini App bölmələri">
             <button class="tab-btn active" onclick="switchTab('services')">📡 Xidmətlər</button>
             <button class="tab-btn" onclick="switchTab('countries')">🌍 Bütün ölkələr</button>
             <button class="tab-btn" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
@@ -268,7 +296,7 @@
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
             <button class="tab-btn" onclick="switchTab('guide')">📖 İstifadə qaydası</button>
             <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
-        </div>
+        </nav>
 
         <!-- 1. Xidmətlər Tabı -->
         <div id="tab-services" class="tab-content active">
@@ -747,8 +775,16 @@
             <button class="action-small" type="button" onclick="closeNumberChoices()">❌ İmtina et</button>
         </div>
     </div>
+    <button type="button" id="site-nav-backdrop" class="site-backdrop website-only"
+            aria-label="Naviqasiyanı bağla"></button>
+    <div class="site-sidebar-footer website-only" aria-hidden="true">
+        <strong>✦ AZE SMS PANEL</strong>
+        <span>Telegram hesabınızla təhlükəsiz panel</span>
+        <span>© 2026 · Web Dashboard</span>
+    </div>
     <script src="web-login.js?v=20261027-website"></script>
     <script src="app.js?v=20261026-three-minute-orders-website-choose-five"></script>
+    <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
 <div id="ui-toast" class="ui-toast" role="status" aria-live="polite"></div>
