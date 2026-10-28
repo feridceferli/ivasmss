@@ -21,15 +21,52 @@ log = logging.getLogger(__name__)
 
 
 class UserProfileBackup:
-    def __init__(self, users_file, stats_file, activity_file=None, news_file=None, referral_file=None):
+    def __init__(self, users_file, stats_file, activity_file=None, news_file=None,
+                 referral_file=None, extra_files=None):
         self.files = {"users": Path(users_file), "stats": Path(stats_file)}
         self.activity_file = Path(activity_file) if activity_file else None
         self.news_file = Path(news_file) if news_file else None
         self.referral_file = Path(referral_file) if referral_file else None
+        # Explicit allow-list of non-OTP runtime data; never back up provider
+        # credentials, raw SMS messages, OTP codes, or session cookies.
+        self.extra_files = {
+            str(key): Path(path) for key, path in (extra_files or {}).items()
+            if key in self._ALLOWED_EXTRAS
+        }
         self.status = "İstifadəçi bazasının yedəklənməsi başlayır."
         self.ready = False
         self._lock = asyncio.Lock()
         self._changed = asyncio.Event()
+
+    _ALLOWED_EXTRAS = frozenset((
+        "system_config", "number_prices", "user_otp_rates",
+        "required_channels", "az_range_permissions", "banned_users",
+        "withdraw_requests", "datarange", "fake_otp_config",
+        "world_news_settings", "ai_post_settings",
+    ))
+    _LIST_EXTRAS = frozenset(("required_channels", "banned_users"))
+    _MAX_EXTRA_BYTES = 12_000_000
+
+    def _extra_value(self, key, value):
+        expected = list if key in self._LIST_EXTRAS else dict
+        if not isinstance(value, expected):
+            raise ValueError("Invalid private settings backup format")
+        # Bound and validate JSON before persisting to a private repo.
+        raw = json.dumps(value, ensure_ascii=False, allow_nan=False)
+        if len(raw.encode("utf-8")) > self._MAX_EXTRA_BYTES:
+            raise ValueError("Private settings record exceeds safe backup size")
+        return value
+
+    def _read_extras(self):
+        result = {}
+        for key, path in self.extra_files.items():
+            if path.exists():
+                try:
+                    content = json.loads(path.read_text(encoding="utf-8"))
+                except (OSError, ValueError) as exc:
+                    raise RuntimeError("Local private settings cannot be read safely") from exc
+                result[key] = self._extra_value(key, content)
+        return result
 
     def changed(self):
         """Wake the background sync after an account or usage update."""
@@ -199,6 +236,19 @@ class UserProfileBackup:
                 self.referral_file.parent.mkdir(parents=True, exist_ok=True)
                 atomic_save(remote_config, self.referral_file)
 
+        if self.extra_files:
+            remote_settings = remote.get("settings", {})
+            if not isinstance(remote_settings, dict):
+                raise ValueError("Invalid private settings snapshot")
+            for key, path in self.extra_files.items():
+                if key not in remote_settings:
+                    continue
+                restored = self._extra_value(key, remote_settings[key])
+                local = self._read_extras().get(key)
+                if local != restored:
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    atomic_save(restored, path)
+
     def _snapshot(self):
         snapshot = {
             "version": 1,
@@ -210,6 +260,8 @@ class UserProfileBackup:
             snapshot["news"] = self._read_news()
         if self.referral_file is not None:
             snapshot["whatsapp_referrals"] = self._read_referral_settings()
+        if self.extra_files:
+            snapshot["settings"] = self._read_extras()
         return snapshot
 
     async def _remote(self, client):
