@@ -35,6 +35,7 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
             "active_numbers": self.active,
             "miniapp_orders": {},
             "miniapp_history": {},
+            "_persist_active_leases": lambda: None,
             "active_number_remaining": lambda info: info.get("remaining", 180),
             "normalize_number": lambda x: re.sub(r"\D", "", str(x or "")),
         }
