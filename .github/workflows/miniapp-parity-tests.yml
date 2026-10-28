@@ -21,6 +21,7 @@ on:
       - docs/website-desktop.css
       - docs/website-desktop.js
       - test_website_desktop.cjs
+      - test_webapp_alert_fallback.cjs
       - docs/web-login.js
       - docs/web-login.css
       - web_login.py
@@ -64,6 +65,7 @@ on:
       - docs/website-desktop.css
       - docs/website-desktop.js
       - test_website_desktop.cjs
+      - test_webapp_alert_fallback.cjs
       - docs/web-login.js
       - docs/web-login.css
       - web_login.py
@@ -116,6 +118,8 @@ jobs:
         run: node test_miniapp_service_picker.cjs
       - name: Test website-only desktop and mobile navigation
         run: node test_website_desktop.cjs
+      - name: Test browser-safe Telegram SDK alerts and number selection
+        run: node test_webapp_alert_fallback.cjs
       - name: Test latest number ordering and automatic copy
         run: node test_miniapp_newest_copy.cjs
       - name: Test Telegram Mini App avatar privacy and fallback
