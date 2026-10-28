@@ -11,12 +11,12 @@ for (const id of [
 ]) assert.ok(html.includes('id="' + id + '"'), "Missing control: " + id);
 
 assert.match(html, /whatsapp-referrals.css/);
-assert.match(js, /renderWhatsappReferrals(data.whatsapp_referrals)/);
-assert.match(js, /state.whatsappReferrals?.enabled/);
-assert.match(js, /async function copyWhatsappReferralLink/);
-assert.match(js, /async function saveWhatsappReferralSettings/);
-assert.match(js, /sendAdminToolAction("wa_referral_settings",s*{enabled})/);
-assert.match(js, /await api("/api/profile")/);
-assert.match(js, /await api("/api/dashboard")/);
+assert.ok(js.includes("renderWhatsappReferrals(data.whatsapp_referrals)"));
+assert.ok(js.includes("state.whatsappReferrals?.enabled"));
+assert.ok(js.includes("async function copyWhatsappReferralLink"));
+assert.ok(js.includes("async function saveWhatsappReferralSettings"));
+assert.ok(js.includes('sendAdminToolAction("wa_referral_settings", {enabled})'));
+assert.ok(js.includes('await api("/api/profile")'));
+assert.ok(js.includes('await api("/api/dashboard")'));
 assert.match(css, /wa-referral-progress/);
 console.log("PASS: WhatsApp-only referral progress/link and admin toggle shown in web and Mini App");
