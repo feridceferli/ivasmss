@@ -32,8 +32,15 @@ class NumberChoiceStore:
         self._purge()
         return self.clock() - self._last.get(str(uid), -1e20) >= self.COOLDOWN
 
-    def reserve_request(self, uid):
-        """Protect against concurrent preview requests even before provider replies."""
+    def reserve_request(self, uid, *, exempt=False):
+        """Only non-admin users have a 30-second preview cooldown.
+
+        Caller must verify admin privileges on the server; never trust a
+        flag from a client request. The purchase lock still serializes calls.
+        """
+        self._purge()
+        if exempt:
+            return True
         if not self.can_request(uid):
             return False
         self._last[str(uid)] = self.clock()
