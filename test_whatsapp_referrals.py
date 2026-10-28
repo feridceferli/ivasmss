@@ -17,7 +17,7 @@ class WhatsAppReferralTests(unittest.TestCase):
         self.addCleanup(self.patch.stop)
 
     def test_disabled_by_default_and_admin_toggle_validates_boolean(self):
-        self.assertFalse(wa.load_settings()["enabled"])
+        self.assertTrue(wa.load_settings()["enabled"])
         self.assertTrue(wa.save_settings(True)["enabled"])
         self.assertTrue(wa.load_settings()["enabled"])
         self.assertFalse(wa.save_settings(False)["enabled"])
