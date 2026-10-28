@@ -162,6 +162,77 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
         await instance.restore(self.gh)
         self.assertTrue(json.loads(config.read_text())["enabled"])
 
+    async def test_all_operational_settings_restore_after_ephemeral_redeploy(self):
+        users = self.folder / "users.json"
+        stats = self.folder / "stats.json"
+        data = {
+            "system_config": {"min_withdraw": 9, "max_withdraw": 400,
+                              "payment_methods": {"BANK": True}, "otp_rate": 1.7},
+            "number_prices": {"country": {"AZ": {"free": False, "price": "4.50"}}},
+            "user_otp_rates": {"123": 1.2},
+            "required_channels": [{"link": "https://t.me/safebot", "label": "Bot"}],
+            "az_range_permissions": {"123": True},
+            "banned_users": ["987"],
+            "withdraw_requests": {"req001": {"status": "pending"}},
+            "datarange": {"447700123456": {"user_id": "123", "range": "447700"}},
+            "fake_otp_config": {"enabled": False, "running": False, "sent_count": 2},
+            "world_news_settings": {"enabled": False, "interval_minutes": 30},
+            "ai_post_settings": {"enabled": False, "style": "minimal"},
+        }
+        paths = {key: self.folder / (key + ".json") for key in data}
+        for key, value in data.items():
+            paths[key].write_text(json.dumps(value), encoding="utf-8")
+        users.write_text(json.dumps({"123": {"balance": 5.50,
+                                            "referred_by": "999"}}), encoding="utf-8")
+        stats.write_text(json.dumps({"123": {"numbers_taken": ["now"],
+                                            "otps_received": []}}), encoding="utf-8")
+
+        first = UserProfileBackup(users, stats, extra_files=paths)
+        await first.restore(self.gh)
+        await first.sync_once(self.gh)
+        saved = json.loads(self.gh.stored)
+        self.assertEqual(saved["settings"], data)
+        self.assertEqual(saved["users"]["123"]["referred_by"], "999")
+
+        # Fresh Render container: no local data, only pinned channel defaults.
+        for path in paths.values():
+            path.unlink()
+        users.unlink()
+        stats.unlink()
+        paths["required_channels"].write_text("[]", encoding="utf-8")
+        later = UserProfileBackup(users, stats, extra_files=paths)
+        await later.restore(self.gh)
+        for key, value in data.items():
+            self.assertEqual(json.loads(paths[key].read_text(encoding="utf-8")), value)
+        self.assertEqual(json.loads(users.read_text())["123"]["referred_by"], "999")
+
+    async def test_backup_rejects_unknown_state_and_never_exports_sms(self):
+        path = self.folder / "private.json"
+        path.write_text(json.dumps({"allowed": True}), encoding="utf-8")
+        allowed = UserProfileBackup(
+            self.folder / "users.json", self.folder / "stats.json",
+            extra_files={"system_config": path,
+                         "paid_sms": self.folder / "paid_sms.json",
+                         "telegram_tokens": self.folder / ".env"},
+        )
+        await allowed.restore(self.gh)
+        await allowed.sync_once(self.gh)
+        snapshot = json.loads(self.gh.stored)
+        self.assertEqual(list(snapshot["settings"]), ["system_config"])
+        self.assertNotIn("paid_sms", str(snapshot))
+        self.assertNotIn("telegram_tokens", str(snapshot))
+
+    async def test_corrupt_local_settings_never_overwrite_remote(self):
+        settings = self.folder / "system_config.json"
+        settings.write_text("{broken", encoding="utf-8")
+        backup = UserProfileBackup(
+            self.folder / "users.json", self.folder / "stats.json",
+            extra_files={"system_config": settings})
+        await backup.restore(self.gh)
+        with self.assertRaises(RuntimeError):
+            await backup.sync_once(self.gh)
+        self.assertIsNone(self.gh.stored)
+
     async def test_never_uploads_before_successful_restore(self):
         with patch.dict(os.environ, {"NUMBER_ARCHIVE_GITHUB_TOKEN": ""}):
             backup = UserProfileBackup(self.folder / "users.json", self.folder / "user_stats.json")
