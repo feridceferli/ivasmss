@@ -76,6 +76,58 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(json.loads(users.read_text())["123"]["balance"], 5.75)
         self.assertEqual(len(json.loads(stats.read_text())["123"]["numbers_taken"]), 1)
 
+    async def test_news_history_roundtrip_survives_render_restart(self):
+        users = self.folder / "users.json"
+        stats = self.folder / "user_stats.json"
+        news = self.folder / "world_news_digest_state.json"
+        state = {
+            "initialized": True, "last_sent": 100000.0,
+            "seen_ids": ["a" * 64, "b" * 64],
+            "seen_titles": [
+                "alimlər kosmik robot təqdim ediblər",
+                "yeni kosmik muzey sərgisi açılıb",
+            ],
+        }
+        news.write_text(json.dumps(state), encoding="utf-8")
+        previous = UserProfileBackup(users, stats, news_file=news)
+        await previous.restore(self.gh)
+        await previous.sync_once(self.gh)
+        stored = json.loads(self.gh.stored.decode("utf-8"))
+        self.assertEqual(stored["news"], state)
+        news.unlink()
+        recovered = UserProfileBackup(users, stats, news_file=news)
+        await recovered.restore(self.gh)
+        self.assertEqual(json.loads(news.read_text(encoding="utf-8")), state)
+
+    async def test_news_archive_merges_history_instead_of_replacing(self):
+        news = self.folder / "world_news_digest_state.json"
+        news.write_text(json.dumps({
+            "initialized": True, "last_sent": 200,
+            "seen_ids": ["b" * 64],
+            "seen_titles": ["ikinci xəbər başlığı"],
+        }), encoding="utf-8")
+        self.gh.stored = json.dumps({
+            "version": 1, "users": {}, "stats": {},
+            "news": {
+                "initialized": True, "last_sent": 100,
+                "seen_ids": ["a" * 64],
+                "seen_titles": ["birinci xəbər başlığı"],
+            },
+        }).encode("utf-8")
+        backup = UserProfileBackup(
+            self.folder / "users.json", self.folder / "stats.json",
+            news_file=news,
+        )
+        await backup.restore(self.gh)
+        data = json.loads(news.read_text(encoding="utf-8"))
+        self.assertEqual(data["last_sent"], 200)
+        self.assertEqual(data["seen_ids"], ["a" * 64, "b" * 64])
+        self.assertEqual(data["seen_titles"], [
+            "birinci xəbər başlığı", "ikinci xəbər başlığı"])
+        await backup.sync_once(self.gh)
+        remote = json.loads(self.gh.stored.decode("utf-8"))
+        self.assertEqual(remote["news"]["seen_ids"], data["seen_ids"])
+
     async def test_never_uploads_before_successful_restore(self):
         with patch.dict(os.environ, {"NUMBER_ARCHIVE_GITHUB_TOKEN": ""}):
             backup = UserProfileBackup(self.folder / "users.json", self.folder / "user_stats.json")
