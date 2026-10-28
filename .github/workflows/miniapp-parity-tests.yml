@@ -20,6 +20,8 @@ on:
       - test_world_news_feed.py
       - docs/index.html
       - docs/app.js
+      - docs/whatsapp-referrals.css
+      - test_whatsapp_referral_ui.cjs
       - docs/website-desktop.css
       - docs/website-desktop.js
       - test_website_desktop.cjs
@@ -66,6 +68,8 @@ on:
       - test_world_news_feed.py
       - docs/index.html
       - docs/app.js
+      - docs/whatsapp-referrals.css
+      - test_whatsapp_referral_ui.cjs
       - docs/website-desktop.css
       - docs/website-desktop.js
       - test_website_desktop.cjs
@@ -122,6 +126,8 @@ jobs:
         run: node test_miniapp_service_picker.cjs
       - name: Test website-only desktop and mobile navigation
         run: node test_website_desktop.cjs
+      - name: Test WhatsApp referral UI on Mini App and website
+        run: node test_whatsapp_referral_ui.cjs
       - name: Test browser-safe Telegram SDK alerts and number selection
         run: node test_webapp_alert_fallback.cjs
       - name: Test latest number ordering and automatic copy
