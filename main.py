@@ -6525,6 +6525,17 @@ async def run_combined_server():
         await asyncio.Event().wait()
     finally:
         range_collector.stop_all()
+        # Render usually sends a graceful shutdown signal before replacing the
+        # free-tier instance. Flush the last settings/referral changes instead
+        # of waiting for the next periodic GitHub backup tick.
+        if user_backup.ready:
+            try:
+                async with httpx.AsyncClient(timeout=7, follow_redirects=False) as final_client:
+                    await asyncio.wait_for(
+                        user_backup.sync_once(final_client), timeout=10)
+                print("[shutdown] Private settings and user backup flushed", flush=True)
+            except Exception as exc:
+                print("[shutdown] Backup flush pending: " + type(exc).__name__, flush=True)
         profile_task = app.bot_data.get("user_backup_task")
         if profile_task:
             profile_task.cancel()
