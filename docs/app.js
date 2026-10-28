@@ -19,7 +19,8 @@ const state = {
     countryPageSize: 25,
     authFailed: false,
     serviceQuery: "",
-    pricing: null
+    pricing: null,
+    whatsappReferrals: null
 };
 
 function node(tag, text = "", className = "") {
@@ -237,6 +238,7 @@ async function fetchDashboard() {
         void updateTelegramAvatar(user);
         state.isAdmin = !!user.is_admin;
         state.azApproved = !!user.az_approved;
+        renderWhatsappReferrals(data.whatsapp_referrals);
         const adminButton = document.getElementById("admin-tab-button");
         adminButton.hidden = !state.isAdmin;
         document.getElementById("tab-admin").hidden = !state.isAdmin;
@@ -252,6 +254,55 @@ async function fetchDashboard() {
             ? "⚠️ Mini App-i Telegram botundan açın."
             : "⚠️ Profil yenilənmədi: " + err.message);
         return null;
+    }
+}
+
+function renderWhatsappReferrals(data) {
+    if (!data || typeof data !== "object") return;
+    state.whatsappReferrals = data;
+    const current = Math.max(0, Number(data.count) || 0);
+    const required = Number(data.required) || 5;
+    const ready = !!data.unlocked;
+    const serviceNotice = document.getElementById("wa-referral-service-info");
+    if (serviceNotice) serviceNotice.hidden = !data.enabled;
+    const status = document.getElementById("wa-referral-status");
+    const detail = document.getElementById("wa-referral-detail");
+    const bar = document.getElementById("wa-referral-progress-bar");
+    const outer = document.querySelector(".wa-referral-progress");
+    const link = document.getElementById("wa-referral-link");
+    if (status) status.textContent = !data.enabled
+        ? "✅ WhatsApp üçün dəvət məhdudiyyəti hazırda deaktivdir."
+        : data.is_admin ? "👑 Admin hesabınız üçün limit tətbiq olunmur."
+        : ready ? "✅ WhatsApp xidməti açılıb!"
+        : "🔒 WhatsApp: " + current + "/" + required +
+          " dəvət · " + Math.max(0, Number(data.remaining) || 0) + " dəvət qalıb.";
+    if (detail) detail.textContent = ready
+        ? "👥 Təsdiqlənmiş dəvət: " + current + " · WhatsApp xidmətindən istifadə mümkündür."
+        : "👥 " + current + "/" + required +
+          " · Yeni Telegram istifadəçiləri linklə /start etdikdən sonra sayılır.";
+    if (outer) {
+        outer.setAttribute("aria-valuemax", String(required));
+        outer.setAttribute("aria-valuenow", String(Math.min(current, required)));
+    }
+    if (bar) bar.style.width = String(Math.min(100, current / required * 100)) + "%";
+    if (link) link.value = String(data.invite_link || "");
+}
+
+async function copyWhatsappReferralLink() {
+    const link = document.getElementById("wa-referral-link")?.value || "";
+    if (!/^https:\/\/t\.me\/[A-Za-z0-9_]{5,32}\?start=ref_\d+$/.test(link)) {
+        alertUser("Dəvət linki hələ hazır deyil. Telegram botunda /referral yazın.");
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(link);
+        alertUser("✅ Dəvət linki kopyalandı.");
+    } catch (_) {
+        // HTTPS clipboard access varies by iOS browser and Mini App client.
+        const input = document.getElementById("wa-referral-link");
+        input?.focus();
+        input?.select();
+        alertUser("Link seçildi. Kopyala əməliyyatını əl ilə yerinə yetirin.");
     }
 }
 
@@ -363,6 +414,7 @@ async function fetchServices() {
         state.services = data.services || {};
         state.azCatalog = data.az_catalog || [];
         state.azApproved = !!data.az_approved;
+        renderWhatsappReferrals(data.whatsapp_referrals);
         updatePermissionStatus();
         renderServices();
         if (state.activeTab === "azerbaijan") renderAzOperators();
@@ -387,9 +439,21 @@ function renderServices() {
         const b = node("button", null, "service-card");
         b.appendChild(node("span", "◈", "service-icon"));
         b.appendChild(node("span", service.toUpperCase(), "service-name"));
-        b.appendChild(node("span", offered.length + " range · Seçmək üçün toxun", "service-meta"));
+        const lockedWA = ["wa", "whatsapp", "whatsapp_business", "whatsapp-business", "whatsapp business"]
+            .includes(String(service).toLowerCase()) &&
+            state.whatsappReferrals?.enabled && !state.whatsappReferrals?.unlocked;
+        b.appendChild(node("span", lockedWA
+            ? "🔒 " + (state.whatsappReferrals?.count || 0) + "/5 dəvət tələb olunur"
+            : offered.length + " range · Seçmək üçün toxun", "service-meta"));
         b.type = "button";
-        b.addEventListener("click", () => showServiceRanges(service));
+        b.addEventListener("click", () => {
+            if (lockedWA) {
+                alertUser("WhatsApp nömrələri üçün 5 dəvət lazımdır. Profil bölməsində linkiniz var.");
+                switchTab("profile");
+                return;
+            }
+            showServiceRanges(service);
+        });
         container.appendChild(b);
     });
 }
@@ -617,6 +681,13 @@ async function openCountry(iso) {
 }
 
 async function selectService(service, country = null, range = null, countryIso = null) {
+    if (["wa", "whatsapp", "whatsapp_business", "whatsapp-business", "whatsapp business"]
+            .includes(String(service).toLowerCase()) &&
+        state.whatsappReferrals?.enabled && !state.whatsappReferrals?.unlocked) {
+        alertUser("WhatsApp üçün 5 dəvət lazımdır. Dəvət linkinizi profildən götürün.");
+        switchTab("profile");
+        return;
+    }
     if (!range) {
         showServiceRanges(service);
         return;
@@ -1007,6 +1078,7 @@ async function fetchProfile() {
     const display = document.getElementById("profile-name");
     try {
         const data = await api("/api/profile");
+        renderWhatsappReferrals(data.whatsapp_referrals);
         const u = data.user || {};
         void updateTelegramAvatar(u);
         display.textContent =
@@ -1245,6 +1317,11 @@ async function loadAdminTools() {
     try {
         adminTools = await api("/api/admin-tools");
         const cfg = adminTools.config || {};
+        const waSetting = adminTools.whatsapp_referrals || {};
+        document.getElementById("admin-wa-referral-enabled").checked = !!waSetting.enabled;
+        document.getElementById("admin-wa-referral-status").textContent =
+            waSetting.enabled ? "✅ 5 dəvət limiti WhatsApp üçün aktivdir." :
+                                "⏸️ WhatsApp dəvət limiti deaktivdir.";
         document.getElementById("cfg-min-withdraw").value = cfg.min_withdraw ?? "";
         document.getElementById("cfg-max-withdraw").value = cfg.max_withdraw ?? "";
         const payment = document.getElementById("cfg-payment-methods");
@@ -1498,6 +1575,20 @@ async function previewWorldNews() {
         area.textContent = response.preview || "Xəbər nümunəsi mövcud deyil.";
     } catch (err) {
         area.textContent = "⚠️ " + err.message;
+    }
+}
+
+async function saveWhatsappReferralSettings() {
+    if (!state.isAdmin) return;
+    const enabled = !!document.getElementById("admin-wa-referral-enabled").checked;
+    try {
+        await sendAdminToolAction("wa_referral_settings", {enabled});
+        alertUser("✅ WhatsApp dəvət məhdudiyyəti " +
+            (enabled ? "aktivləşdirildi." : "deaktiv edildi."));
+        await Promise.allSettled([loadAdminTools(), fetchDashboard(), fetchServices()]);
+    } catch (error) {
+        alertUser("Parametr yadda saxlanmadı: " + error.message);
+        await loadAdminTools();
     }
 }
 
