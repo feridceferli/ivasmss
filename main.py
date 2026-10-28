@@ -751,6 +751,8 @@ async def verify_user(update: Update, context: ContextTypes.DEFAULT_TYPE):
     user_data["verified"] = True
     all_data = load_data(USER_DATA_FILE)
     all_data[str(uid)] = user_data
+    # A newly invited user receives credit only after the joining step succeeds.
+    confirm_referral(all_data, uid)
     save_data(all_data)
 
     await query.edit_message_text(
