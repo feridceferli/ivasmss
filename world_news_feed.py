@@ -8,6 +8,8 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import html
+import unicodedata
+from difflib import SequenceMatcher
 import json
 import os
 import random
@@ -29,6 +31,7 @@ POLL_INTERVAL = 60  # Check every minute for a precise ten-minute cadence.
 MAX_AGE = 36 * 60 * 60
 MAX_FEED_BYTES = 220_000
 STATE_FILE = "world_news_digest_state.json"
+MAX_SEEN_ITEMS = 3000
 SETTINGS_FILE = data_path("world_news_settings.json")
 SOURCES = (
     ("BBC World", "https://feeds.bbci.co.uk/news/world/rss.xml", ("bbc.co.uk", "bbc.com")),
@@ -186,14 +189,62 @@ async def fetch_recent_news(client=None, now=None):
                   reverse=True)
 
 
-def choose_headlines(candidates, seen_ids, limit=2):
-    # Sample from the top-quality fresh Azerbaijani stories instead of always
-    # using the newest item; local-language items need no translation API.
-    available = [item for item in candidates
-                 if item["id"] not in seen_ids and item["score"] >= 0]
+def normalized_news_title(title):
+    """Canonical public headline text, independent of publisher URL/casing."""
+    value = unicodedata.normalize("NFKC", html.unescape(str(title or ""))).casefold()
+    # Strip publisher suffixes that may change from one RSS feed to another.
+    value = re.sub(
+        r"\s*[-|–—]\s*(?:bbc(?:\s+news)?|the\s+guardian|"
+        r"azadlıqradiosu|yeni\s+sabah|ayna)\s*$", "", value
+    )
+    value = re.sub(r"[^\w\s]", " ", value, flags=re.UNICODE)
+    return " ".join(value.split())[:180]
+
+
+def repeated_news_title(title, seen_titles):
+    """Catch the same story even if its RSS URL or punctuation changes."""
+    key = normalized_news_title(title)
+    if not key:
+        return False
+    if key in seen_titles:
+        return True
+    if len(key) < 28:
+        return False
+    words = set(key.split())
+    for previous in seen_titles:
+        if not isinstance(previous, str):
+            continue
+        if abs(len(key) - len(previous)) > max(len(key), len(previous)) * 0.22:
+            continue
+        if SequenceMatcher(None, key, previous, autojunk=False).ratio() >= 0.91:
+            return True
+        earlier = set(previous.split())
+        if (len(words) >= 6 and len(earlier) >= 6
+                and len(words & earlier) / max(len(words), len(earlier)) >= 0.88):
+            return True
+    return False
+
+
+def choose_headlines(candidates, seen_ids, limit=2, seen_titles=()):
+    """Select fresh stories only: no repost from new URL or shared RSS title."""
+    available = [
+        item for item in candidates
+        if item["id"] not in seen_ids
+        and item["score"] >= 0
+        and not repeated_news_title(item.get("title", ""), seen_titles)
+    ]
     local = [item for item in available if item.get("language") == "az"]
     pool = local if local else available
-    return random.sample(pool[:30], min(limit, len(pool)))
+    selected = []
+    chosen_titles = set(seen_titles)
+    # Prevent selecting the same story twice from different feeds in one post.
+    for item in random.sample(pool[:30], len(pool[:30])):
+        if not repeated_news_title(item.get("title", ""), chosen_titles):
+            selected.append(item)
+            chosen_titles.add(normalized_news_title(item["title"]))
+            if len(selected) >= limit:
+                break
+    return selected
 
 
 def _source_excerpt(story):
@@ -379,11 +430,21 @@ def _read_state(file):
         return {}
 
 
-async def publish_world_news(*, bot, group_id, now=None, state_file=None,
-                             client=None, translate=None):
-    """Post an interesting verified Azerbaijani digest at most every 10 minutes.
+def _bounded_seen(previous, fresh=()):
+    """Keep recent insertion order rather than sorting URL hashes arbitrarily."""
+    unique = {}
+    for item in list(previous or []) + list(fresh or []):
+        if isinstance(item, str) and 1 <= len(item) <= 180:
+            unique[item] = None
+    return list(unique)[-MAX_SEEN_ITEMS:]
 
-    Never invent headlines, repeat consumed items or mark failed deliveries seen.
+
+async def publish_world_news(*, bot, group_id, now=None, state_file=None,
+                             client=None, translate=None, on_state_change=None):
+    """Send only newly published, non-repeated news at the configured cadence.
+
+    The first RSS snapshot seeds the dedup history without reposting stale
+    headlines after a restart. New items are published on later polls.
     """
     settings = load_news_settings()
     if not settings["enabled"]:
@@ -400,31 +461,62 @@ async def publish_world_news(*, bot, group_id, now=None, state_file=None,
     if not candidates:
         return "no_fresh_news"
 
-    # On a new deployment, publish one fresh sourced digest immediately.
-    # Mark items seen only after Telegram confirms delivery. The old silent
-    # initialization could permanently suppress all recent headlines.
+    ids = _bounded_seen(prior.get("seen_ids", []))
+    titles = _bounded_seen(prior.get("seen_titles", []))
+    seen = set(ids)
+    seen_titles = set(titles)
 
-    seen = set(prior.get("seen_ids", []))
-    selected = choose_headlines(candidates, seen, limit=1)
+    if not prior.get("initialized") and not ids and not titles:
+        # No persistent history. Never publish the same still-current RSS
+        # item as "new" on every Render cold start/redeploy.
+        baseline = [item for item in candidates if item.get("score", -1) >= 0]
+        atomic_save({
+            "initialized": True,
+            "last_sent": now,
+            "seen_ids": _bounded_seen(ids, [x["id"] for x in baseline]),
+            "seen_titles": _bounded_seen(
+                titles, [normalized_news_title(x["title"]) for x in baseline]),
+        }, path)
+        if on_state_change:
+            on_state_change()
+        return "initialized"
+
+    selected = choose_headlines(candidates, seen, limit=1, seen_titles=seen_titles)
     if not selected:
         return "nothing_new"
-
     translated = (await translate(selected) if translate is not None
                   else await translate_headlines(selected))
     valid_stories = [story for story in selected if translated.get(story["id"])]
     if not valid_stories:
-        # Another article may be in Azerbaijani even when an English
-        # translation provider is down or rate-limited.
-        remaining = [item for item in candidates if item["id"] not in seen
-                     and item["id"] not in {s["id"] for s in selected}
-                     and item.get("language") == "az" and item["score"] >= 0]
-        if remaining:
-            fallback = choose_headlines(remaining, seen, limit=1)
+        # Prefer a new Azerbaijani report when external translation is unavailable.
+        remaining = [
+            item for item in candidates
+            if item["id"] not in seen
+            and item["id"] not in {s["id"] for s in selected}
+            and item.get("language") == "az"
+            and item["score"] >= 0
+        ]
+        fallback = choose_headlines(remaining, seen, limit=1, seen_titles=seen_titles)
+        if fallback:
             translations = await translate_headlines(fallback)
             valid_stories = [item for item in fallback if translations.get(item["id"])]
             translated.update(translations)
         if not valid_stories:
             return "translation_unavailable"
+
+    # Recheck the selected titles against the latest state before sending.
+    # Multiple callers should not send stale output if state was changed.
+    recent = _read_state(path)
+    current_titles = set(_bounded_seen(recent.get("seen_titles", [])))
+    current_ids = set(_bounded_seen(recent.get("seen_ids", [])))
+    valid_stories = [
+        story for story in valid_stories
+        if story["id"] not in current_ids
+        and not repeated_news_title(story["title"], current_titles)
+    ]
+    if not valid_stories:
+        return "nothing_new"
+
     message = compose_news_digest(valid_stories, translated)
     try:
         await bot.send_message(chat_id=int(group_id), text=message,
@@ -432,10 +524,16 @@ async def publish_world_news(*, bot, group_id, now=None, state_file=None,
     except Exception as exc:
         print(f"[world-news] Telegram delivery failed: {type(exc).__name__}", flush=True)
         return "send_failed"
-    seen.update(story["id"] for story in valid_stories)
+
     atomic_save({
         "initialized": True,
         "last_sent": now,
-        "seen_ids": list(sorted(seen))[-200:],
+        "seen_ids": _bounded_seen(
+            ids, [story["id"] for story in valid_stories]),
+        "seen_titles": _bounded_seen(
+            titles, [normalized_news_title(story["title"])
+                     for story in valid_stories]),
     }, path)
+    if on_state_change:
+        on_state_change()
     return "sent"
