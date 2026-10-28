@@ -6488,6 +6488,30 @@ async def miniapp_get_number_api(request):
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
 
+    mode = body.get("mode")
+    if mode == "select":
+        token = str(body.get("choice_token") or "")
+        index = body.get("choice_index")
+        if (not re.fullmatch(r"[A-Za-z0-9_-]{16}", token)
+                or type(index) is not int):
+            return _miniapp_cors(web.json_response(
+                {"error": "invalid_choice"}, status=400))
+        try:
+            result = await confirm_number_choice(
+                uid, token, index,
+                expected_price_cents=body.get("expected_price_cents"))
+        except PricingError as exc:
+            status = (402 if exc.code == "insufficient_balance"
+                      else 410 if exc.code == "choice_expired"
+                      else 409 if exc.code in ("price_changed", "already_active")
+                      else 400)
+            return _miniapp_cors(web.json_response(
+                {"error": exc.code, "message": str(exc)}, status=status))
+        return _miniapp_cors(web.json_response(result))
+    if mode not in (None, "preview"):
+        return _miniapp_cors(web.json_response(
+            {"error": "invalid_mode"}, status=400))
+
     # +994 operator catalogue supports 210/211 subrange selections.
     # Catalogue entries are not claims that the upstream has live numbers.
     selected_rid = str(body.get("range", "")).strip()
@@ -6555,13 +6579,28 @@ async def miniapp_get_number_api(request):
                 "message": "Qiymət dəyişib. Sifarişdən əvvəl yeni qiyməti təsdiqləyin.",
                 "price": quote["price"], "free": quote["free"],
             }, status=409))
+        if mode == "preview":
+            offer = await prepare_number_choices(
+                uid, rid, service, country_iso,
+                expected_price_cents=expected_cents)
+            if not offer:
+                return _miniapp_cors(web.json_response({
+                    "success": False,
+                    "message": "Bu diapazon üzrə hazırda nömrə tapılmadı. Balansdan ödəniş çıxılmadı.",
+                }, status=404))
+            return _miniapp_cors(web.json_response({
+                "success": True, "choice_token": offer["token"],
+                "options": offer["numbers"], "expires_in": offer["expires_in"],
+                "price_cents": quote["cents"],
+                "message": "Yalnız seçdiyiniz nömrə hesabınıza əlavə olunacaq.",
+            }))
         num, country = await get_number_from_api(
             rid, requester_id=uid,
             country_iso=country_iso,
             expected_price_cents=expected_cents,
         )
     except PricingError as exc:
-        status = 402 if exc.code == "insufficient_balance" else 409 if exc.code in ("ambiguous_country_price", "price_changed") else 400
+        status = 402 if exc.code == "insufficient_balance" else 429 if exc.code == "preview_cooldown" else 409 if exc.code in ("ambiguous_country_price", "price_changed") else 400
         return _miniapp_cors(web.json_response(
             {"error": exc.code, "message": str(exc)}, status=status))
     if not num:
