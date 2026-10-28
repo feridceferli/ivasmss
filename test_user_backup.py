@@ -178,6 +178,9 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
             "fake_otp_config": {"enabled": False, "running": False, "sent_count": 2},
             "world_news_settings": {"enabled": False, "interval_minutes": 30},
             "ai_post_settings": {"enabled": False, "style": "minimal"},
+            "active_leases": {"447700123456": {"uid": 123, "range": "447700XXX",
+                                                "timestamp": "2026-10-28T08:00:00",
+                                                "lease_id": "a" * 16}},
         }
         paths = {key: self.folder / (key + ".json") for key in data}
         for key, value in data.items():
