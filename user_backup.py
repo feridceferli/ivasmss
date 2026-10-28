@@ -21,10 +21,11 @@ log = logging.getLogger(__name__)
 
 
 class UserProfileBackup:
-    def __init__(self, users_file, stats_file, activity_file=None, news_file=None):
+    def __init__(self, users_file, stats_file, activity_file=None, news_file=None, referral_file=None):
         self.files = {"users": Path(users_file), "stats": Path(stats_file)}
         self.activity_file = Path(activity_file) if activity_file else None
         self.news_file = Path(news_file) if news_file else None
+        self.referral_file = Path(referral_file) if referral_file else None
         self.status = "İstifadəçi bazasının yedəklənməsi başlayır."
         self.ready = False
         self._lock = asyncio.Lock()
@@ -123,6 +124,21 @@ class UserProfileBackup:
             return {}
         return self._sanitize_news(self._read(self.news_file))
 
+    @staticmethod
+    def _sanitize_referral_settings(value):
+        if not isinstance(value, dict) or type(value.get("enabled")) is not bool:
+            return {}
+        timestamp = value.get("updated_at", 0)
+        if type(timestamp) not in (int, float) or not 0 <= timestamp <= 1e12:
+            timestamp = 0
+        return {"enabled": value["enabled"], "required": 5,
+                "updated_at": float(timestamp)}
+
+    def _read_referral_settings(self):
+        if self.referral_file is None or not self.referral_file.exists():
+            return {}
+        return self._sanitize_referral_settings(self._read(self.referral_file))
+
     def _merge_restore(self, remote):
         if remote.get("version") != 1:
             raise ValueError("Unknown private backup version")
@@ -175,6 +191,14 @@ class UserProfileBackup:
                     self.news_file.parent.mkdir(parents=True, exist_ok=True)
                     atomic_save(merged, self.news_file)
 
+        if self.referral_file is not None:
+            remote_config = self._sanitize_referral_settings(remote.get("whatsapp_referrals"))
+            local_config = self._read_referral_settings()
+            if remote_config and (not local_config or
+                                  remote_config.get("updated_at", 0) > local_config.get("updated_at", 0)):
+                self.referral_file.parent.mkdir(parents=True, exist_ok=True)
+                atomic_save(remote_config, self.referral_file)
+
     def _snapshot(self):
         snapshot = {
             "version": 1,
@@ -184,6 +208,8 @@ class UserProfileBackup:
         }
         if self.news_file is not None:
             snapshot["news"] = self._read_news()
+        if self.referral_file is not None:
+            snapshot["whatsapp_referrals"] = self._read_referral_settings()
         return snapshot
 
     async def _remote(self, client):
