@@ -128,6 +128,40 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
         remote = json.loads(self.gh.stored.decode("utf-8"))
         self.assertEqual(remote["news"]["seen_ids"], data["seen_ids"])
 
+    async def test_whatsapp_referral_setting_survives_redeploy(self):
+        users = self.folder / "users.json"
+        stats = self.folder / "stats.json"
+        config = self.folder / "whatsapp_referral_settings.json"
+        config.write_text(json.dumps({
+            "enabled": False, "required": 5, "updated_at": 10000.0,
+        }), encoding="utf-8")
+        first = UserProfileBackup(users, stats, referral_file=config)
+        await first.restore(self.gh)
+        await first.sync_once(self.gh)
+        saved = json.loads(self.gh.stored.decode("utf-8"))
+        self.assertFalse(saved["whatsapp_referrals"]["enabled"])
+        config.unlink()
+        newer = UserProfileBackup(users, stats, referral_file=config)
+        await newer.restore(self.gh)
+        self.assertFalse(json.loads(config.read_text())["enabled"])
+
+    async def test_newer_admin_referral_setting_is_not_overwritten(self):
+        config = self.folder / "whatsapp_referral_settings.json"
+        config.write_text(json.dumps({
+            "enabled": True, "required": 5, "updated_at": 20000.0,
+        }), encoding="utf-8")
+        self.gh.stored = json.dumps({
+            "version": 1, "users": {}, "stats": {}, "whatsapp_referrals": {
+                "enabled": False, "required": 5, "updated_at": 10000.0,
+            },
+        }).encode("utf-8")
+        instance = UserProfileBackup(
+            self.folder / "users.json", self.folder / "stats.json",
+            referral_file=config,
+        )
+        await instance.restore(self.gh)
+        self.assertTrue(json.loads(config.read_text())["enabled"])
+
     async def test_never_uploads_before_successful_restore(self):
         with patch.dict(os.environ, {"NUMBER_ARCHIVE_GITHUB_TOKEN": ""}):
             backup = UserProfileBackup(self.folder / "users.json", self.folder / "user_stats.json")
