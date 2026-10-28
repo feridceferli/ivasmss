@@ -711,6 +711,42 @@
         </div>
     </div>
 
+    <style>
+        .number-choices-overlay:not([hidden]) {
+            position: fixed; inset: 0; z-index: 9000; overflow: auto;
+            display: flex; align-items: center; justify-content: center;
+            padding: 14px; box-sizing: border-box;
+            background: rgba(2, 6, 23, .85); backdrop-filter: blur(8px);
+        }
+        .number-choices-modal {
+            width: min(100%, 480px); max-height: 92vh; overflow-y: auto;
+            background: #142139; color: #f8fafc; padding: 20px;
+            border: 1px solid rgba(148, 163, 184, .3);
+            box-shadow: 0 15px 50px rgba(0, 0, 0, .4); border-radius: 18px;
+        }
+        .number-choice-button {
+            box-sizing: border-box; width: 100%; display: flex;
+            justify-content: space-between; align-items: center;
+            gap: 10px; padding: 14px 12px; margin: 9px 0;
+            border: 1px solid #334155; border-radius: 12px;
+            background: #1e293b; color: #f8fafc; cursor: pointer;
+            font-size: 15px; text-align: left;
+        }
+        .number-choice-button b {color: #5eead4}
+        .number-choice-button:disabled {opacity: .5; cursor: wait}
+        .number-choice-button:focus-visible {outline: 2px solid #5eead4}
+        .number-choices-modal .notice-mini {line-height: 1.5}
+    </style>
+    <div id="number-choices-overlay" class="number-choices-overlay" hidden
+         role="dialog" aria-modal="true" aria-label="Nömrə seçimi">
+        <div class="number-choices-modal">
+            <h3>📱 5 nömrədən birini seçin</h3>
+            <p id="number-choices-description" class="notice-mini"></p>
+            <div id="number-choices-list" aria-live="polite"></div>
+            <p class="notice-mini">Yalnız seçilən nömrə hesabınıza yazılır. Provayderin ayırdığı digər variantların geri qaytarılmasına zəmanət yoxdur.</p>
+            <button class="action-small" type="button" onclick="closeNumberChoices()">❌ İmtina et</button>
+        </div>
+    </div>
     <script src="web-login.js?v=20261027-website"></script>
     <script src="app.js?v=20261026-three-minute-orders-website"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
