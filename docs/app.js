@@ -6,7 +6,7 @@ const tg = window.Telegram?.WebApp || { initData: "", expand() {} };
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "leaderboard", "profile", "guide", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "api-sales", "leaderboard", "profile", "guide", "admin"];
 const state = {
     activeTab: "services",
     services: {},
@@ -20,7 +20,8 @@ const state = {
     authFailed: false,
     serviceQuery: "",
     pricing: null,
-    whatsappReferrals: null
+    whatsappReferrals: null,
+    apiSales: {visible:false, products:[], owned:[]}
 };
 
 function node(tag, text = "", className = "") {
@@ -108,6 +109,7 @@ function setStatus(message) {
 
 function switchTab(tab) {
     if (!TABS.includes(tab) || (tab === "admin" && !state.isAdmin)) return;
+    if (tab === "api-sales" && !state.isAdmin && !state.apiSales.visible && !state.apiSales.owned.length) return;
     state.activeTab = tab;
     document.querySelectorAll(".tab-content").forEach(content => {
         content.classList.toggle("active", content.id === "tab-" + tab);
@@ -129,6 +131,8 @@ function switchTab(tab) {
         fetchOrders();
     } else if (tab === "history") {
         fetchIncomingSms();
+    } else if (tab === "api-sales") {
+        fetchApiSales();
     } else if (tab === "leaderboard") {
         fetchLeaderboard();
     } else if (tab === "profile") {
@@ -137,6 +141,7 @@ function switchTab(tab) {
         fetchAdminUsers();
         loadAdminTools();
         fetchPrices();
+        fetchApiSales();
     }
 }
 
@@ -1685,6 +1690,206 @@ async function adminAzPermission(approve, directId = null) {
     }
 }
 
+
+// ===================================
+// API Sales - authenticated shared bot/site catalog
+// ===================================
+function apiSalesAmount(cents) {
+    return (Number(cents || 0) / 100).toFixed(2) + " AZN";
+}
+
+function apiSalesElement(tag, label, css = "") {
+    return node(tag, label, css);
+}
+
+async function fetchApiSales() {
+    try {
+        const data = await api("/api/api-sales");
+        state.apiSales = data;
+        const accessible = !!data.visible || !!state.isAdmin || (data.owned || []).length > 0;
+        const tabButton = document.getElementById("api-sales-tab-button");
+        const tab = document.getElementById("tab-api-sales");
+        if (tabButton) tabButton.hidden = !accessible;
+        if (tab) tab.hidden = !accessible;
+        const status = document.getElementById("api-sales-status");
+        if (status) status.textContent = data.visible
+            ? "✅ API alışları aktivdir."
+            : "🔒 Yeni API alışları bağlıdır. Əvvəlki alışlarınızı yenə görə bilərsiniz.";
+        renderApiSalesProducts();
+        renderApiSalesOwned();
+        if (state.isAdmin) renderAdminApiSales();
+    } catch (err) {
+        const status = document.getElementById("api-sales-status");
+        if (status) status.textContent = "⚠️ API kataloqu: " + err.message;
+    }
+}
+
+function renderApiSalesProducts() {
+    const container = document.getElementById("api-sales-products");
+    if (!container) return;
+    container.replaceChildren();
+    const data = state.apiSales;
+    const products = data.visible
+        ? (data.products || []).filter(p => p.enabled)
+        : [];
+    if (!products.length) {
+        container.appendChild(apiSalesElement("p",
+            data.visible ? "Hələ satışda API yoxdur." : "Yeni satışlar bağlıdır.", "notice-mini"));
+        return;
+    }
+    const owned = new Set((data.owned || []).map(p => p.id));
+    products.forEach(product => {
+        const card = apiSalesElement("div", null, "api-sales-product");
+        card.appendChild(apiSalesElement("strong", "📡 " + product.name));
+        card.appendChild(apiSalesElement("p", product.description || "API xidməti", "notice-mini"));
+        card.appendChild(apiSalesElement("strong", "💰 " + apiSalesAmount(product.price_cents), "api-sales-price"));
+        const button = apiSalesElement("button", owned.has(product.id) ? "✅ Alınıb" : "🛒 Satın al", "action-small");
+        button.type = "button";
+        button.disabled = owned.has(product.id);
+        button.addEventListener("click", () => buyApiSalesProduct(product.id));
+        card.appendChild(button);
+        container.appendChild(card);
+    });
+}
+
+function renderApiSalesOwned() {
+    const container = document.getElementById("api-sales-owned");
+    if (!container) return;
+    container.replaceChildren();
+    if (!(state.apiSales.owned || []).length) {
+        container.appendChild(apiSalesElement("p", "Hələ API almamısınız.", "notice-mini"));
+        return;
+    }
+    (state.apiSales.owned || []).forEach(receipt => {
+        const card = apiSalesElement("div", null, "api-sales-product");
+        card.appendChild(apiSalesElement("strong", "✅ " + (receipt.name || "API")));
+        card.appendChild(apiSalesElement("p", receipt.description || "API məlumatı", "notice-mini"));
+        card.appendChild(apiSalesElement("div", "🌐 Endpoint: " + (receipt.endpoint || "—"), "api-sales-detail"));
+        const key = apiSalesElement("code", receipt.secret || "", "api-sales-secret");
+        const secretRow = apiSalesElement("div", null, "api-sales-secret-row");
+        secretRow.appendChild(apiSalesElement("span", "🔑 API məlumatı: "));
+        secretRow.appendChild(key);
+        card.appendChild(secretRow);
+        const copy = apiSalesElement("button", "📋 Kopyala", "action-small");
+        copy.type = "button";
+        copy.addEventListener("click", async () => {
+            try {
+                await navigator.clipboard.writeText(receipt.secret || "");
+                toast("✅ API məlumatı kopyalandı.", "success");
+            } catch (_) {
+                toast("Məlumatı seçərək əl ilə kopyalayın.", "error");
+            }
+        });
+        card.appendChild(copy);
+        container.appendChild(card);
+    });
+}
+
+async function buyApiSalesProduct(id) {
+    const product = (state.apiSales.products || []).find(item => item.id === id);
+    if (!product || !state.apiSales.visible) return;
+    if (!window.confirm("“" + product.name + "” API-sini " +
+            apiSalesAmount(product.price_cents) + " qiymətinə almaq istəyirsiniz?")) return;
+    try {
+        const result = await api("/api/api-sales", {method:"POST", body:{action:"buy", id}});
+        toast(result.purchased ? "✅ API alındı!" : "✅ Bu API əvvəl alınmışdı.", "success");
+        await Promise.all([fetchDashboard(), fetchApiSales()]);
+        switchTab("api-sales");
+    } catch (err) {
+        toast(err.message, "error");
+    }
+}
+
+function renderAdminApiSales() {
+    if (!state.isAdmin) return;
+    const data = state.apiSales || {};
+    const select = document.getElementById("admin-api-sales-select");
+    const toggle = document.getElementById("admin-api-sales-visible");
+    const status = document.getElementById("admin-api-sales-status");
+    if (!select || !toggle) return;
+    const previous = select.value;
+    toggle.checked = !!data.visible;
+    select.replaceChildren(new Option("➕ Yeni API əlavə et", ""));
+    for (const p of (data.products || [])) {
+        select.appendChild(new Option((p.enabled ? "🟢 " : "🔴 ") + p.name + " · " +
+            apiSalesAmount(p.price_cents), p.id));
+    }
+    if ((data.products || []).some(p => p.id === previous)) select.value = previous;
+    else select.value = "";
+    selectApiSalesProduct();
+    if (status) status.textContent = "Bölmə " + (data.visible ? "görünür" : "gizlidir") +
+        " · " + (data.products || []).length + " API";
+}
+
+function selectApiSalesProduct() {
+    if (!state.isAdmin) return;
+    const id = document.getElementById("admin-api-sales-select")?.value || "";
+    const product = (state.apiSales.products || []).find(p => p.id === id);
+    const fields = {
+        "name": product?.name || "", "description": product?.description || "",
+        "endpoint": product?.endpoint || "",
+        "secret": "", "price": product ? (product.price_cents / 100).toFixed(2) : ""
+    };
+    for (const [k,v] of Object.entries(fields)) {
+        const element = document.getElementById("admin-api-sales-" + k);
+        if (element) element.value = v;
+    }
+}
+
+async function saveApiSalesVisibility() {
+    if (!state.isAdmin) return;
+    try {
+        await api("/api/api-sales", {method:"POST", body:{
+            action:"visibility", visible:document.getElementById("admin-api-sales-visible").checked
+        }});
+        await fetchApiSales();
+        toast("✅ Bölmənin görünməsi yeniləndi.", "success");
+    } catch (err) { toast(err.message, "error"); }
+}
+
+async function saveApiSalesProduct() {
+    if (!state.isAdmin) return;
+    const fields = {};
+    for (const key of ["name", "description", "endpoint", "secret", "price"]) {
+        fields[key] = document.getElementById("admin-api-sales-" + key).value;
+    }
+    fields.id = document.getElementById("admin-api-sales-select").value;
+    try {
+        const res = await api("/api/api-sales", {method:"POST", body:{action:"upsert", ...fields}});
+        await fetchApiSales();
+        document.getElementById("admin-api-sales-select").value = res.result.id;
+        selectApiSalesProduct();
+        toast("✅ API və qiyməti saxlanıldı.", "success");
+    } catch (err) { toast(err.message, "error"); }
+}
+
+async function toggleApiSalesProduct() {
+    if (!state.isAdmin) return;
+    const id = document.getElementById("admin-api-sales-select").value;
+    const product = (state.apiSales.products || []).find(p => p.id === id);
+    if (!product) { toast("Əvvəl API seçin.", "error"); return; }
+    try {
+        await api("/api/api-sales", {method:"POST", body:{
+            action:"product_visibility", id, enabled:!product.enabled
+        }});
+        await fetchApiSales();
+        toast("✅ Məhsul görünməsi yeniləndi.", "success");
+    } catch (err) { toast(err.message, "error"); }
+}
+
+async function deleteApiSalesProduct() {
+    if (!state.isAdmin) return;
+    const id = document.getElementById("admin-api-sales-select").value;
+    const product = (state.apiSales.products || []).find(p => p.id === id);
+    if (!product) { toast("Əvvəl API seçin.", "error"); return; }
+    if (!window.confirm("“" + product.name + "” satışdan silinsin?")) return;
+    try {
+        await api("/api/api-sales", {method:"POST", body:{action:"delete", id}});
+        await fetchApiSales();
+        toast("✅ API siyahıdan silindi.", "success");
+    } catch (err) { toast(err.message, "error"); }
+}
+
 document.addEventListener("DOMContentLoaded", async () => {
     if (window.websiteAuth && !(await window.websiteAuth.ensureAuthenticated())) return;
     const serviceSearch = document.getElementById("service-search");
@@ -1707,6 +1912,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     }
     await fetchPrices();
     await Promise.all([fetchDashboard(), fetchServices(), fetchCountries(), fetchOrders()]);
+    await fetchApiSales();
     await checkNewOtpNotifications();
     window.setInterval(checkNewOtpNotifications, 10000);
     if (state.isAdmin) renderAdminPrices();
@@ -1722,5 +1928,6 @@ document.addEventListener("DOMContentLoaded", async () => {
         if (state.activeTab === "history") fetchIncomingSms();
         if (state.activeTab === "profile") fetchProfile();
         if (state.activeTab === "leaderboard") fetchLeaderboard();
+        if (state.activeTab === "api-sales") fetchApiSales();
     }, 30000);
 });
