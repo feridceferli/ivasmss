@@ -110,7 +110,7 @@ class ApiSalesStore:
                     owned.append(receipt)
             return {"visible": visible, "products": products, "owned": owned}
 
-    def buy(self, uid, product_id):
+    def buy(self, uid, product_id, expected_price_cents):
         """Synchronous transaction: no await between checking balance and saving."""
         if not isinstance(product_id, str) or not _ID.fullmatch(product_id):
             raise ApiSalesError("invalid_product")
@@ -132,6 +132,8 @@ class ApiSalesStore:
                                endpoint=item["endpoint"], secret=item["secret"])
                 return receipt, False
             cost = int(item["price_cents"])
+            if type(expected_price_cents) is not int or expected_price_cents != cost:
+                raise ApiSalesError("price_changed")
             balance = price_to_balance_cents(user.get("balance", 0))
             if balance < cost:
                 raise ApiSalesError("insufficient_balance")
