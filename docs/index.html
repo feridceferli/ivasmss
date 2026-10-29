@@ -229,7 +229,7 @@
         .profile-fields p { margin:8px 0; overflow-wrap:anywhere; }
         @media(max-width:390px){ .tab-btn{font-size:11px;padding:8px 6px}.catalog-row{font-size:12px} }
     </style>
-    <link rel="stylesheet" href="miniapp-modern.css?v=20261025-prices">
+    <link rel="stylesheet" href="miniapp-modern.css?v=20261029-api-sales">
     <link rel="stylesheet" href="web-login.css?v=20261027-website">
     <link rel="stylesheet" href="whatsapp-referrals.css?v=20261028-5-invites">
     <!-- Website-only layout: Telegram WebApp keeps exactly its Mini App styles. -->
@@ -293,6 +293,7 @@
             <button class="tab-btn" onclick="switchTab('azerbaijan')">🇦🇿 Azərbaycan</button>
             <button class="tab-btn" onclick="switchTab('active')">📱 Aktivlər</button>
             <button class="tab-btn" onclick="switchTab('history')">📜 Tarixçə</button>
+            <button class="tab-btn" id="api-sales-tab-button" hidden onclick="switchTab('api-sales')">🛒 API Satışı</button>
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
             <button class="tab-btn" onclick="switchTab('guide')">📖 İstifadə qaydası</button>
@@ -430,6 +431,23 @@
                 </div>
             </div>
         </div>
+
+        <section id="tab-api-sales" class="tab-content" hidden>
+            <div class="card api-sales-hero">
+                <h3>🛒 API Satışı</h3>
+                <p class="notice-mini">API xidmətlərini balansınızla əldə edin. Alınmış API məlumatları yalnız sizin hesabınıza göstərilir.</p>
+                <p id="api-sales-status" class="notice-mini" aria-live="polite">Kataloq yüklənir...</p>
+            </div>
+            <div class="card">
+                <h4>📡 Satışda olan API-lər</h4>
+                <div id="api-sales-products" class="api-sales-grid" aria-live="polite"></div>
+            </div>
+            <div class="card">
+                <h4>📦 Aldığım API-lər</h4>
+                <p class="notice-mini">Satın aldığınız API-lərə bu bölmədən yenidən daxil ola bilərsiniz.</p>
+                <div id="api-sales-owned" class="api-sales-grid" aria-live="polite"></div>
+            </div>
+        </section>
 
         <div id="tab-leaderboard" class="tab-content">
             <div class="card">
@@ -592,6 +610,7 @@
                 <div class="admin-nav-grid">
                     <button class="action-small" onclick="adminJump('admin-users-section')">👥 İstifadəçilər</button>
                     <button class="action-small" onclick="adminJump('admin-wa-referral-section')">🎁 WhatsApp dəvətləri</button>
+                    <button class="action-small" onclick="adminJump('admin-api-sales-section')">🛒 API Satışı</button>
                     <button class="action-small" onclick="adminJump('admin-system-section')">⚙️ Sistem</button>
                     <button class="action-small" onclick="adminJump('admin-channels-section')">🔗 Kanallar</button>
                     <button class="action-small" onclick="adminJump('admin-fake-otp-section')">⚡ Fake OTP (test)</button>
@@ -603,6 +622,38 @@
                     <button class="action-small" onclick="adminJump('admin-archive-section')">📦 Arxiv</button>
                 </div>
             </div>
+            <section class="card api-sales-admin" id="admin-api-sales-section">
+                <h4>🛒 API Satışı — Admin idarəetməsi</h4>
+                <p class="notice-mini">Bölmənin görünməsini idarə edin, API əlavə edin, mövcud API məlumatını və qiyməti yeniləyin.</p>
+                <label class="price-free-check" for="admin-api-sales-visible">
+                    <input id="admin-api-sales-visible" type="checkbox">
+                    API Satışı bölməsi istifadəçilərə görünsün
+                </label>
+                <button type="button" class="action-small" onclick="saveApiSalesVisibility()">💾 Görünməni saxla</button>
+                <p id="admin-api-sales-status" class="notice-mini" role="status"></p>
+                <label class="notice-mini" for="admin-api-sales-select">Dəyişmək istədiyiniz API</label>
+                <select class="admin-input" id="admin-api-sales-select" onchange="selectApiSalesProduct()">
+                    <option value="">➕ Yeni API əlavə et</option>
+                </select>
+                <label class="notice-mini" for="admin-api-sales-name">API adı</label>
+                <input class="admin-input" id="admin-api-sales-name" maxlength="80" placeholder="Məsələn: SMS Panel API">
+                <label class="notice-mini" for="admin-api-sales-description">Təsvir / istifadə qaydası</label>
+                <textarea class="admin-input" id="admin-api-sales-description" maxlength="600" rows="3" placeholder="API-nin imkanları və istifadə qaydası"></textarea>
+                <label class="notice-mini" for="admin-api-sales-endpoint">HTTPS endpoint (alıcıya göstəriləcək)</label>
+                <input class="admin-input" id="admin-api-sales-endpoint" type="url" maxlength="600" placeholder="https://api.example.com/v1">
+                <label class="notice-mini" for="admin-api-sales-secret">API açarı / giriş məlumatı</label>
+                <textarea class="admin-input" id="admin-api-sales-secret" maxlength="4000" rows="3" autocomplete="off" placeholder="Yeni API üçün açarı yazın; redaktədə boş saxlasanız əvvəlki qalacaq"></textarea>
+                <p class="notice-mini">API açarı yalnız alıcıya, alış tamamlandıqdan sonra göstərilir. Əvvəlki açar redaktə formasına qaytarılmır.</p>
+                <label class="notice-mini" for="admin-api-sales-price">Qiymət (AZN)</label>
+                <input class="admin-input" id="admin-api-sales-price" type="number" min="0.01" max="10000" step="0.01" inputmode="decimal" placeholder="1.00">
+                <div class="quick-actions">
+                    <button type="button" class="action-small" onclick="saveApiSalesProduct()">💾 API əlavə et / yadda saxla</button>
+                    <button type="button" class="action-small" onclick="toggleApiSalesProduct()">👁 Seçilmiş API-ni göstər/gizlət</button>
+                    <button type="button" class="action-small" onclick="deleteApiSalesProduct()">🗑 Seçilmiş API-ni sil</button>
+                </div>
+                <p class="notice-mini">Alıcılar artıq aldıqları API məlumatını məhsul silindikdən sonra da öz hesablarında görə bilirlər.</p>
+            </section>
+
             <div class="card" id="admin-users-section">
                 <h4 style="margin:0 0 8px">⚙️ Admin idarəetməsi</h4>
                 <p class="notice-mini">Yalnız təsdiqlənmiş bot adminləri üçün. +994 giriş icazələri serverdə yoxlanır.</p>
@@ -812,7 +863,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261026-three-minute-orders-website-choose-five-alert-safe-20261028-referral"></script>
+    <script src="app.js?v=20261029-api-sales-v1"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
