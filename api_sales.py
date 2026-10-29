@@ -94,10 +94,20 @@ class ApiSalesStore:
                         row["has_secret"] = bool(item.get("secret"))
                         row["endpoint"] = item["endpoint"]
                     products.append(row)
+            # Existing buyers retain access when an API's endpoint or key is
+            # updated. Their original purchase price remains unchanged.
+            by_id = {item["id"]: item for item in data["items"]}
             owned = []
             for purchase in mine.values():
                 if isinstance(purchase, dict):
-                    owned.append(copy.deepcopy(purchase))
+                    receipt = copy.deepcopy(purchase)
+                    current = by_id.get(receipt.get("id"))
+                    if current:
+                        receipt.update(
+                            name=current["name"], description=current["description"],
+                            endpoint=current["endpoint"], secret=current["secret"],
+                        )
+                    owned.append(receipt)
             return {"visible": visible, "products": products, "owned": owned}
 
     def buy(self, uid, product_id):
@@ -117,7 +127,10 @@ class ApiSalesStore:
             if not isinstance(purchases, dict):
                 raise ApiSalesError("corrupt_purchases")
             if product_id in purchases:
-                return copy.deepcopy(purchases[product_id]), False
+                receipt = copy.deepcopy(purchases[product_id])
+                receipt.update(name=item["name"], description=item["description"],
+                               endpoint=item["endpoint"], secret=item["secret"])
+                return receipt, False
             cost = int(item["price_cents"])
             balance = price_to_balance_cents(user.get("balance", 0))
             if balance < cost:
