@@ -96,7 +96,10 @@ async function api(path, options = {}) {
             invalid_catalog_range: "Bu range mövcud siyahıda yoxdur.",
             range_unavailable: "Bu range artıq API siyahısında yoxdur.",
             service_unavailable: "Bu xidmət mövcud deyil.",
-            country_mismatch: "Ölkə və range uyğun gəlmir."
+            country_mismatch: "Ölkə və range uyğun gəlmir.",
+            price_changed: "API qiyməti dəyişib. Kataloqdan yenidən təsdiqləyin.",
+            insufficient_balance: "Balansınız kifayət etmir.",
+            unavailable: "API hazırda satışda deyil."
         }[data.error] || "Server xətası: " + res.status));
     }
     return data;
@@ -1791,7 +1794,7 @@ async function buyApiSalesProduct(id) {
     if (!window.confirm("“" + product.name + "” API-sini " +
             apiSalesAmount(product.price_cents) + " qiymətinə almaq istəyirsiniz?")) return;
     try {
-        const result = await api("/api/api-sales", {method:"POST", body:{action:"buy", id}});
+        const result = await api("/api/api-sales", {method:"POST", body:{action:"buy", id, expected_price_cents:product.price_cents}});
         toast(result.purchased ? "✅ API alındı!" : "✅ Bu API əvvəl alınmışdı.", "success");
         await Promise.all([fetchDashboard(), fetchApiSales()]);
         switchTab("api-sales");
