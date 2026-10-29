@@ -154,6 +154,17 @@ class ApiSalesTests(unittest.TestCase):
             self.store.buy("42", item["id"], 100)
         self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 2.50)
 
+    def test_promotion_settings_survive_catalog_reload(self):
+        self.item()
+        self.assertTrue(self.store.promotion_settings()["enabled"])
+        self.assertEqual(self.store.promotion_settings()["interval_minutes"], 15)
+        self.store.set_promotions_enabled(False)
+        self.store.mark_promotion_sent(1_800_000_000)
+        reopened = ApiSalesStore(self.catalog, self.users,
+                                  self.store.read_users, self.store.write_data)
+        self.assertFalse(reopened.promotion_settings()["enabled"])
+        self.assertEqual(reopened.promotion_settings()["last_sent_at"], 1_800_000_000)
+
     def test_invalid_endpoint_rejected(self):
         with self.assertRaises(ApiSalesError):
             self.store.upsert({
