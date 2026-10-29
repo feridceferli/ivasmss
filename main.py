@@ -19,6 +19,9 @@ from world_news_feed import (
 from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
                             valid_country, valid_range)
 from api_sales import ApiSalesStore, ApiSalesError
+from api_sales_promotions import (
+    build_group_digest, promotion_due, safe_promotion_state,
+)
 
 range_collector = RangeCollector()
 import io
@@ -170,6 +173,8 @@ NOTIFY_GROUP_ID = os.environ.get("NOTIFY_GROUP_ID", "").strip()
 # Keep global status summaries in the existing OTP group unless overridden.
 # The digest excludes OTP codes, SMS content and individual phone numbers.
 GLOBAL_FEED_GROUP_ID = os.environ.get("GLOBAL_FEED_GROUP_ID", "").strip() or str(OTP_GROUP_ID)
+# API sale advertisements go to the existing OTP group unless configured otherwise.
+API_SALES_GROUP_ID = os.environ.get("API_SALES_GROUP_ID", "").strip() or str(OTP_GROUP_ID)
 NOTIFY_BOT_TOKEN = os.environ.get("NOTIFY_BOT_TOKEN", "").strip() or BOT_TOKEN
 
 request_queue = asyncio.Queue()
@@ -1698,6 +1703,52 @@ def save_data(data, filename=USER_DATA_FILE):
 
 api_sales_store = ApiSalesStore(API_SALES_FILE, USER_DATA_FILE, load_data, _save_persistent_json)
 _api_sales_persistence_lock = asyncio.Lock()
+
+
+api_sales_promo_diagnostics = {"status": "waiting", "last_attempt": None, "last_success": None}
+
+
+async def api_sales_promotion_loop(app):
+    """Publish a credential-free catalog summary at most every 15 minutes.
+
+    The last-send timestamp is stored in the private catalog backup so a
+    normal Render restart does not restart the announcement interval.
+    """
+    await asyncio.sleep(15)
+    while True:
+        try:
+            if not user_backup.ready:
+                api_sales_promo_diagnostics["status"] = "backup_not_ready"
+            else:
+                async with _api_sales_persistence_lock:
+                    catalog = api_sales_store._read()
+                    now = time.time()
+                    if promotion_due(catalog, now):
+                        message = build_group_digest(catalog, WEBAPP_URL)
+                        if message:
+                            api_sales_promo_diagnostics["last_attempt"] = int(now)
+                            try:
+                                chat_id = int(API_SALES_GROUP_ID)
+                            except (TypeError, ValueError):
+                                chat_id = API_SALES_GROUP_ID
+                            await app.bot.send_message(
+                                chat_id=chat_id, text=message, parse_mode="HTML",
+                                disable_web_page_preview=True,
+                            )
+                            api_sales_store.mark_promotion_sent(time.time())
+                            api_sales_promo_diagnostics["last_success"] = int(time.time())
+                            api_sales_promo_diagnostics["status"] = "sent"
+                            print("[api-sales-promo] Group announcement sent", flush=True)
+                            try:
+                                await _persist_api_sales_now()
+                            except ApiSalesError:
+                                api_sales_promo_diagnostics["status"] = "backup_failed"
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            api_sales_promo_diagnostics["status"] = "send_failed"
+            print(f"[api-sales-promo] Send failed ({type(exc).__name__})", flush=True)
+        await asyncio.sleep(30)
 
 
 async def _persist_api_sales_now():
@@ -6335,6 +6386,10 @@ async def miniapp_api_sales_api(request):
         data = api_sales_store.list_products(uid, admin=admin)
         data["is_admin"] = admin
         data["storage_ready"] = bool(user_backup.ready) if admin else None
+        if admin:
+            data["promotions"] = api_sales_store.promotion_settings()
+            data["promotion_status"] = dict(api_sales_promo_diagnostics)
+            data["promotion_group_configured"] = bool(API_SALES_GROUP_ID)
         return _miniapp_cors(web.json_response(data, headers={"Cache-Control": "no-store"}))
     if request.method != "POST":
         return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
@@ -6368,6 +6423,11 @@ async def miniapp_api_sales_api(request):
                 result = api_sales_store.upsert(body)
             elif action == "visibility":
                 result = {"visible": api_sales_store.toggle_section(body.get("visible"))}
+            elif action == "promo_settings":
+                result = {"enabled": api_sales_store.set_promotions_enabled(body.get("enabled"))}
+            elif action == "promo_preview":
+                result = {"preview": build_group_digest(api_sales_store._read(), WEBAPP_URL)}
+                return _miniapp_cors(web.json_response({"ok": True, "result": result}))
             elif action == "product_visibility":
                 result = {"enabled": api_sales_store.toggle_product(
                     body.get("id"), body.get("enabled"))}
@@ -6712,6 +6772,8 @@ async def post_init(application):
     asyncio.create_task(monitor_loop(application))
     asyncio.create_task(fake_otp_loop(application))
     asyncio.create_task(country_availability_loop(application))
+    application.bot_data["api_sales_promo_task"] = asyncio.create_task(
+        api_sales_promotion_loop(application))
 
 
 def register_handlers(app):
