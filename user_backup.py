@@ -27,8 +27,10 @@ class UserProfileBackup:
         self.activity_file = Path(activity_file) if activity_file else None
         self.news_file = Path(news_file) if news_file else None
         self.referral_file = Path(referral_file) if referral_file else None
-        # Explicit allow-list of non-OTP runtime data; never back up provider
-        # credentials, raw SMS messages, OTP codes, or session cookies.
+        # Explicit allow-list of private runtime data. API sale inventory may
+        # include customer delivery secrets and is ONLY synced to a checked
+        # private GitHub backup repository, never to the public source repo.
+        # Never back up provider authentication, raw SMS, OTPs or cookies.
         self.extra_files = {
             str(key): Path(path) for key, path in (extra_files or {}).items()
             if key in self._ALLOWED_EXTRAS
@@ -43,6 +45,7 @@ class UserProfileBackup:
         "required_channels", "az_range_permissions", "banned_users",
         "withdraw_requests", "datarange", "fake_otp_config",
         "world_news_settings", "ai_post_settings", "active_leases",
+        "api_sales",
     ))
     _LIST_EXTRAS = frozenset(("required_channels", "banned_users"))
     _MAX_EXTRA_BYTES = 12_000_000
