@@ -16,6 +16,8 @@ on:
       - global_availability_feed.py
       - world_news_feed.py
       - user_backup.py
+      - api_sales.py
+      - test_api_sales.py
       - data_storage.py
       - test_active_leases_persistence.py
       - test_user_backup.py
@@ -66,6 +68,8 @@ on:
       - global_availability_feed.py
       - world_news_feed.py
       - user_backup.py
+      - api_sales.py
+      - test_api_sales.py
       - data_storage.py
       - test_active_leases_persistence.py
       - test_user_backup.py
@@ -139,6 +143,6 @@ jobs:
       - name: Test Telegram Mini App avatar privacy and fallback
         run: node test_telegram_avatar_ui.cjs
       - name: Check Python syntax
-        run: python -m py_compile main.py whatsapp_referrals.py number_choices.py web_login.py otp_leaderboard.py world_country_codes.py number_pricing.py free_ai_posts.py global_availability_feed.py world_news_feed.py user_backup.py
+        run: python -m py_compile main.py api_sales.py test_api_sales.py whatsapp_referrals.py number_choices.py web_login.py otp_leaderboard.py world_country_codes.py number_pricing.py free_ai_posts.py global_availability_feed.py world_news_feed.py user_backup.py
       - name: Test Mini App parity, safe rendering and +994 permissions
-        run: python -m unittest -v test_whatsapp_referrals test_number_choices test_number_choice_integration test_otp_leaderboard test_web_login test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing test_free_ai_posts test_global_availability_feed test_world_news_feed test_user_backup test_active_leases_persistence
+        run: python -m unittest -v test_api_sales test_whatsapp_referrals test_number_choices test_number_choice_integration test_otp_leaderboard test_web_login test_miniapp_parity test_miniapp_active_numbers test_miniapp_admin_tools test_miniapp_withdrawals test_world_country_codes test_az_permissions test_telegram_profile_photo test_number_pricing test_free_ai_posts test_global_availability_feed test_world_news_feed test_user_backup test_active_leases_persistence
