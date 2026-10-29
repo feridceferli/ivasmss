@@ -1697,6 +1697,21 @@ def save_data(data, filename=USER_DATA_FILE):
 
 
 api_sales_store = ApiSalesStore(API_SALES_FILE, USER_DATA_FILE, load_data, _save_persistent_json)
+_api_sales_persistence_lock = asyncio.Lock()
+
+
+async def _persist_api_sales_now():
+    """Confirm the sales data was written to the separate private GitHub archive."""
+    if not user_backup.ready:
+        raise ApiSalesError("storage_not_ready")
+    try:
+        async with httpx.AsyncClient(timeout=40, follow_redirects=False) as client:
+            await user_backup.sync_once(client)
+    except Exception as exc:
+        print(f"[api-sales] Private backup failed ({type(exc).__name__})", flush=True)
+        raise ApiSalesError("backup_failed") from exc
+
+
 
 
 def load_number_prices():
