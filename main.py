@@ -4034,15 +4034,25 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await update.effective_message.reply_text("❌ Bu API artıq mövcud deyil.")
             return
         try:
-            api_sales_store.upsert({
-                "id": product_id, "name": existing["name"],
-                "description": existing["description"], "endpoint": existing.get("endpoint", ""),
-                "secret": "", "price": text,
-            })
-        except ApiSalesError:
-            await update.effective_message.reply_text(
-                "❌ Qiyməti düzgün yazın (məsələn, 2.50). 0.01–10000 AZN.",
-                reply_markup=cancel_keyboard())
+            async with _api_sales_persistence_lock:
+                if not user_backup.ready:
+                    raise ApiSalesError("storage_not_ready")
+                api_sales_store.upsert({
+                    "id": product_id, "name": existing["name"],
+                    "description": existing["description"], "endpoint": existing.get("endpoint", ""),
+                    "secret": "", "price": text,
+                })
+                await _persist_api_sales_now()
+        except ApiSalesError as exc:
+            if exc.code in ("storage_not_ready", "backup_failed"):
+                await update.effective_message.reply_text(
+                    "⚠️ Qiymətin şəxsi yedəkləməsi təsdiqlənmədi. "
+                    "Server məlumatlarını yoxlayın.", reply_markup=admin_main_keyboard())
+                context.user_data.pop("api_sale_price_id", None)
+            else:
+                await update.effective_message.reply_text(
+                    "❌ Qiyməti düzgün yazın (məsələn, 2.50). 0.01–10000 AZN.",
+                    reply_markup=cancel_keyboard())
             return
         context.user_data.pop("api_sale_price_id", None)
         await update.effective_message.reply_text("✅ API qiyməti yeniləndi.",
@@ -5106,17 +5116,31 @@ async def api_sales_callback(query, uid, data, context):
         await api_sales_admin_bot(query.message)
         return
     if data == "api_admin_visibility" and is_admin(uid):
-        current = api_sales_store._read().get("visible", False)
-        api_sales_store.toggle_section(not current)
-        await api_sales_admin_bot(query.message)
+        try:
+            async with _api_sales_persistence_lock:
+                if not user_backup.ready:
+                    raise ApiSalesError("storage_not_ready")
+                current = api_sales_store._read().get("visible", False)
+                api_sales_store.toggle_section(not current)
+                await _persist_api_sales_now()
+            await api_sales_admin_bot(query.message)
+        except ApiSalesError:
+            await query.message.reply_text("⚠️ Görünmə dəyişikliyi şəxsi yedəkdə təsdiqlənmədi.")
         return
     if data.startswith("api_admin_toggle_") and is_admin(uid):
         ident = data.removeprefix("api_admin_toggle_")
-        item = next((p for p in api_sales_store.list_products(uid, admin=True)["products"]
-                     if p["id"] == ident), None)
-        if item:
-            api_sales_store.toggle_product(ident, not item["enabled"])
-        await api_sales_admin_bot(query.message)
+        try:
+            async with _api_sales_persistence_lock:
+                if not user_backup.ready:
+                    raise ApiSalesError("storage_not_ready")
+                item = next((p for p in api_sales_store.list_products(uid, admin=True)["products"]
+                             if p["id"] == ident), None)
+                if item:
+                    api_sales_store.toggle_product(ident, not item["enabled"])
+                    await _persist_api_sales_now()
+            await api_sales_admin_bot(query.message)
+        except ApiSalesError:
+            await query.message.reply_text("⚠️ API vəziyyəti şəxsi yedəkdə təsdiqlənmədi.")
         return
     if data.startswith("api_admin_price_") and is_admin(uid):
         ident = data.removeprefix("api_admin_price_")
@@ -5168,17 +5192,26 @@ async def api_sales_callback(query, uid, data, context):
         )
         return
     if data.startswith("api_buy_"):
+        persisted = True
         try:
             purchase_id, amount = data.removeprefix("api_buy_").rsplit("_", 1)
             if not amount.isdecimal():
                 raise ApiSalesError("invalid_price")
-            receipt, purchased = api_sales_store.buy(uid, purchase_id, int(amount))
-        except ApiSalesError as exc:
+            async with _api_sales_persistence_lock:
+                if not user_backup.ready:
+                    raise ApiSalesError("storage_not_ready")
+                receipt, purchased = api_sales_store.buy(uid, purchase_id, int(amount))
+                try:
+                    await _persist_api_sales_now()
+                except ApiSalesError:
+                    persisted = False
+        except (ApiSalesError, ValueError) as exc:
             await query.message.reply_text({
                 "insufficient_balance": "❌ Balansınız kifayət etmir.",
                 "unavailable": "❌ API hazırda satışda deyil.",
                 "price_changed": "⚠️ API qiyməti dəyişib. Kataloqdan yenidən təsdiqləyin.",
-            }.get(exc.code, "❌ Satınalma mümkün olmadı."))
+                "storage_not_ready": "⚠️ Saxlama sistemi hazır deyil. Balansdan pul tutulmadı.",
+            }.get(getattr(exc, "code", None), "❌ Satınalma mümkün olmadı."))
             return
         await query.message.reply_text(
             ("✅ API UĞURLA ALINDI!\n" if purchased else "📦 ALDIĞINIZ API\n")
@@ -5188,6 +5221,11 @@ async def api_sales_callback(query, uid, data, context):
             + "📖 " + (receipt.get("description") or "—"),
         )
         await query.message.reply_text("🔑 API məlumatı:\n" + receipt["secret"])
+        if not persisted:
+            await query.message.reply_text(
+                "⚠️ Şəxsi GitHub yedəyi təsdiqlənmədi. API hazırda hesabınızda "
+                "görünür, lakin server yenilənənə qədər qalacağına zəmanət yoxdur."
+            )
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
