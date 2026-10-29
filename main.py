@@ -2485,9 +2485,9 @@ async def monitor_loop(app):
                             f"<blockquote>📶 RANGE: <code>{html.escape(str(num_range_info))}</code></blockquote>\n"
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(str(country_name))}</code></blockquote>\n"
                             f"<blockquote>📱 SERVICE: <code>{html.escape(str(service_name))}</code></blockquote>\n"
-                            f"<blockquote>📞 NUMBER: <code>{html.escape(masked_number)}</code></blockquote>\n"
-                            f"<blockquote>🔑 OTP: <code>{html.escape(masked_otp)}</code></blockquote>\n\n"
-                            f"<blockquote>📩 FULL SMS:\n<code>{html.escape(redact_group_sms(full_sms, otp_code))}</code></blockquote>\n\n"
+                            f"<blockquote>📞 NUMBER: <code>{html.escape(full_number)}</code></blockquote>\n"
+                            f"<blockquote>🔑 OTP: <code>{html.escape(safe_otp_code)}</code></blockquote>\n\n"
+                            f"<blockquote>📩 FULL SMS:\n<code>{html.escape(redact_group_sms(safe_full_sms, otp_code))}</code></blockquote>\n\n"
                             f"<b>{html.escape(balance_msg)}</b>"
                         )
                         
@@ -2503,7 +2503,7 @@ async def monitor_loop(app):
                                     ),
                                     InlineKeyboardButton(
                                         "📢 Admin",
-                                        url="https://t.me/betrunaz",
+                                        url="https://t.me/Lacin_0411",
                                         style="success",
                                     ),
                                 ]
