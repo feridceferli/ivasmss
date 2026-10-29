@@ -3,6 +3,13 @@ from data_storage import data_path, atomic_save
 from number_archive import NumberArchive, txt_chunks
 from otp_leaderboard import otp_leaderboards, leaderboard_page
 from user_backup import UserProfileBackup
+from bot_user_promos import (
+    PromoConfigError, load_settings as load_bot_user_promos,
+    save_settings as save_bot_user_promos,
+    update_settings as update_bot_user_promos,
+    ready_to_dispatch as bot_promo_due, mark_scheduled as bot_promo_mark,
+    planned_message as bot_promo_message, eligible_users as bot_promo_recipients,
+)
 from range_collection import RangeCollector
 from world_country_codes import WORLD_COUNTRIES, build_all_country_rows, region_flag
 from global_availability_feed import (
@@ -111,6 +118,7 @@ REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 ACTIVE_LEASES_FILE = data_path("active_leases.json")
 API_SALES_FILE = data_path("api_sales_private.json")
+BOT_PROMO_FILE = data_path("bot_user_promos.json")
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
@@ -130,6 +138,7 @@ user_backup = UserProfileBackup(
         "ai_post_settings": data_path("ai_post_settings.json"),
         "active_leases": ACTIVE_LEASES_FILE,
         "api_sales": API_SALES_FILE,
+        "bot_user_promos": BOT_PROMO_FILE,
     },
 )
 
@@ -1547,6 +1556,7 @@ def admin_main_keyboard():
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
         [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
         [KeyboardButton("🛒 API SATIŞI (ADMIN)")],
+        [KeyboardButton("📣 SAATLIQ NÖMRƏ ELANLARI")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -4022,6 +4032,194 @@ async def show_main_menu(update, context, uid):
     )
 
 
+
+# ==================== HOURLY BOT USER ANNOUNCEMENTS ====================
+_hourly_promo_lock = asyncio.Lock()
+_hourly_promo_state = {"status": "starting", "targeted": 0, "sent": 0, "failed": 0}
+
+
+async def _backup_bot_promos_now():
+    """Only promise persistence when the private GitHub backup confirms the write."""
+    if not user_backup.ready:
+        raise PromoConfigError("Şəxsi GitHub arxivi hazır deyil.")
+    try:
+        async with httpx.AsyncClient(timeout=40, follow_redirects=False) as client:
+            await user_backup.sync_once(client)
+    except Exception as exc:
+        print("[bot-hourly-promo] Backup unavailable (" + type(exc).__name__ + ")", flush=True)
+        raise PromoConfigError("Ayar lokal saxlanıldı, lakin şəxsi arxivə yazılmadı.") from exc
+
+
+async def save_bot_promo_admin_change(**changes):
+    async with _hourly_promo_lock:
+        if not user_backup.ready:
+            raise PromoConfigError("Şəxsi arxiv hazır deyil; ayarlar saxlanılmadı.")
+        config = update_bot_user_promos(BOT_PROMO_FILE, **changes)
+        await _backup_bot_promos_now()
+        return config
+
+
+async def bot_hourly_promo_loop(app):
+    """One hourly, opt-out capable information notice to registered private chats.
+
+    Before sending, reserve and back up the next interval to prevent duplicate
+    waves when Render restarts. Fail closed if private backup is unavailable.
+    """
+    from safe_broadcast import send_notice
+    await asyncio.sleep(20)
+    while True:
+        try:
+            if not user_backup.ready:
+                _hourly_promo_state["status"] = "backup_not_ready"
+                await asyncio.sleep(30)
+                continue
+            if app.bot_data.get("broadcast_running"):
+                await asyncio.sleep(30)
+                continue
+            async with _hourly_promo_lock:
+                settings = load_bot_user_promos(BOT_PROMO_FILE)
+                if not settings["enabled"]:
+                    _hourly_promo_state["status"] = "disabled"
+                    await asyncio.sleep(30)
+                    continue
+                now = time.time()
+                if settings["next_due_at"] == 0:
+                    # The very first run waits a full hour, not a deployment burst.
+                    settings["next_due_at"] = now + settings["interval_minutes"] * 60
+                    save_bot_user_promos(BOT_PROMO_FILE, settings)
+                    await _backup_bot_promos_now()
+                if not bot_promo_due(settings, now):
+                    await asyncio.sleep(30)
+                    continue
+                content = bot_promo_message(settings)
+                settings = bot_promo_mark(settings, now)
+                save_bot_user_promos(BOT_PROMO_FILE, settings)
+                # Confirm the next due timestamp BEFORE sending to avoid repeats
+                # even when the instance is replaced midway through a broadcast.
+                await _backup_bot_promos_now()
+                users = load_data(USER_DATA_FILE)
+                eligible = bot_promo_recipients(users, load_banned_users())
+                app.bot_data["broadcast_running"] = True
+            try:
+                result = await send_notice(app.bot, eligible, content)
+            finally:
+                app.bot_data.pop("broadcast_running", None)
+            async with _hourly_promo_lock:
+                latest = load_bot_user_promos(BOT_PROMO_FILE)
+                latest["last_sent_at"] = time.time() if result["sent"] else latest["last_sent_at"]
+                latest["last_result"] = {key: result[key] for key in
+                                         ("targeted", "sent", "failed", "blocked")}
+                save_bot_user_promos(BOT_PROMO_FILE, latest)
+                user_backup.changed()
+                _hourly_promo_state.update({"status": "sent" if result["sent"] else "empty_or_failed",
+                                            **latest["last_result"]})
+            print("[bot-hourly-promo] wave finished targeted=" +
+                  str(result["targeted"]) + " sent=" + str(result["sent"]), flush=True)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            _hourly_promo_state["status"] = "error"
+            print("[bot-hourly-promo] worker error=" + type(exc).__name__, flush=True)
+        await asyncio.sleep(30)
+
+
+async def promo_preference_command(update, context):
+    if not update.effective_chat or update.effective_chat.type != "private":
+        return
+    user_id = update.effective_user.id
+    enabled = update.message.text.split()[0].lower() == "/promo_on"
+    users = load_data(USER_DATA_FILE)
+    user = users.setdefault(str(user_id), {"user_id": str(user_id), "balance": 0.0})
+    user["promo_opt_out"] = not enabled
+    save_data(users, USER_DATA_FILE)
+    await update.effective_message.reply_text(
+        "✅ Saatlıq nömrə elanları aktivləşdirildi." if enabled
+        else "🔕 Saatlıq nömrə elanları sizin üçün dayandırıldı."
+    )
+
+
+async def bot_promo_admin_menu(message):
+    if message.chat.type != "private":
+        return
+    settings = load_bot_user_promos(BOT_PROMO_FILE)
+    caption = (
+        "📣 <b>SAATLIQ NÖMRƏ ELANLARI</b>\n\n"
+        f"Vəziyyət: {'✅ Aktiv' if settings['enabled'] else '⏸️ Bağlı'}\n"
+        f"⏱ Interval: {settings['interval_minutes']} dəqiqə\n"
+        f"📝 Mesaj sayı: {len(settings['templates'])}\n"
+        "📨 Ünvan: yalnız botu başladan və imtina etməyən istifadəçilərin şəxsi çatları.\n"
+        "🔕 İstifadəçi dayandırma komandası: /promo_off"
+    )
+    kb = InlineKeyboardMarkup([
+        [InlineKeyboardButton(
+            "⏸️ Dayandır" if settings["enabled"] else "▶️ Aktivləşdir",
+            callback_data="hourly_admin_toggle")],
+        [InlineKeyboardButton("✏️ Qısa mətnləri dəyiş", callback_data="hourly_admin_edit"),
+         InlineKeyboardButton("⏱ Intervalı dəyiş", callback_data="hourly_admin_interval")],
+        [InlineKeyboardButton("👁 Nümunə", callback_data="hourly_admin_preview"),
+         InlineKeyboardButton("🧪 Yalnız mənə sınaq", callback_data="hourly_admin_test")],
+    ])
+    await message.reply_text(caption, parse_mode="HTML", reply_markup=kb)
+
+
+async def bot_promo_admin_callback(query, context, data):
+    if not is_admin(query.from_user.id) or query.message.chat.type != "private":
+        return
+    if data == "hourly_admin_toggle":
+        config = load_bot_user_promos(BOT_PROMO_FILE)
+        try:
+            await save_bot_promo_admin_change(enabled=not config["enabled"])
+            await bot_promo_admin_menu(query.message)
+        except PromoConfigError as exc:
+            await query.message.reply_text("⚠️ " + str(exc))
+        return
+    if data == "hourly_admin_preview":
+        await query.message.reply_text("👁 <b>Elan nümunəsi:</b>\n\n" +
+            html.escape(bot_promo_message(load_bot_user_promos(BOT_PROMO_FILE))),
+            parse_mode="HTML")
+        return
+    if data == "hourly_admin_test":
+        await query.message.reply_text(
+            "🧪 SINAQ — yalnız adminə\n\n" +
+            bot_promo_message(load_bot_user_promos(BOT_PROMO_FILE)))
+        return
+    if data == "hourly_admin_edit":
+        context.user_data["hourly_promo_edit"] = "templates"
+        await query.message.reply_text(
+            "✏️ Qısa elanları hər sətirdə bir ədəd yazın (1–10 mesaj, maksimum 220 simvol).\n"
+            "Hazır mətnlər növbə ilə göndəriləcək. Çıxmaq üçün ❌ CANCEL.",
+            reply_markup=cancel_keyboard())
+        return
+    if data == "hourly_admin_interval":
+        context.user_data["hourly_promo_edit"] = "interval"
+        await query.message.reply_text(
+            "⏱ Intervalı dəqiqə ilə yazın. Standart 60, icazə verilən 60–1440.\n"
+            "Çıxmaq üçün ❌ CANCEL.", reply_markup=cancel_keyboard())
+
+
+async def bot_promo_admin_text(update, context, text):
+    mode = context.user_data.get("hourly_promo_edit")
+    if text == "❌ CANCEL":
+        context.user_data.pop("hourly_promo_edit", None)
+        await update.effective_message.reply_text("❌ Dəyişiklik ləğv edildi.",
+                                                  reply_markup=admin_main_keyboard())
+        return
+    try:
+        if mode == "templates":
+            values = [line.strip() for line in (update.message.text or "").splitlines()
+                      if line.strip()]
+            await save_bot_promo_admin_change(templates=values)
+        elif mode == "interval":
+            minutes = int(text)
+            await save_bot_promo_admin_change(interval_minutes=minutes)
+    except (PromoConfigError, ValueError) as exc:
+        await update.effective_message.reply_text("⚠️ " + str(exc))
+        return
+    context.user_data.pop("hourly_promo_edit", None)
+    await update.effective_message.reply_text("✅ Elan parametrləri arxivə saxlanıldı.",
+                                              reply_markup=admin_main_keyboard())
+
+
 async def broadcast_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
     """Open the existing announcement flow for an administrator in private chat."""
     if not update.effective_user or not is_admin(update.effective_user.id):
@@ -4066,6 +4264,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     uid = update.effective_user.id
     text = normalize_button_input(update.message.text.strip())
+
+    if text == "📣 SAATLIQ NÖMRƏ ELANLARI" and is_admin(uid):
+        await bot_promo_admin_menu(update.effective_message)
+        return
+    if context.user_data.get("hourly_promo_edit") and is_admin(uid):
+        await bot_promo_admin_text(update, context, text)
+        return
 
     if text == "🛒 API SATIŞI (ADMIN)" and is_admin(uid):
         await api_sales_admin_bot(update.effective_message)
@@ -5315,6 +5520,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     data = query.data
     await query.answer()
 
+    if data.startswith("hourly_admin_"):
+        await bot_promo_admin_callback(query, context, data)
+        return
     if data == "menu_api_sales" or data.startswith("api_"):
         if is_admin(uid) or not is_user_banned(uid):
             await api_sales_callback(query, uid, data, context)
@@ -6803,6 +7011,8 @@ async def post_init(application):
     asyncio.create_task(monitor_loop(application))
     asyncio.create_task(fake_otp_loop(application))
     asyncio.create_task(country_availability_loop(application))
+    application.bot_data["hourly_user_promo_task"] = asyncio.create_task(
+        bot_hourly_promo_loop(application))
     application.bot_data["api_sales_promo_task"] = asyncio.create_task(
         api_sales_promotion_loop(application))
 
@@ -6821,6 +7031,8 @@ def register_handlers(app):
     app.add_handler(CommandHandler("az_approve", az_approve_command))
     app.add_handler(CommandHandler("az_revoke", az_revoke_command))
     app.add_handler(CommandHandler("broadcast", broadcast_command))
+    app.add_handler(CommandHandler("promo_off", promo_preference_command))
+    app.add_handler(CommandHandler("promo_on", promo_preference_command))
     app.add_handler(CommandHandler("get1number", get1number_command))
     app.add_handler(CommandHandler("searchotp", searchotp_command))
     app.add_handler(CommandHandler("balance", balance_command))
