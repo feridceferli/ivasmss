@@ -5044,6 +5044,9 @@ async def api_sales_bot_menu(message, uid):
 
 
 async def api_sales_admin_bot(message):
+    if message.chat.type != "private":
+        await message.reply_text("🔒 API idarəetməsi yalnız şəxsi çatda açılır.")
+        return
     data = api_sales_store.list_products(message.chat.id, admin=True)
     buttons = [[InlineKeyboardButton(
         "👁 Bölməni gizlət" if data["visible"] else "👁 Bölməni göstər",
