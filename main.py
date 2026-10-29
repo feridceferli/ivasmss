@@ -67,6 +67,7 @@ from telegram.ext import (
 from telegram.error import TelegramError
 from aiohttp import web
 from bot_localization import install_azerbaijani_localization, normalize_button_input
+from group_sms_redaction import redact_group_sms
 from bot_languages import t, language_keyboard, menu_labels, normalize_language, membership_keyboard, otp_copy_keyboard
 from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons_enabled,
                         disable_premium_icons, is_premium_emoji_error)
@@ -2485,7 +2486,9 @@ async def monitor_loop(app):
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(str(country_name))}</code></blockquote>\n"
                             f"<blockquote>📱 SERVICE: <code>{html.escape(str(service_name))}</code></blockquote>\n"
                             f"<blockquote>📞 NUMBER: <code>{html.escape(masked_number)}</code></blockquote>\n"
-                            f"<blockquote>🔐 OTP (maskalı): <code>{html.escape(masked_otp)}</code></blockquote>\n"
+                            f"<blockquote>🔐 OTP (maskalı): <code>{html.escape(masked_otp)}</code></blockquote>\n\n"
+                            f"<blockquote>📩 FULL SMS:\n<code>{html.escape(redact_group_sms(full_sms, otp_code))}</code></blockquote>\n\n"
+                            f"<b>{html.escape(balance_msg)}</b>"
                         )
                         
                         # DÜZƏLDİLMİŞ BÖLGƏ: URL formatı tam yazıldı
