@@ -6296,6 +6296,7 @@ async def miniapp_api_sales_api(request):
     if request.method == "GET":
         data = api_sales_store.list_products(uid, admin=admin)
         data["is_admin"] = admin
+        data["storage_ready"] = bool(user_backup.ready) if admin else None
         return _miniapp_cors(web.json_response(data, headers={"Cache-Control": "no-store"}))
     if request.method != "POST":
         return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
@@ -6304,32 +6305,64 @@ async def miniapp_api_sales_api(request):
         if not isinstance(body, dict):
             raise ValueError()
         action = body.get("action")
-        if action == "buy":
-            receipt, purchased = api_sales_store.buy(uid, body.get("id"), body.get("expected_price_cents"))
-            return _miniapp_cors(web.json_response({
-                "ok": True, "purchased": purchased, "receipt": receipt,
-                "balance": format_balance(get_user(uid).get("balance", 0)),
-            }, headers={"Cache-Control": "no-store"}))
-        if not admin:
-            return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-        if action == "upsert":
-            result = api_sales_store.upsert(body)
-        elif action == "visibility":
-            result = {"visible": api_sales_store.toggle_section(body.get("visible"))}
-        elif action == "product_visibility":
-            result = {"enabled": api_sales_store.toggle_product(body.get("id"), body.get("enabled"))}
-        elif action == "delete":
-            api_sales_store.delete(body.get("id"))
-            result = {"deleted": True}
-        else:
-            raise ApiSalesError("bad_action")
+        if action != "buy" and not admin:
+            raise ApiSalesError("forbidden")
+        async with _api_sales_persistence_lock:
+            # Reject operations if the private backup was not restored. Render's
+            # free local filesystem is ephemeral and cannot safely store API keys.
+            if not user_backup.ready:
+                raise ApiSalesError("storage_not_ready")
+            if action == "buy":
+                receipt, purchased = api_sales_store.buy(
+                    uid, body.get("id"), body.get("expected_price_cents"))
+                persisted = True
+                try:
+                    await _persist_api_sales_now()
+                except ApiSalesError:
+                    persisted = False
+                return _miniapp_cors(web.json_response({
+                    "ok": True, "purchased": purchased, "receipt": receipt,
+                    "balance": format_balance(get_user(uid).get("balance", 0)),
+                    "persisted": persisted,
+                    "warning": None if persisted else "backup_failed",
+                }, headers={"Cache-Control": "no-store"}))
+            if action == "upsert":
+                result = api_sales_store.upsert(body)
+            elif action == "visibility":
+                result = {"visible": api_sales_store.toggle_section(body.get("visible"))}
+            elif action == "product_visibility":
+                result = {"enabled": api_sales_store.toggle_product(
+                    body.get("id"), body.get("enabled"))}
+            elif action == "delete":
+                api_sales_store.delete(body.get("id"))
+                result = {"deleted": True}
+            else:
+                raise ApiSalesError("bad_action")
+            try:
+                await _persist_api_sales_now()
+            except ApiSalesError as exc:
+                # Don't tell the admin changes are durable when they're local only.
+                return _miniapp_cors(web.json_response({
+                    "error": exc.code,
+                    "message": "Məlumat serverdə saxlanıldı, lakin şəxsi GitHub "
+                               "yedəyi təsdiqlənmədi. Yenidən yoxlayın.",
+                    "saved_locally": True,
+                    "result": result,
+                }, status=503))
         return _miniapp_cors(web.json_response({"ok": True, "result": result}))
     except ApiSalesError as exc:
-        status = 402 if exc.code == "insufficient_balance" else (
-            409 if exc.code in ("unavailable", "catalog_unavailable", "price_changed") else 400)
+        status = (402 if exc.code == "insufficient_balance"
+                  else 403 if exc.code == "forbidden"
+                  else 503 if exc.code in ("storage_not_ready", "backup_failed")
+                  else 409 if exc.code in ("unavailable", "catalog_unavailable", "price_changed")
+                  else 400)
         return _miniapp_cors(web.json_response({"error": exc.code}, status=status))
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+    except (OSError, json.JSONDecodeError) as exc:
+        print(f"[api-sales] Storage operation failed ({type(exc).__name__})", flush=True)
+        return _miniapp_cors(web.json_response(
+            {"error": "storage_error"}, status=503))
 
 
 async def miniapp_admin_api(request):
