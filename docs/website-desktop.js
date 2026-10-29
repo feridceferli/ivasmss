@@ -9,6 +9,7 @@
         azerbaijan: ["Azərbaycan nömrələri", "Operatorlar, icazələr və qiymətlər"],
         active: ["Aktiv nömrələr", "Nömrələriniz və geri sayım bir yerdə"],
         history: ["Tarixçə", "Hesabınıza aid OTP və fəaliyyət qeydləri"],
+        "api-sales": ["API Satışı", "Balansınızla API əldə edin və əvvəlki alışlarınıza baxın"],
         leaderboard: ["OTP liderləri", "Bugünkü və bütün dövrlər üzrə sıralamalar"],
         profile: ["Profilim", "Telegram profiliniz və hesab statistikanız"],
         guide: ["İstifadə bələdçisi", "Sistem haqqında qısa və aydın məlumat"],
