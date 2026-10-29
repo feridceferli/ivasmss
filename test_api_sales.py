@@ -47,11 +47,11 @@ class ApiSalesTests(unittest.TestCase):
     def test_one_time_purchase_and_owned_secret(self):
         item = self.item("1.20")
         self.store.toggle_section(True)
-        bought, charged = self.store.buy("42", item["id"])
+        bought, charged = self.store.buy("42", item["id"], item["price_cents"])
         self.assertTrue(charged)
         self.assertEqual(bought["secret"], "test-only-secret")
         self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 1.30)
-        again, charged = self.store.buy("42", item["id"])
+        again, charged = self.store.buy("42", item["id"], item["price_cents"])
         self.assertFalse(charged)
         self.assertEqual(again, bought)
         self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 1.30)
@@ -62,23 +62,23 @@ class ApiSalesTests(unittest.TestCase):
         item = self.item("3.00")
         self.store.toggle_section(True)
         with self.assertRaisesRegex(ApiSalesError, "insufficient_balance"):
-            self.store.buy("42", item["id"])
+            self.store.buy("42", item["id"], item["price_cents"])
         self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 2.50)
         self.assertNotIn("api_purchases", self.store.read_users(self.users)["42"])
 
     def test_disabled_item_and_hidden_section_reject_new_purchases(self):
         item = self.item()
         with self.assertRaisesRegex(ApiSalesError, "unavailable"):
-            self.store.buy("42", item["id"])
+            self.store.buy("42", item["id"], item["price_cents"])
         self.store.toggle_section(True)
         self.store.toggle_product(item["id"], False)
         with self.assertRaisesRegex(ApiSalesError, "unavailable"):
-            self.store.buy("42", item["id"])
+            self.store.buy("42", item["id"], item["price_cents"])
 
     def test_purchased_access_survives_catalog_delete(self):
         item = self.item()
         self.store.toggle_section(True)
-        receipt, _ = self.store.buy("42", item["id"])
+        receipt, _ = self.store.buy("42", item["id"], item["price_cents"])
         self.store.delete(item["id"])
         self.store.toggle_section(False)
         owned = self.store.list_products("42")["owned"]
@@ -93,7 +93,7 @@ class ApiSalesTests(unittest.TestCase):
         self.assertEqual(item["id"], changed["id"])
         self.store.toggle_section(True)
         self.assertEqual(self.store.list_products("42")["products"][0]["price_cents"], 210)
-        receipt, charged = self.store.buy("42", item["id"])
+        receipt, charged = self.store.buy("42", item["id"], item["price_cents"])
         self.assertTrue(charged)
         self.assertEqual(receipt["secret"], "test-only-secret")
 
@@ -108,7 +108,7 @@ class ApiSalesTests(unittest.TestCase):
         self.store.toggle_section(True)
         results = []
         def worker():
-            results.append(self.store.buy("42", item["id"])[1])
+            results.append(self.store.buy("42", item["id"], item["price_cents"])[1])
         threads = [threading.Thread(target=worker) for _ in range(10)]
         for thread in threads: thread.start()
         for thread in threads: thread.join()
@@ -119,7 +119,7 @@ class ApiSalesTests(unittest.TestCase):
     def test_api_rotation_updates_existing_buyer_without_recharging(self):
         item = self.item()
         self.store.toggle_section(True)
-        first, charged = self.store.buy("42", item["id"])
+        first, charged = self.store.buy("42", item["id"], item["price_cents"])
         self.assertTrue(charged)
         self.assertEqual(first["secret"], "test-only-secret")
         self.store.upsert({
@@ -131,10 +131,21 @@ class ApiSalesTests(unittest.TestCase):
         self.assertEqual(mine["secret"], "rotated-secret")
         self.assertEqual(mine["endpoint"], "https://api.example.test/v2")
         self.assertEqual(mine["price_cents"], 100)
-        again, charged = self.store.buy("42", item["id"])
+        again, charged = self.store.buy("42", item["id"], item["price_cents"])
         self.assertFalse(charged)
         self.assertEqual(again["secret"], "rotated-secret")
         self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 1.50)
+
+    def test_price_change_requires_new_confirmation(self):
+        item = self.item("1.00")
+        self.store.toggle_section(True)
+        self.store.upsert({
+            "id": item["id"], "name": "Updated API", "description": "",
+            "endpoint": "https://api.example.test/v2", "secret": "", "price": "1.25"
+        })
+        with self.assertRaisesRegex(ApiSalesError, "price_changed"):
+            self.store.buy("42", item["id"], 100)
+        self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 2.50)
 
     def test_invalid_endpoint_rejected(self):
         with self.assertRaises(ApiSalesError):
