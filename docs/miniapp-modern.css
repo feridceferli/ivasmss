@@ -350,3 +350,20 @@ select {appearance:auto}
 .ai-post-preview{white-space:pre-wrap;overflow-wrap:anywhere;font-family:inherit;font-size:12px;line-height:1.65;
  background:#0e192b;border:1px solid rgba(142,166,235,.22);border-radius:12px;padding:13px;
  max-height:360px;overflow-y:auto}
+
+/* API sales: responsive cards, protected delivery area and admin editor. */
+.api-sales-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,240px),1fr));gap:12px;margin-top:12px}
+.api-sales-product{display:flex;flex-direction:column;align-items:flex-start;gap:9px;padding:15px;
+  border:1px solid var(--ui-border,rgba(140,155,190,.25));border-radius:14px;
+  background:rgba(117,136,197,.07);min-width:0}
+.api-sales-product strong{font-size:14px;overflow-wrap:anywhere}
+.api-sales-product .notice-mini{margin:0;line-height:1.55}
+.api-sales-price{color:var(--ui-text,#e9f0ff)}
+.api-sales-detail,.api-sales-secret-row{font-size:13px;overflow-wrap:anywhere;line-height:1.55;max-width:100%}
+.api-sales-secret{display:block;white-space:pre-wrap;word-break:break-all;padding:10px;margin-top:7px;
+  border-radius:8px;background:rgba(0,0,0,.14);user-select:text}
+.api-sales-admin{margin-bottom:15px}
+.api-sales-admin>.admin-input{display:block;box-sizing:border-box;width:100%;max-width:100%;margin:7px 0 12px}
+.api-sales-admin>label.notice-mini{display:block;margin-top:12px}
+.api-sales-admin .quick-actions{flex-wrap:wrap}
+.tab-btn[hidden],.tab-content[hidden]{display:none!important}
