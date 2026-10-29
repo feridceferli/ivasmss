@@ -160,6 +160,7 @@ function switchTab(tab) {
         loadAdminTools();
         fetchPrices();
         fetchApiSales();
+        fetchBotHourlyPromos();
     }
 }
 
@@ -1331,6 +1332,84 @@ async function fetchAdminUsers() {
     } catch (err) { clearAndText(container, err.message); }
 }
 
+
+
+// Bot-only hourly direct-message reminders. These calls require admin auth.
+async function fetchBotHourlyPromos() {
+    if (!state.isAdmin) return;
+    const status = document.getElementById("admin-hourly-status");
+    try {
+        const data = await api("/api/bot-promos");
+        document.getElementById("admin-hourly-enabled").checked = !!data.enabled;
+        document.getElementById("admin-hourly-interval").value = data.interval_minutes || 60;
+        document.getElementById("admin-hourly-templates").value = (data.templates || []).join("\n");
+        const next = data.next_due_at > 0
+            ? new Date(data.next_due_at * 1000).toLocaleString("az-AZ", {
+                timeZone: "Asia/Baku", dateStyle: "short", timeStyle: "short"
+              })
+            : "İlk göndəriş bir saat sonra planlaşdırılacaq";
+        const last = data.last_sent_at > 0
+            ? new Date(data.last_sent_at * 1000).toLocaleString("az-AZ", {
+                timeZone: "Asia/Baku", dateStyle: "short", timeStyle: "short"
+              })
+            : "Hələ göndərilməyib";
+        status.textContent = (data.enabled ? "✅ Aktiv" : "⏸️ Bağlı")
+            + " · 👥 Alıcı sayı: " + (data.recipients || 0)
+            + " · ⏱ Növbəti: " + next
+            + " · Son uğurlu: " + last
+            + " · ✅ Çatdırılan: " + (data.last_result?.sent || 0)
+            + (data.storage_ready ? "" : " · ⚠️ Şəxsi arxiv hazır deyil");
+    } catch (err) {
+        if (status) status.textContent = "⚠️ Elan ayarları: " + err.message;
+    }
+}
+
+async function saveBotHourlyPromos() {
+    if (!state.isAdmin) return;
+    const enabled = document.getElementById("admin-hourly-enabled").checked;
+    const interval = Number(document.getElementById("admin-hourly-interval").value);
+    const templates = document.getElementById("admin-hourly-templates").value
+        .split(/\r?\n/).map(line => line.trim()).filter(Boolean);
+    if (!Number.isInteger(interval) || interval < 60 || interval > 1440) {
+        toast("Interval 60–1440 dəqiqə olmalıdır.", "error"); return;
+    }
+    if (templates.length < 1 || templates.length > 10 ||
+        templates.some(s => s.length < 8 || s.length > 220)) {
+        toast("1–10 qısa mesaj yazın. Hər mesaj 8–220 simvol olmalıdır.", "error"); return;
+    }
+    try {
+        await api("/api/bot-promos", {method: "POST", body: {
+            action: "settings", enabled, interval_minutes: interval, templates
+        }});
+        await fetchBotHourlyPromos();
+        toast("✅ Saatlıq bot bildirişləri şəxsi arxivə saxlanıldı.", "success");
+    } catch (err) { toast(err.message, "error"); }
+}
+
+async function previewBotHourlyPromos() {
+    if (!state.isAdmin) return;
+    const output = document.getElementById("admin-hourly-preview");
+    output.hidden = false;
+    output.textContent = "Nümunə hazırlanır...";
+    try {
+        const data = await api("/api/bot-promos", {
+            method: "POST", body: {action: "preview"}
+        });
+        output.textContent = data.preview || "Mesaj yoxdur.";
+    } catch (err) { output.textContent = "⚠️ " + err.message; }
+}
+
+async function testBotHourlyPromos() {
+    if (!state.isAdmin) return;
+    try {
+        const data = await api("/api/bot-promos", {
+            method: "POST", body: {action: "test"}
+        });
+        toast(data.sent_to_admin
+            ? "✅ Sınaq mesajı yalnız sizin şəxsi Telegram çatınıza göndərildi."
+            : "⚠️ Sınaq təsdiqlənmədi.", data.sent_to_admin ? "success" : "error");
+    } catch (err) { toast(err.message, "error"); }
+}
 
 let adminTools = null;
 
