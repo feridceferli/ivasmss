@@ -24,6 +24,9 @@ class ApiSalesError(ValueError):
 
 def price_to_cents(value):
     try:
+        # Azerbaijani admin forms often use comma as the decimal separator.
+        if isinstance(value, str):
+            value = value.strip().replace(' ', '').replace(',', '.')
         decimal = Decimal(str(value))
         cents = decimal * 100
         if not cents.is_finite() or cents != cents.to_integral_value() or not (1 <= cents <= 1_000_000):
@@ -62,7 +65,10 @@ class ApiSalesStore:
     def _read(self):
         if not self.catalog_file.exists():
             return {"visible": False, "items": []}
-        data = json.loads(self.catalog_file.read_text(encoding="utf-8"))
+        try:
+            data = json.loads(self.catalog_file.read_text(encoding="utf-8"))
+        except (ValueError, OSError) as exc:
+            raise ApiSalesError("catalog_unavailable") from exc
         if not isinstance(data, dict) or not isinstance(data.get("items"), list):
             raise ApiSalesError("catalog_unavailable")
         return data
@@ -158,6 +164,15 @@ class ApiSalesStore:
             if ident and (not _ID.fullmatch(ident) or item is None):
                 raise ApiSalesError("invalid_product")
             name = _bounded(fields.get("name"), 80, True)
+            # A retry after a lost response should update, not duplicate, a product.
+            # Titles are unique within an admin-owned catalog.
+            duplicate = next((p for p in data["items"]
+                              if p["name"].casefold() == name.casefold()
+                              and p is not item), None)
+            if duplicate:
+                if ident:
+                    raise ApiSalesError("duplicate_name")
+                item = duplicate
             description = _bounded(fields.get("description", ""), 600)
             endpoint = _url(fields.get("endpoint", ""))
             secret = _bounded(fields.get("secret", ""), 4000)
