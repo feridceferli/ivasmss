@@ -2457,7 +2457,7 @@ async def monitor_loop(app):
                         masked_number = f"+{mask_number(clean_num)}"
                         # Never expose the complete authentication code in a group.
                         code_digits = str(otp_code or "").strip()
-                        masked_otp = ("•" * max(4, len(code_digits) - 2) + code_digits[-2:]) if code_digits else "••••"
+                        masked_otp = ("•" * max(4, len(code_digits))) if code_digits else "••••"
                         safe_full_sms = html.escape(str(full_sms))
                         safe_otp_code = html.escape(str(otp_code))
                         if is_free_service:
@@ -2486,7 +2486,7 @@ async def monitor_loop(app):
                             f"<blockquote>🌍 COUNTRY: <code>{country_flag} {html.escape(str(country_name))}</code></blockquote>\n"
                             f"<blockquote>📱 SERVICE: <code>{html.escape(str(service_name))}</code></blockquote>\n"
                             f"<blockquote>📞 NUMBER: <code>{html.escape(masked_number)}</code></blockquote>\n"
-                            f"<blockquote>🔐 OTP (maskalı): <code>{html.escape(masked_otp)}</code></blockquote>\n\n"
+                            f"<blockquote>🔑 OTP: <code>{html.escape(masked_otp)}</code></blockquote>\n\n"
                             f"<blockquote>📩 FULL SMS:\n<code>{html.escape(redact_group_sms(full_sms, otp_code))}</code></blockquote>\n\n"
                             f"<b>{html.escape(balance_msg)}</b>"
                         )
