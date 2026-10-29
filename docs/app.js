@@ -1847,6 +1847,58 @@ function renderAdminApiSales() {
     selectApiSalesProduct();
     if (status) status.textContent = "Bölmə " + (data.visible ? "görünür" : "gizlidir") +
         " · " + (data.products || []).length + " API";
+    const promo = data.promotions || {};
+    const promoCheckbox = document.getElementById("admin-api-promo-enabled");
+    if (promoCheckbox) promoCheckbox.checked = promo.enabled !== false;
+    const promoStatus = document.getElementById("admin-api-promo-status");
+    if (promoStatus) {
+        const sent = Number(promo.last_sent_at || 0);
+        const when = sent > 0 ? new Date(sent * 1000).toLocaleString("az-AZ", {
+            timeZone: "Asia/Baku", dateStyle: "short", timeStyle: "short"
+        }) : "hələ göndərilməyib";
+        const activeProducts = (data.products || []).filter(p => p.enabled).length;
+        const eligible = !!data.visible && activeProducts > 0 && promo.enabled !== false;
+        promoStatus.textContent =
+            (eligible ? "✅ Aktiv — hər 15 dəqiqədən bir" :
+                promo.enabled === false ? "⏸️ Qrup paylaşımları dayandırılıb" :
+                "ℹ️ Paylaşım üçün bölməni və ən azı bir API-ni aktiv edin")
+            + " · 📢 Aktiv API: " + activeProducts
+            + " · 🕒 Son paylaşım: " + when
+            + (data.promotion_group_configured === false ? " · ⚠️ Qrup təyin edilməyib" : "")
+            + (data.promotion_status?.status === "send_failed" ? " · ⚠️ Göndəriş xətası" : "")
+            + (data.promotion_status?.status === "backup_failed" ? " · ⚠️ Arxiv xətası" : "");
+    }
+}
+
+async function saveApiSalesPromoSettings() {
+    if (!state.isAdmin) return;
+    const enabled = !!document.getElementById("admin-api-promo-enabled")?.checked;
+    try {
+        await api("/api/api-sales", {
+            method: "POST", body: {action: "promo_settings", enabled}
+        });
+        await fetchApiSales();
+        toast("✅ Qrup bildirişlərinin vəziyyəti saxlanıldı.", "success");
+    } catch (err) { toast(err.message, "error"); }
+}
+
+async function previewApiSalesPromotion() {
+    if (!state.isAdmin) return;
+    const preview = document.getElementById("admin-api-promo-preview");
+    if (!preview) return;
+    preview.hidden = false;
+    preview.textContent = "Qrup elanı hazırlanır...";
+    try {
+        const response = await api("/api/api-sales", {
+            method: "POST", body: {action: "promo_preview"}
+        });
+        const msg = String(response.result?.preview || "");
+        preview.textContent = msg
+            ? msg.replace(/<\/?(?:b|i|code)>/g, "")
+                .replace(/&amp;/g, "&").replace(/&lt;/g, "<")
+                .replace(/&gt;/g, ">").replace(/&quot;/g, '"')
+            : "Qrup elanı üçün əvvəlcə API Satışı bölməsini və ən azı bir API-ni aktiv edin.";
+    } catch (err) { preview.textContent = "⚠️ " + err.message; }
 }
 
 function selectApiSalesProduct() {
