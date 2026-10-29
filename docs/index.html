@@ -611,6 +611,7 @@
                     <button class="action-small" onclick="adminJump('admin-users-section')">👥 İstifadəçilər</button>
                     <button class="action-small" onclick="adminJump('admin-wa-referral-section')">🎁 WhatsApp dəvətləri</button>
                     <button class="action-small" onclick="adminJump('admin-api-sales-section')">🛒 API Satışı</button>
+                    <button class="action-small" onclick="adminJump('admin-hourly-promos-section')">📣 Saatlıq bot elanları</button>
                     <button class="action-small" onclick="adminJump('admin-system-section')">⚙️ Sistem</button>
                     <button class="action-small" onclick="adminJump('admin-channels-section')">🔗 Kanallar</button>
                     <button class="action-small" onclick="adminJump('admin-fake-otp-section')">⚡ Fake OTP (test)</button>
@@ -622,6 +623,31 @@
                     <button class="action-small" onclick="adminJump('admin-archive-section')">📦 Arxiv</button>
                 </div>
             </div>
+            <section class="card api-sales-admin" id="admin-hourly-promos-section">
+                <h4>📣 Bot istifadəçilərinə saatlıq nömrə elanları</h4>
+                <p class="notice-mini">Qısa elanlar qeydiyyatlı bot istifadəçilərinin şəxsi çatlarına göndərilir, qrupa yox. Mesajlar növbə ilə dəyişir. Heç bir OTP, API açarı və ya şəxsi nömrə paylaşılmır.</p>
+                <label class="price-free-check" for="admin-hourly-enabled">
+                    <input type="checkbox" id="admin-hourly-enabled">
+                    ✅ Avtomatik saatlıq elanları aktivləşdir
+                </label>
+                <label class="notice-mini" for="admin-hourly-interval">⏱ Interval (dəqiqə, standart 60)</label>
+                <input class="admin-input" id="admin-hourly-interval" type="number"
+                       min="60" max="1440" step="1" value="60" inputmode="numeric">
+                <label class="notice-mini" for="admin-hourly-templates">✏️ Qısa mesajlar — hər sətirdə bir mesaj</label>
+                <textarea id="admin-hourly-templates" class="admin-input" rows="7" maxlength="2400"
+                          spellcheck="false" placeholder="📱 Gəl, nömrələrə bax! /start&#10;🔥 Yaxşı nömrə axtarırsan? /start"></textarea>
+                <p class="notice-mini">1–10 mesaj, hər biri 8–220 simvol. Real nömrə mövcudluğu təsdiqlənmədikcə “yeni nömrələr gəldi” kimi iddialar istifadə etməyin. Hər mesajın altında /promo_off seçimi göstərilir.</p>
+                <p id="admin-hourly-status" class="notice-mini" role="status">Saatlıq elan ayarları yüklənir...</p>
+                <div class="quick-actions">
+                    <button type="button" class="action-small" onclick="saveBotHourlyPromos()">💾 Ayarları yadda saxla</button>
+                    <button type="button" class="action-small" onclick="previewBotHourlyPromos()">👁 Nümunə göstər</button>
+                    <button type="button" class="action-small" onclick="testBotHourlyPromos()">🧪 Yalnız mənə göndər</button>
+                </div>
+                <pre id="admin-hourly-preview" class="notice-mini" hidden
+                     style="white-space:pre-wrap;overflow-wrap:anywhere"></pre>
+                <p class="notice-mini">İstifadəçi /promo_off ilə mesajları dayandıra, /promo_on ilə yenidən aktivləşdirə bilər. Parametrlər şəxsi GitHub arxivində saxlanılır.</p>
+            </section>
+
             <section class="card api-sales-admin" id="admin-api-sales-section">
                 <h4>🛒 API Satışı — Admin idarəetməsi</h4>
                 <p class="notice-mini">Bölmənin görünməsini idarə edin, API əlavə edin, mövcud API məlumatını və qiyməti yeniləyin.</p>
@@ -878,7 +904,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261029-api-group-15m"></script>
+    <script src="app.js?v=20261029-bot-hourly-promos"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
