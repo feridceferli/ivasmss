@@ -7,3 +7,7 @@ number_archive.sqlite3*
 numbers.txt
 numbers-*.tmp
 .venv/
+# Private account/API sales runtime records; never commit these secrets.
+api_sales_private.json
+users.json
+user_profiles.json
