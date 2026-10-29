@@ -5143,18 +5143,23 @@ async def api_sales_callback(query, uid, data, context):
             f"💰 Qiymət: <b>{product['price_cents']/100:.2f} AZN</b>\n"
             "Alışı təsdiqlədikdə balansdan bu məbləğ tutulacaq.",
             parse_mode="HTML", reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("✅ SATIN AL", callback_data="api_buy_" + ident),
+                InlineKeyboardButton("✅ SATIN AL",
+                                     callback_data=f"api_buy_{ident}_{product['price_cents']}"),
                 InlineKeyboardButton("❌ İmtina", callback_data="menu_api_sales"),
             ]]),
         )
         return
     if data.startswith("api_buy_"):
         try:
-            receipt, purchased = api_sales_store.buy(uid, data.removeprefix("api_buy_"))
+            purchase_id, amount = data.removeprefix("api_buy_").rsplit("_", 1)
+            if not amount.isdecimal():
+                raise ApiSalesError("invalid_price")
+            receipt, purchased = api_sales_store.buy(uid, purchase_id, int(amount))
         except ApiSalesError as exc:
             await query.message.reply_text({
                 "insufficient_balance": "❌ Balansınız kifayət etmir.",
                 "unavailable": "❌ API hazırda satışda deyil.",
+                "price_changed": "⚠️ API qiyməti dəyişib. Kataloqdan yenidən təsdiqləyin.",
             }.get(exc.code, "❌ Satınalma mümkün olmadı."))
             return
         await query.message.reply_text(
@@ -6282,7 +6287,7 @@ async def miniapp_api_sales_api(request):
             raise ValueError()
         action = body.get("action")
         if action == "buy":
-            receipt, purchased = api_sales_store.buy(uid, body.get("id"))
+            receipt, purchased = api_sales_store.buy(uid, body.get("id"), body.get("expected_price_cents"))
             return _miniapp_cors(web.json_response({
                 "ok": True, "purchased": purchased, "receipt": receipt,
                 "balance": format_balance(get_user(uid).get("balance", 0)),
@@ -6303,7 +6308,7 @@ async def miniapp_api_sales_api(request):
         return _miniapp_cors(web.json_response({"ok": True, "result": result}))
     except ApiSalesError as exc:
         status = 402 if exc.code == "insufficient_balance" else (
-            409 if exc.code in ("unavailable", "catalog_unavailable") else 400)
+            409 if exc.code in ("unavailable", "catalog_unavailable", "price_changed") else 400)
         return _miniapp_cors(web.json_response({"error": exc.code}, status=status))
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
