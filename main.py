@@ -5128,6 +5128,15 @@ async def api_sales_admin_bot(message):
         "👁 Bölməni gizlət" if data["visible"] else "👁 Bölməni göstər",
         callback_data="api_admin_visibility",
     )]]
+    promotions = api_sales_store.promotion_settings()
+    buttons.append([InlineKeyboardButton(
+        "⏸️ 15 dəq qrup elanını dayandır" if promotions["enabled"]
+        else "▶️ 15 dəq qrup elanını aktiv et",
+        callback_data="api_admin_promo",
+    )])
+    buttons.append([InlineKeyboardButton(
+        "👁 Qrup elanı nümunəsi", callback_data="api_admin_preview",
+    )])
     for product in data["products"]:
         buttons.append([InlineKeyboardButton(
             ("🔴 Gizlət: " if product["enabled"] else "🟢 Göstər: ") + product["name"][:30],
@@ -5165,6 +5174,28 @@ async def api_sales_callback(query, uid, data, context):
         return
     if data == "api_admin_menu" and is_admin(uid):
         await api_sales_admin_bot(query.message)
+        return
+    if data == "api_admin_promo" and is_admin(uid):
+        try:
+            async with _api_sales_persistence_lock:
+                if not user_backup.ready:
+                    raise ApiSalesError("storage_not_ready")
+                current = api_sales_store.promotion_settings()["enabled"]
+                api_sales_store.set_promotions_enabled(not current)
+                await _persist_api_sales_now()
+            await api_sales_admin_bot(query.message)
+        except ApiSalesError:
+            await query.message.reply_text(
+                "⚠️ Qrup paylaşım ayarı şəxsi yedəkdə təsdiqlənmədi.")
+        return
+    if data == "api_admin_preview" and is_admin(uid):
+        preview = build_group_digest(api_sales_store._read(), WEBAPP_URL)
+        if preview:
+            await query.message.reply_text(
+                preview, parse_mode="HTML", disable_web_page_preview=True)
+        else:
+            await query.message.reply_text(
+                "ℹ️ Nümunə üçün əvvəlcə API Satışı bölməsini və ən azı bir API-ni aktiv edin.")
         return
     if data == "api_admin_visibility" and is_admin(uid):
         try:
