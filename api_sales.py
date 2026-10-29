@@ -212,6 +212,39 @@ class ApiSalesStore:
             self._write(data)
         return enabled
 
+    def promotion_settings(self):
+        """Non-secret delivery settings; only public display state."""
+        from api_sales_promotions import safe_promotion_state
+        with self.lock:
+            return safe_promotion_state(self._read())
+
+    def set_promotions_enabled(self, enabled):
+        """Admin switch for scheduled group announcements."""
+        if type(enabled) is not bool:
+            raise ApiSalesError("invalid_field")
+        with self.lock:
+            data = self._read()
+            state = data.get("promotions")
+            if not isinstance(state, dict):
+                state = {}
+            state["enabled"] = enabled
+            data["promotions"] = state
+            self._write(data)
+        return enabled
+
+    def mark_promotion_sent(self, timestamp):
+        """Persist successful send time in the private catalog snapshot."""
+        if type(timestamp) not in (int, float) or timestamp <= 0:
+            raise ApiSalesError("invalid_field")
+        with self.lock:
+            data = self._read()
+            state = data.get("promotions")
+            if not isinstance(state, dict):
+                state = {}
+            state["last_sent_at"] = timestamp
+            data["promotions"] = state
+            self._write(data)
+
     def delete(self, product_id):
         with self.lock:
             data = self._read()
