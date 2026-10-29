@@ -4060,11 +4060,7 @@ async def save_bot_promo_admin_change(**changes):
 
 
 async def bot_hourly_promo_loop(app):
-    """One hourly, opt-out capable information notice to registered private chats.
-
-    Before sending, reserve and back up the next interval to prevent duplicate
-    waves when Render restarts. Fail closed if private backup is unavailable.
-    """
+    """Send an opt-out reminder each hour, preserving the interval on redeploy."""
     from safe_broadcast import send_notice
     await asyncio.sleep(20)
     while True:
@@ -4076,32 +4072,34 @@ async def bot_hourly_promo_loop(app):
             if app.bot_data.get("broadcast_running"):
                 await asyncio.sleep(30)
                 continue
+            dispatch = False
+            content = ""
+            targets = []
             async with _hourly_promo_lock:
                 settings = load_bot_user_promos(BOT_PROMO_FILE)
                 if not settings["enabled"]:
                     _hourly_promo_state["status"] = "disabled"
-                    await asyncio.sleep(30)
-                    continue
-                now = time.time()
-                if settings["next_due_at"] == 0:
-                    # The very first run waits a full hour, not a deployment burst.
-                    settings["next_due_at"] = now + settings["interval_minutes"] * 60
-                    save_bot_user_promos(BOT_PROMO_FILE, settings)
-                    await _backup_bot_promos_now()
-                if not bot_promo_due(settings, now):
-                    await asyncio.sleep(30)
-                    continue
-                content = bot_promo_message(settings)
-                settings = bot_promo_mark(settings, now)
-                save_bot_user_promos(BOT_PROMO_FILE, settings)
-                # Confirm the next due timestamp BEFORE sending to avoid repeats
-                # even when the instance is replaced midway through a broadcast.
-                await _backup_bot_promos_now()
-                users = load_data(USER_DATA_FILE)
-                eligible = bot_promo_recipients(users, load_banned_users())
-                app.bot_data["broadcast_running"] = True
+                else:
+                    now = time.time()
+                    if settings["next_due_at"] == 0:
+                        # First start: wait an hour instead of blasting users.
+                        settings["next_due_at"] = now + settings["interval_minutes"] * 60
+                        save_bot_user_promos(BOT_PROMO_FILE, settings)
+                        await _backup_bot_promos_now()
+                    if bot_promo_due(settings, now):
+                        content = bot_promo_message(settings)
+                        settings = bot_promo_mark(settings, now)
+                        save_bot_user_promos(BOT_PROMO_FILE, settings)
+                        # Before dispatch, persist the new due time off-instance.
+                        await _backup_bot_promos_now()
+                        targets = bot_promo_recipients(load_data(USER_DATA_FILE), load_banned_users())
+                        app.bot_data["broadcast_running"] = True
+                        dispatch = True
+            if not dispatch:
+                await asyncio.sleep(30)
+                continue
             try:
-                result = await send_notice(app.bot, eligible, content)
+                result = await send_notice(app.bot, targets, content)
             finally:
                 app.bot_data.pop("broadcast_running", None)
             async with _hourly_promo_lock:
