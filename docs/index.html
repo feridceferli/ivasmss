@@ -645,7 +645,7 @@
                 <textarea class="admin-input" id="admin-api-sales-secret" maxlength="4000" rows="3" autocomplete="off" placeholder="Yeni API üçün açarı yazın; redaktədə boş saxlasanız əvvəlki qalacaq"></textarea>
                 <p class="notice-mini">API açarı yalnız alıcıya, alış tamamlandıqdan sonra göstərilir. Əvvəlki açar redaktə formasına qaytarılmır.</p>
                 <label class="notice-mini" for="admin-api-sales-price">Qiymət (AZN)</label>
-                <input class="admin-input" id="admin-api-sales-price" type="number" min="0.01" max="10000" step="0.01" inputmode="decimal" placeholder="1.00">
+                <input class="admin-input" id="admin-api-sales-price" type="text" maxlength="16" inputmode="decimal" placeholder="Məsələn: 1.00 və ya 1,00">
                 <div class="quick-actions">
                     <button type="button" class="action-small" onclick="saveApiSalesProduct()">💾 API əlavə et / yadda saxla</button>
                     <button type="button" class="action-small" onclick="toggleApiSalesProduct()">👁 Seçilmiş API-ni göstər/gizlət</button>
@@ -863,7 +863,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261029-api-sales-v1"></script>
+    <script src="app.js?v=20261029-api-sales-storage-fix"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
