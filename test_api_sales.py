@@ -116,6 +116,26 @@ class ApiSalesTests(unittest.TestCase):
         self.assertEqual(results.count(False), 9)
         self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 1.50)
 
+    def test_api_rotation_updates_existing_buyer_without_recharging(self):
+        item = self.item()
+        self.store.toggle_section(True)
+        first, charged = self.store.buy("42", item["id"])
+        self.assertTrue(charged)
+        self.assertEqual(first["secret"], "test-only-secret")
+        self.store.upsert({
+            "id": item["id"], "name": "Rotated API", "description": "New instructions",
+            "endpoint": "https://api.example.test/v2", "secret": "rotated-secret",
+            "price": "9.99",
+        })
+        mine = self.store.list_products("42")["owned"][0]
+        self.assertEqual(mine["secret"], "rotated-secret")
+        self.assertEqual(mine["endpoint"], "https://api.example.test/v2")
+        self.assertEqual(mine["price_cents"], 100)
+        again, charged = self.store.buy("42", item["id"])
+        self.assertFalse(charged)
+        self.assertEqual(again["secret"], "rotated-secret")
+        self.assertEqual(self.store.read_users(self.users)["42"]["balance"], 1.50)
+
     def test_invalid_endpoint_rejected(self):
         with self.assertRaises(ApiSalesError):
             self.store.upsert({
