@@ -18,6 +18,7 @@ from world_news_feed import (
 )
 from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
                             valid_country, valid_range)
+from api_sales import ApiSalesStore, ApiSalesError
 
 range_collector = RangeCollector()
 import io
@@ -106,6 +107,7 @@ USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
 FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 ACTIVE_LEASES_FILE = data_path("active_leases.json")
+API_SALES_FILE = data_path("api_sales_private.json")
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
@@ -124,6 +126,7 @@ user_backup = UserProfileBackup(
         "world_news_settings": data_path("world_news_settings.json"),
         "ai_post_settings": data_path("ai_post_settings.json"),
         "active_leases": ACTIVE_LEASES_FILE,
+        "api_sales": API_SALES_FILE,
     },
 )
 
@@ -1501,6 +1504,8 @@ def main_keyboard(user_id):
             premium_inline_button(labels["admin"], "admin",
                                   callback_data="menu_admin", style="danger")
         ])
+    if api_sales_store._read().get("visible"):
+        rows.append([InlineKeyboardButton("🛒 API SATIŞI", callback_data="menu_api_sales")])
     rows.append([InlineKeyboardButton("📥 NÖMRƏLƏRİM — TXT", callback_data="menu_numbers_txt")])
     return InlineKeyboardMarkup(rows)
 
@@ -1536,6 +1541,7 @@ def admin_main_keyboard():
         [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR"), KeyboardButton("⚡ FAKE OTP")],
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
         [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
+        [KeyboardButton("🛒 API SATIŞI (ADMIN)")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
@@ -1688,6 +1694,9 @@ def load_data(filename=USER_DATA_FILE):
 
 def save_data(data, filename=USER_DATA_FILE):
     _save_persistent_json(data, filename)
+
+
+api_sales_store = ApiSalesStore(API_SALES_FILE, USER_DATA_FILE, load_data, _save_persistent_json)
 
 
 def load_number_prices():
@@ -3992,6 +4001,10 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = normalize_button_input(update.message.text.strip())
 
+    if text == "🛒 API SATIŞI (ADMIN)" and is_admin(uid):
+        await api_sales_admin_bot(update.effective_message)
+        return
+
     # Admin-only ordinary information notices to users who started this bot.
     if text in ("📢 SEND MESSAGE TO ALL USERS", "📢 BÜTÜN İSTİFADƏÇİLƏRƏ MESAJ GÖNDƏR") and is_admin(uid):
         if context.application.bot_data.get("broadcast_running"):
@@ -4971,11 +4984,155 @@ async def legacy_menu_command(update: Update, context: ContextTypes.DEFAULT_TYPE
     )
 
 
+async def api_sales_bot_menu(message, uid):
+    """Show public listings and private account purchases, with no keys in lists."""
+    if message.chat.type != "private":
+        await message.reply_text("🔒 API satınalma bölməsini şəxsi çatda açın.")
+        return
+    data = api_sales_store.list_products(uid, admin=is_admin(uid))
+    if not data["visible"] and not is_admin(uid) and not data["owned"]:
+        await message.reply_text("🛒 API satışı hazırda bağlıdır.")
+        return
+    buttons = []
+    if data["visible"]:
+        for product in data["products"][:50]:
+            if not product["enabled"]:
+                continue
+            buttons.append([InlineKeyboardButton(
+                f"🛒 {product['name'][:35]} · {product['price_cents']/100:.2f} AZN",
+                callback_data="api_confirm_" + product["id"],
+            )])
+    if data["owned"]:
+        buttons.append([InlineKeyboardButton("📦 ALDIĞIM API-LƏR", callback_data="api_owned_list")])
+    if is_admin(uid):
+        buttons.append([InlineKeyboardButton("⚙️ API SATIŞ ADMIN", callback_data="api_admin_menu")])
+    await message.reply_text(
+        "🛒 <b>API SATIŞI</b>\n\n"
+        "API məlumatları yalnız balansla alındıqda şəxsi hesabınızda açılır. "
+        "Alınan API-ni 'Aldığım API-lər' bölməsindən yenidən görə bilərsiniz.",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
+    )
+
+
+async def api_sales_admin_bot(message):
+    data = api_sales_store.list_products(message.chat.id, admin=True)
+    buttons = [[InlineKeyboardButton(
+        "👁 Bölməni gizlət" if data["visible"] else "👁 Bölməni göstər",
+        callback_data="api_admin_visibility",
+    )]]
+    for product in data["products"]:
+        buttons.append([InlineKeyboardButton(
+            ("🔴 Gizlət: " if product["enabled"] else "🟢 Göstər: ") + product["name"][:30],
+            callback_data="api_admin_toggle_" + product["id"],
+        )])
+    if WEBAPP_URL.startswith("https://"):
+        buttons.append([InlineKeyboardButton("✏️ Əlavə et / API və qiyməti dəyiş",
+                                             web_app=WebAppInfo(url=WEBAPP_URL))])
+    await message.reply_text(
+        "⚙️ <b>API SATIŞ İDARƏETMƏSİ</b>\n"
+        "API və qiyməti saytdakı Admin → API satışı bölməsində redaktə edin.\n"
+        f"Vəziyyət: {'✅ Görünür' if data['visible'] else '🔒 Gizlidir'}",
+        parse_mode="HTML", reply_markup=InlineKeyboardMarkup(buttons),
+    )
+
+
+async def api_sales_command(update, context):
+    uid = update.effective_user.id
+    if not is_admin(uid) and is_user_banned(uid):
+        return
+    await api_sales_bot_menu(update.effective_message, uid)
+
+
+async def api_sales_callback(query, uid, data):
+    """Handle buy confirmation and admin toggles only in a private conversation."""
+    if query.message.chat.type != "private":
+        await query.message.reply_text("🔒 API satışı yalnız şəxsi çatda mümkündür.")
+        return
+    if data == "menu_api_sales":
+        await api_sales_bot_menu(query.message, uid)
+        return
+    if data == "api_admin_menu" and is_admin(uid):
+        await api_sales_admin_bot(query.message)
+        return
+    if data == "api_admin_visibility" and is_admin(uid):
+        current = api_sales_store._read().get("visible", False)
+        api_sales_store.toggle_section(not current)
+        await api_sales_admin_bot(query.message)
+        return
+    if data.startswith("api_admin_toggle_") and is_admin(uid):
+        ident = data.removeprefix("api_admin_toggle_")
+        item = next((p for p in api_sales_store.list_products(uid, admin=True)["products"]
+                     if p["id"] == ident), None)
+        if item:
+            api_sales_store.toggle_product(ident, not item["enabled"])
+        await api_sales_admin_bot(query.message)
+        return
+    if data == "api_owned_list":
+        owned = api_sales_store.list_products(uid)["owned"]
+        buttons = [[InlineKeyboardButton(p["name"][:45], callback_data="api_owned_" + p["id"])]
+                   for p in owned if isinstance(p, dict) and "id" in p]
+        await query.message.reply_text("📦 Aldığım API-lər:", reply_markup=InlineKeyboardMarkup(buttons)
+                                       if buttons else None)
+        return
+    if data.startswith("api_owned_"):
+        ident = data.removeprefix("api_owned_")
+        owned = api_sales_store.list_products(uid)["owned"]
+        receipt = next((p for p in owned if p.get("id") == ident), None)
+        if receipt:
+            await query.message.reply_text(
+                "✅ <b>" + html.escape(receipt["name"]) + "</b>\n"
+                "🌐 Endpoint: <code>" + html.escape(receipt.get("endpoint") or "—") + "</code>\n"
+                "🔑 API məlumatı: <code>" + html.escape(receipt["secret"]) + "</code>\n"
+                "📖 " + html.escape(receipt.get("description") or "—"),
+                parse_mode="HTML",
+            )
+        return
+    if data.startswith("api_confirm_"):
+        ident = data.removeprefix("api_confirm_")
+        catalog = api_sales_store.list_products(uid)
+        product = next((p for p in catalog["products"] if p["id"] == ident), None)
+        if not catalog["visible"] or not product:
+            await query.message.reply_text("❌ API satışda deyil.")
+            return
+        await query.message.reply_text(
+            f"🛒 <b>{html.escape(product['name'])}</b>\n"
+            f"💰 Qiymət: <b>{product['price_cents']/100:.2f} AZN</b>\n"
+            "Alışı təsdiqlədikdə balansdan bu məbləğ tutulacaq.",
+            parse_mode="HTML", reply_markup=InlineKeyboardMarkup([[
+                InlineKeyboardButton("✅ SATIN AL", callback_data="api_buy_" + ident),
+                InlineKeyboardButton("❌ İmtina", callback_data="menu_api_sales"),
+            ]]),
+        )
+        return
+    if data.startswith("api_buy_"):
+        try:
+            receipt, purchased = api_sales_store.buy(uid, data.removeprefix("api_buy_"))
+        except ApiSalesError as exc:
+            await query.message.reply_text({
+                "insufficient_balance": "❌ Balansınız kifayət etmir.",
+                "unavailable": "❌ API hazırda satışda deyil.",
+            }.get(exc.code, "❌ Satınalma mümkün olmadı."))
+            return
+        await query.message.reply_text(
+            ("✅ <b>API UĞURLA ALINDI!</b>\n" if purchased else "📦 <b>ALDIĞINIZ API</b>\n")
+            + "📦 " + html.escape(receipt["name"]) + "\n"
+            + "🌐 Endpoint: <code>" + html.escape(receipt.get("endpoint") or "—") + "</code>\n"
+            + "🔑 API məlumatı: <code>" + html.escape(receipt["secret"]) + "</code>\n"
+            + f"💰 Qiymət: {receipt['price_cents']/100:.2f} AZN\n"
+            + "📖 " + html.escape(receipt.get("description") or "—"),
+            parse_mode="HTML",
+        )
+
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
     uid = query.from_user.id
     data = query.data
     await query.answer()
+
+    if data == "menu_api_sales" or data.startswith("api_"):
+        if is_admin(uid) or not is_user_banned(uid):
+            await api_sales_callback(query, uid, data)
+        return
 
     if data in ("lang_az", "lang_en", "lang_tr"):
         lang = data.split("_", 1)[1]
@@ -6058,6 +6215,57 @@ async def miniapp_test_sms(request):
     return _miniapp_cors(web.json_response({"messages":[{"id":"demo-1","sender":"Sandbox","text":"Bu test SMS-dir. Kod: 583921","code":"583921","is_test":True,"label":"Test məlumatı"}]}))
 
 
+async def miniapp_api_sales_api(request):
+    """Same catalog and account purchase history for website and Telegram Mini App."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, reason = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": reason}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid) and not is_admin(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    admin = is_admin(uid)
+    if request.method == "GET":
+        data = api_sales_store.list_products(uid, admin=admin)
+        data["is_admin"] = admin
+        return _miniapp_cors(web.json_response(data, headers={"Cache-Control": "no-store"}))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+        action = body.get("action")
+        if action == "buy":
+            receipt, purchased = api_sales_store.buy(uid, body.get("id"))
+            return _miniapp_cors(web.json_response({
+                "ok": True, "purchased": purchased, "receipt": receipt,
+                "balance": format_balance(get_user(uid).get("balance", 0)),
+            }, headers={"Cache-Control": "no-store"}))
+        if not admin:
+            return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+        if action == "upsert":
+            result = api_sales_store.upsert(body)
+        elif action == "visibility":
+            result = {"visible": api_sales_store.toggle_section(body.get("visible"))}
+        elif action == "product_visibility":
+            result = {"enabled": api_sales_store.toggle_product(body.get("id"), body.get("enabled"))}
+        elif action == "delete":
+            api_sales_store.delete(body.get("id"))
+            result = {"deleted": True}
+        else:
+            raise ApiSalesError("bad_action")
+        return _miniapp_cors(web.json_response({"ok": True, "result": result}))
+    except ApiSalesError as exc:
+        status = 402 if exc.code == "insufficient_balance" else (
+            409 if exc.code in ("unavailable", "catalog_unavailable") else 400)
+        return _miniapp_cors(web.json_response({"error": exc.code}, status=status))
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+
+
 async def miniapp_admin_api(request):
     if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
     tg_user, err = _miniapp_auth(request)
@@ -6386,6 +6594,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("get1number", get1number_command))
     app.add_handler(CommandHandler("searchotp", searchotp_command))
     app.add_handler(CommandHandler("balance", balance_command))
+    app.add_handler(CommandHandler("apis", api_sales_command))
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(website_login_callback, pattern=r"^website:[A-Za-z0-9_-]{32}$"))
@@ -6463,6 +6672,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
+    server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
     server.router.add_route("*", "/api/prices", miniapp_prices_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
