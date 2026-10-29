@@ -35,6 +35,38 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 - [Yoxlama](#yoxlama)
 - [Problemlərin həlli](#problemlərin-həlli)
 
+## 🛒 API Satışı (bot + sayt + Mini App)
+
+Admin panelində **🛒 API Satışı** bölməsi var. Admin API adı, təsvir,
+HTTPS endpoint, API açarı və AZN qiymətini daxil edir. Mövcud məhsulun
+qiymətini və giriş məlumatını dəyişmək, məhsulu gizlətmək, silmək və
+bütün satış bölməsini istifadəçilər üçün açıb-bağlamaq mümkündür.
+Yeni satış bölməsi **ilkin olaraq gizlidir**: admin API əlavə etdikdən
+sonra görünməni aktivləşdirir.
+
+- Sayt/Mini App: **Admin → API Satışı** idarəetməsi, **🛒 API Satışı**
+  kataloqu və **📦 Aldığım API-lər** şəxsi bölməsi.
+- Bot: `/apis` və **🛒 API SATIŞI** menyu düyməsi. Adminin bot
+  panelində **🛒 API SATIŞI (ADMIN)** düyməsi ilə bölmənin görünməsini
+  və məhsulların aktivliyini dəyişmək olar. Yeni məhsul və qiymət
+  redaktəsi Admin web panelində aparılır.
+- Alışda məbləğ serverdə balansdan yoxlanıb yalnız **bir dəfə**
+  tutulur. Təkrar alış eyni API-ni açır, ikinci dəfə pul çıxmır.
+- API açarı və endpoint ictimai kataloqda yoxdur. Açar ancaq
+  alıcıya şəxsi sessiyada/şəxsi bot çatında göstərilir.
+- Əlavə edilən API açarları **müştərilər üçün çatdırılacaq
+  məlumatdır**; bu sistem xarici API provayderində avtomatik
+  yeni açar yaratmır. Məhsul üçün eyni açarı bir neçə alıcıya
+  təqdim edirsinizsə, provayder qaydalarının buna icazə verdiyini
+  yoxlayın.
+- API kataloqu `DB_FOLDER/api_sales_private.json` və alınmış
+  hüquqlar `users.json` faylındadır. Private backup qurulubsa
+  arxivlənir; **heç vaxt ictimai GitHub depoya yerləşdirməyin**.
+  Render-in müvəqqəti fayl sistemi və uğursuz backup halında
+  məlumat itkisi mümkündür. Yaxşısı dayanıqlı DB və ya diskdir.
+- REST: `GET /api/api-sales` (kataloq + öz alışları),
+  `POST /api/api-sales` (balansla alış, yalnız admində düzəlişlər).
+
 ## İmkanlar
 
 | Bölmə | İmkan |
