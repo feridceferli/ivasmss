@@ -11,3 +11,5 @@ numbers-*.tmp
 api_sales_private.json
 users.json
 user_profiles.json
+# Private scheduled announcement settings and timestamps
+bot_user_promos.json
