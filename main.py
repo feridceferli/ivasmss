@@ -4005,6 +4005,35 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await api_sales_admin_bot(update.effective_message)
         return
 
+    if context.user_data.get("api_sale_price_id") and is_admin(uid):
+        product_id = context.user_data["api_sale_price_id"]
+        if text == "❌ CANCEL":
+            context.user_data.pop("api_sale_price_id", None)
+            await update.effective_message.reply_text("❌ Qiymət dəyişikliyi ləğv edildi.",
+                                                      reply_markup=admin_main_keyboard())
+            return
+        existing = next((item for item in api_sales_store.list_products(uid, admin=True)["products"]
+                         if item["id"] == product_id), None)
+        if not existing:
+            context.user_data.pop("api_sale_price_id", None)
+            await update.effective_message.reply_text("❌ Bu API artıq mövcud deyil.")
+            return
+        try:
+            api_sales_store.upsert({
+                "id": product_id, "name": existing["name"],
+                "description": existing["description"], "endpoint": existing.get("endpoint", ""),
+                "secret": "", "price": text,
+            })
+        except ApiSalesError:
+            await update.effective_message.reply_text(
+                "❌ Qiyməti düzgün yazın (məsələn, 2.50). 0.01–10000 AZN.",
+                reply_markup=cancel_keyboard())
+            return
+        context.user_data.pop("api_sale_price_id", None)
+        await update.effective_message.reply_text("✅ API qiyməti yeniləndi.",
+                                                  reply_markup=admin_main_keyboard())
+        return
+
     # Admin-only ordinary information notices to users who started this bot.
     if text in ("📢 SEND MESSAGE TO ALL USERS", "📢 BÜTÜN İSTİFADƏÇİLƏRƏ MESAJ GÖNDƏR") and is_admin(uid):
         if context.application.bot_data.get("broadcast_running"):
@@ -5025,6 +5054,10 @@ async def api_sales_admin_bot(message):
             ("🔴 Gizlət: " if product["enabled"] else "🟢 Göstər: ") + product["name"][:30],
             callback_data="api_admin_toggle_" + product["id"],
         )])
+        buttons.append([InlineKeyboardButton(
+            f"💰 {product['price_cents']/100:.2f} AZN · " + product["name"][:26],
+            callback_data="api_admin_price_" + product["id"],
+        )])
     if WEBAPP_URL.startswith("https://"):
         buttons.append([InlineKeyboardButton("✏️ Əlavə et / API və qiyməti dəyiş",
                                              web_app=WebAppInfo(url=WEBAPP_URL))])
@@ -5043,7 +5076,7 @@ async def api_sales_command(update, context):
     await api_sales_bot_menu(update.effective_message, uid)
 
 
-async def api_sales_callback(query, uid, data):
+async def api_sales_callback(query, uid, data, context):
     """Handle buy confirmation and admin toggles only in a private conversation."""
     if query.message.chat.type != "private":
         await query.message.reply_text("🔒 API satışı yalnız şəxsi çatda mümkündür.")
@@ -5066,6 +5099,18 @@ async def api_sales_callback(query, uid, data):
         if item:
             api_sales_store.toggle_product(ident, not item["enabled"])
         await api_sales_admin_bot(query.message)
+        return
+    if data.startswith("api_admin_price_") and is_admin(uid):
+        ident = data.removeprefix("api_admin_price_")
+        selected = next((p for p in api_sales_store.list_products(uid, admin=True)["products"]
+                         if p["id"] == ident), None)
+        if selected:
+            context.user_data["api_sale_price_id"] = ident
+            await query.message.reply_text(
+                f"💰 {html.escape(selected['name'])} üçün yeni AZN qiymətini yazın.\n"
+                "Məsələn: 2.50",
+                parse_mode="HTML", reply_markup=cancel_keyboard(),
+            )
         return
     if data == "api_owned_list":
         owned = api_sales_store.list_products(uid)["owned"]
@@ -5131,7 +5176,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "menu_api_sales" or data.startswith("api_"):
         if is_admin(uid) or not is_user_banned(uid):
-            await api_sales_callback(query, uid, data)
+            await api_sales_callback(query, uid, data, context)
         return
 
     if data in ("lang_az", "lang_en", "lang_tr"):
