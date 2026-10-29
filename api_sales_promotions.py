@@ -56,7 +56,7 @@ def _safe_description(value, limit=220):
     # Product descriptions are public, but defensively redact accidental
     # credentials and any URLs included by the administrator.
     s = re.sub(r"(?i)(?:https?://|www\.)[^\s]+", "[keçid gizlidir]", s)
-    s = re.sub(r"(?i)\b(api[\\s_-]*key|token|secret|password|authorization)\s*[:=]\s*[^\s,;]+",
+    s = re.sub(r"(?i)\b(api[\s_-]*key|token|secret|password|authorization)\s*[:=]\s*[^\s,;]+",
                r"\1: [gizlidir]", s)
     s = re.sub(r"\s+", " ", s)
     return html.escape(s[:limit])
