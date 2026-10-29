@@ -244,6 +244,37 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(recovered["balance"], 4.75)
         self.assertEqual(recovered["api_purchases"]["a1b2c3d4e5f6"], receipt)
 
+    async def test_hourly_promos_and_user_opt_out_survive_render_redeploy(self):
+        from bot_user_promos import save_settings, normalize_settings
+        users = self.folder / "users.json"
+        stats = self.folder / "stats.json"
+        promotions = self.folder / "bot_user_promos.json"
+        prefs = normalize_settings({
+            "enabled": True, "interval_minutes": 60,
+            "templates": ["📱 Bir saatlıq nömrə xatırlatması. /start"],
+            "next_due_at": 1_800_000_000,
+            "last_sent_at": 1_799_996_400,
+            "next_index": 0,
+        })
+        save_settings(promotions, prefs)
+        users.write_text(json.dumps({
+            "123": {"balance": 4.25, "promo_opt_out": True},
+            "456": {"balance": 0, "promo_opt_out": False},
+        }), encoding="utf-8")
+        first = UserProfileBackup(users, stats, extra_files={"bot_user_promos": promotions})
+        await first.restore(self.gh)
+        await first.sync_once(self.gh)
+        saved = json.loads(self.gh.stored)
+        self.assertEqual(saved["settings"]["bot_user_promos"], prefs)
+        promotions.unlink()
+        users.unlink()
+        later = UserProfileBackup(users, stats, extra_files={"bot_user_promos": promotions})
+        await later.restore(self.gh)
+        self.assertEqual(json.loads(promotions.read_text(encoding="utf-8")), prefs)
+        recovered = json.loads(users.read_text(encoding="utf-8"))
+        self.assertTrue(recovered["123"]["promo_opt_out"])
+        self.assertFalse(recovered["456"]["promo_opt_out"])
+
     async def test_backup_rejects_unknown_state_and_never_exports_sms(self):
         path = self.folder / "private.json"
         path.write_text(json.dumps({"allowed": True}), encoding="utf-8")
