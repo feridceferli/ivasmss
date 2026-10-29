@@ -67,6 +67,29 @@ sonra görünməni aktivləşdirir.
 - REST: `GET /api/api-sales` (kataloq + öz alışları),
   `POST /api/api-sales` (balansla alış, yalnız admində düzəlişlər).
 
+## 📢 API Satışı üçün avtomatik Telegram qrup bildirişləri
+
+- **15 dəqiqə** (900 saniyə) aralıqla mövcud, aktiv API məhsullarından
+  ətraflı Azərbaycan dilində elan hazırlanır və qrupa göndərilir.
+- Qrup: Render Environment-də `API_SALES_GROUP_ID` təyin edilibsə həmin
+  qrup; boşdursa mövcud OTP qrupu (`OTP_GROUP_ID`).
+- Elan yalnız **API Satışı bölməsi görünürsə**, ən azı bir aktiv və
+  qiyməti təyin edilmiş API varsa və **qrupla paylaşım aktivdirsə**
+  göndərilir. Bağlı və ya gizli məhsullar reklam edilmir.
+- Elan adı, açıq təsvir, AZN qiyməti, alış addımları, Mini App saytı və
+  məxfilik xəbərdarlığını əhatə edir. **API açarları, endpoint-lər, alıcı
+  məlumatları və SMS/OTP-lər qrupa ötürülmür.**
+- Saytın Admin → API Satışı → Qrup bildirişləri bölməsindən reklamları
+  açıb-bağlamaq, son paylaşım vaxtını izləmək, nümunəyə baxmaq olar.
+  Botun `🛒 API SATIŞI (ADMIN)` düyməsindən də eyni ayarı dəyişmək olur.
+- Son uğurlu göndəriş vaxtı şəxsi API kataloqunda saxlanır və özəl
+  GitHub arxivinə sinxronizasiya olunur. Render yeniləndikdə əvvəlki
+  15 dəqiqəlik interval nəzərə alınır; bunun üçün şəxsi arxiv işləməlidir.
+- Qrupda botun mesaj göndərmək icazəsi olmalıdır. Göndəriş xətaları
+  `[api-sales-promo]` prefiksi ilə Render loqlarına yazılır.
+- `POST /api/api-sales` admin `promo_settings` və `promo_preview`
+  əməliyyatlarını dəstəkləyir; nümunə əməliyyatı qrupa paylaşmır.
+
 ## İmkanlar
 
 | Bölmə | İmkan |
