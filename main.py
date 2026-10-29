@@ -5125,12 +5125,11 @@ async def api_sales_callback(query, uid, data, context):
         receipt = next((p for p in owned if p.get("id") == ident), None)
         if receipt:
             await query.message.reply_text(
-                "✅ <b>" + html.escape(receipt["name"]) + "</b>\n"
-                "🌐 Endpoint: <code>" + html.escape(receipt.get("endpoint") or "—") + "</code>\n"
-                "🔑 API məlumatı: <code>" + html.escape(receipt["secret"]) + "</code>\n"
-                "📖 " + html.escape(receipt.get("description") or "—"),
-                parse_mode="HTML",
+                "✅ " + receipt["name"] + "\n"
+                "🌐 Endpoint: " + (receipt.get("endpoint") or "—") + "\n"
+                "📖 " + (receipt.get("description") or "—"),
             )
+            await query.message.reply_text("🔑 API məlumatı:\n" + receipt["secret"])
         return
     if data.startswith("api_confirm_"):
         ident = data.removeprefix("api_confirm_")
@@ -5159,14 +5158,13 @@ async def api_sales_callback(query, uid, data, context):
             }.get(exc.code, "❌ Satınalma mümkün olmadı."))
             return
         await query.message.reply_text(
-            ("✅ <b>API UĞURLA ALINDI!</b>\n" if purchased else "📦 <b>ALDIĞINIZ API</b>\n")
-            + "📦 " + html.escape(receipt["name"]) + "\n"
-            + "🌐 Endpoint: <code>" + html.escape(receipt.get("endpoint") or "—") + "</code>\n"
-            + "🔑 API məlumatı: <code>" + html.escape(receipt["secret"]) + "</code>\n"
+            ("✅ API UĞURLA ALINDI!\n" if purchased else "📦 ALDIĞINIZ API\n")
+            + "📦 " + receipt["name"] + "\n"
+            + "🌐 Endpoint: " + (receipt.get("endpoint") or "—") + "\n"
             + f"💰 Qiymət: {receipt['price_cents']/100:.2f} AZN\n"
-            + "📖 " + html.escape(receipt.get("description") or "—"),
-            parse_mode="HTML",
+            + "📖 " + (receipt.get("description") or "—"),
         )
+        await query.message.reply_text("🔑 API məlumatı:\n" + receipt["secret"])
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     query = update.callback_query
