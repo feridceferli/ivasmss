@@ -8,6 +8,7 @@ import json
 import re
 import threading
 import uuid
+from datetime import datetime, timezone
 from decimal import Decimal, InvalidOperation
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -73,7 +74,7 @@ class ApiSalesStore:
     def _public(item):
         return {
             "id": item["id"], "name": item["name"],
-            "description": item["description"], "endpoint": item["endpoint"],
+            "description": item["description"],
             "price_cents": item["price_cents"], "enabled": item["enabled"],
         }
 
@@ -91,6 +92,7 @@ class ApiSalesStore:
                     row = self._public(item)
                     if admin:
                         row["has_secret"] = bool(item.get("secret"))
+                        row["endpoint"] = item["endpoint"]
                     products.append(row)
             owned = []
             for purchase in mine.values():
@@ -126,8 +128,7 @@ class ApiSalesStore:
                 "id": product_id, "name": item["name"],
                 "description": item["description"], "endpoint": item["endpoint"],
                 "secret": item["secret"], "price_cents": cost,
-                "purchased_at": __import__("datetime").datetime.now(
-                    __import__("datetime").timezone.utc).isoformat(),
+                "purchased_at": datetime.now(timezone.utc).isoformat(),
             }
             user["balance"] = (balance - cost) / 100
             purchases[product_id] = purchase
