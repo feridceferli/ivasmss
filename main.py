@@ -6791,6 +6791,87 @@ _ai_preview_times = {}
 _world_news_preview_times = {}
 
 
+_hourly_promo_test_times = {}
+
+
+async def miniapp_bot_promos_api(request):
+    """Web/Mini App administrator controls for hourly bot-only DM reminders."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, reason = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": reason}, status=401))
+    uid = int(tg_user["id"])
+    if not is_admin(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+
+    def current_state():
+        config = load_bot_user_promos(BOT_PROMO_FILE)
+        registered = load_data(USER_DATA_FILE)
+        return {
+            "enabled": config["enabled"],
+            "interval_minutes": config["interval_minutes"],
+            "templates": config["templates"],
+            "next_due_at": config["next_due_at"],
+            "last_sent_at": config["last_sent_at"],
+            "last_result": config["last_result"],
+            "recipients": len(bot_promo_recipients(registered, load_banned_users())),
+            "storage_ready": bool(user_backup.ready),
+            "status": dict(_hourly_promo_state),
+        }
+
+    if request.method == "GET":
+        try:
+            return _miniapp_cors(web.json_response(current_state(),
+                                                   headers={"Cache-Control": "no-store"}))
+        except PromoConfigError:
+            return _miniapp_cors(web.json_response(
+                {"error": "invalid_promo_storage"}, status=503))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
+    action = body.get("action")
+    try:
+        if action == "settings":
+            config = await save_bot_promo_admin_change(
+                enabled=body.get("enabled"), interval_minutes=body.get("interval_minutes"),
+                templates=body.get("templates"))
+            return _miniapp_cors(web.json_response(
+                {"ok": True, "interval_minutes": config["interval_minutes"],
+                 **current_state()}))
+        if action == "preview":
+            text = bot_promo_message(load_bot_user_promos(BOT_PROMO_FILE))
+            return _miniapp_cors(web.json_response({"ok": True, "preview": text}))
+        if action == "test":
+            now = time.monotonic()
+            if now - _hourly_promo_test_times.get(uid, -1e9) < 30:
+                return _miniapp_cors(web.json_response(
+                    {"error": "rate_limited", "message": "Sınaq üçün 30 saniyə fasilə verin."},
+                    status=429))
+            _hourly_promo_test_times[uid] = now
+            text = "🧪 SINAQ — yalnız adminə\n\n" + bot_promo_message(
+                load_bot_user_promos(BOT_PROMO_FILE))
+            try:
+                await request.app["telegram_bot"].send_message(chat_id=uid, text=text)
+            except TelegramError:
+                return _miniapp_cors(web.json_response({
+                    "error": "test_delivery_failed",
+                    "message": "Sınaq çatdırılmadı. Botu şəxsi çatda /start ilə açın.",
+                }, status=502))
+            return _miniapp_cors(web.json_response({"ok": True, "sent_to_admin": True}))
+        return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
+    except PromoConfigError as exc:
+        return _miniapp_cors(web.json_response({
+            "error": "invalid_promo_settings", "message": str(exc)
+        }, status=400 if "arxiv" not in str(exc) else 503))
+
+
 async def miniapp_admin_tools_api(request):
     """Authenticated, admin-only parity for safe bot settings and diagnostics."""
     if request.method == "OPTIONS":
@@ -7112,6 +7193,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
+    server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
     server.router.add_route("*", "/api/prices", miniapp_prices_api)
