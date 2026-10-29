@@ -652,6 +652,21 @@
                     <button type="button" class="action-small" onclick="deleteApiSalesProduct()">🗑 Seçilmiş API-ni sil</button>
                 </div>
                 <p class="notice-mini">Alıcılar artıq aldıqları API məlumatını məhsul silindikdən sonra da öz hesablarında görə bilirlər.</p>
+                <div class="card" id="admin-api-promo-section" style="margin-top:14px">
+                    <h4>📢 API Satışı — qrup bildirişləri</h4>
+                    <p class="notice-mini">API satışı aktiv olduqda qrupda hər 15 dəqiqədən bir API-lərin adları, açıqlamaları, qiymətləri və alış qaydası paylaşılır. API açarları və şəxsi məlumatlar göndərilmir.</p>
+                    <label class="price-free-check" for="admin-api-promo-enabled">
+                        <input id="admin-api-promo-enabled" type="checkbox">
+                        ✅ Hər 15 dəqiqədə avtomatik qrup paylaşımını aktivləşdir
+                    </label>
+                    <p id="admin-api-promo-status" class="notice-mini" role="status">Qrup bildirişinin vəziyyəti yoxlanır...</p>
+                    <div class="quick-actions">
+                        <button type="button" class="action-small" onclick="saveApiSalesPromoSettings()">💾 Paylaşımı aç / bağla</button>
+                        <button type="button" class="action-small" onclick="previewApiSalesPromotion()">👁️ Qrup mesajına bax</button>
+                    </div>
+                    <pre id="admin-api-promo-preview" class="notice-mini" style="white-space:pre-wrap;overflow-wrap:anywhere" hidden></pre>
+                    <p class="notice-mini">Qrup üçün standart ünvan mövcud OTP qrupudur. Alternativ qrup üçün Render Environment-də <code>API_SALES_GROUP_ID</code> təyin etmək olar.</p>
+                </div>
             </section>
 
             <div class="card" id="admin-users-section">
@@ -863,7 +878,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261029-api-sales-storage-fix"></script>
+    <script src="app.js?v=20261029-api-group-15m"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
