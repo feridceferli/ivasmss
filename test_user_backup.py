@@ -209,6 +209,41 @@ class BackupTests(unittest.IsolatedAsyncioTestCase):
             self.assertEqual(json.loads(paths[key].read_text(encoding="utf-8")), value)
         self.assertEqual(json.loads(users.read_text())["123"]["referred_by"], "999")
 
+    async def test_api_sales_and_buyer_access_restore_after_render_redeploy(self):
+        users = self.folder / "users.json"
+        stats = self.folder / "stats.json"
+        catalog = self.folder / "api_sales_private.json"
+        sale = {
+            "visible": True,
+            "items": [{
+                "id": "a1b2c3d4e5f6", "name": "Test API", "description": "Demo",
+                "endpoint": "https://api.example.test/v1",
+                "secret": "private-test-only-key", "price_cents": 125,
+                "enabled": True,
+            }],
+        }
+        receipt = {
+            "id": "a1b2c3d4e5f6", "name": "Test API",
+            "secret": "private-test-only-key", "price_cents": 125,
+        }
+        catalog.write_text(json.dumps(sale), encoding="utf-8")
+        users.write_text(json.dumps({"123": {
+            "user_id": "123", "balance": 4.75,
+            "api_purchases": {"a1b2c3d4e5f6": receipt},
+        }}), encoding="utf-8")
+        first = UserProfileBackup(users, stats, extra_files={"api_sales": catalog})
+        await first.restore(self.gh)
+        await first.sync_once(self.gh)
+        self.assertIn("api_sales", json.loads(self.gh.stored)["settings"])
+        catalog.unlink()
+        users.unlink()
+        next_instance = UserProfileBackup(users, stats, extra_files={"api_sales": catalog})
+        await next_instance.restore(self.gh)
+        self.assertEqual(json.loads(catalog.read_text(encoding="utf-8")), sale)
+        recovered = json.loads(users.read_text(encoding="utf-8"))["123"]
+        self.assertEqual(recovered["balance"], 4.75)
+        self.assertEqual(recovered["api_purchases"]["a1b2c3d4e5f6"], receipt)
+
     async def test_backup_rejects_unknown_state_and_never_exports_sms(self):
         path = self.folder / "private.json"
         path.write_text(json.dumps({"allowed": True}), encoding="utf-8")
