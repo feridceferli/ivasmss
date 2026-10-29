@@ -89,7 +89,7 @@ async function api(path, options = {}) {
             state.authFailed = true;
             window.websiteAuth?.requireLogin();
         }
-        throw new Error(data.message || ({
+        const failure = new Error(data.message || ({
             unauthorized: "Mini App-i Telegram botunun içindən açın.",
             banned: "Hesab məhdudlaşdırılıb.",
             admin_approval_required: "Azərbaycan nömrələri üçün admin icazəsi lazımdır.",
@@ -99,8 +99,23 @@ async function api(path, options = {}) {
             country_mismatch: "Ölkə və range uyğun gəlmir.",
             price_changed: "API qiyməti dəyişib. Kataloqdan yenidən təsdiqləyin.",
             insufficient_balance: "Balansınız kifayət etmir.",
-            unavailable: "API hazırda satışda deyil."
+            unavailable: "API hazırda satışda deyil.",
+            invalid_price: "Qiymət 0.01–10000 AZN arasında olmalıdır. Məsələn: 2.50.",
+            missing_secret: "API açarını və ya giriş məlumatını daxil edin.",
+            invalid_field: "API adını və digər sahələri düzgün doldurun.",
+            invalid_endpoint: "Endpoint HTTPS ilə başlamalıdır. Məsələn: https://api.example.com/v1",
+            duplicate_name: "Bu adda API artıq mövcuddur. Redaktə üçün siyahıdan seçin.",
+            catalog_limit: "Ən çox 100 API əlavə etmək mümkündür.",
+            invalid_product: "Seçilmiş API tapılmadı. Siyahını yeniləyin.",
+            storage_not_ready: "Şəxsi GitHub yedəyi hazır deyil. Saxlama dayandırılıb ki, məlumat itməsin.",
+            backup_failed: "API serverdə saxlanıldı, ancaq şəxsi arxivə yazılmadı. Yedək bağlantısını yoxlayın.",
+            storage_error: "Saxlama sistemində xəta var. Adminə məlumat verin.",
+            catalog_unavailable: "API kataloqu oxunmur. Saxlama faylı yoxlanmalıdır."
         }[data.error] || "Server xətası: " + res.status));
+        failure.code = data.error;
+        failure.savedLocally = !!data.saved_locally;
+        failure.savedResult = data.result;
+        throw failure;
     }
     return data;
 }
@@ -1715,6 +1730,13 @@ async function fetchApiSales() {
         if (tabButton) tabButton.hidden = !accessible;
         if (tab) tab.hidden = !accessible;
         const status = document.getElementById("api-sales-status");
+        if (state.isAdmin) {
+            const adminStatus = document.getElementById("admin-api-sales-status");
+            if (adminStatus && !data.storage_ready) {
+                adminStatus.textContent = "⚠️ Şəxsi GitHub arxivi hazır deyil. "
+                    + "Render yenilənməsində API məlumatları itə bilər.";
+            }
+        }
         if (status) status.textContent = data.visible
             ? "✅ API alışları aktivdir."
             : "🔒 Yeni API alışları bağlıdır. Əvvəlki alışlarınızı yenə görə bilərsiniz.";
@@ -1795,7 +1817,10 @@ async function buyApiSalesProduct(id) {
             apiSalesAmount(product.price_cents) + " qiymətinə almaq istəyirsiniz?")) return;
     try {
         const result = await api("/api/api-sales", {method:"POST", body:{action:"buy", id, expected_price_cents:product.price_cents}});
-        toast(result.purchased ? "✅ API alındı!" : "✅ Bu API əvvəl alınmışdı.", "success");
+        toast(result.persisted === false
+            ? "⚠️ API alındı, lakin şəxsi yedəkləmə baş tutmadı."
+            : (result.purchased ? "✅ API alındı!" : "✅ Bu API əvvəl alınmışdı."),
+            result.persisted === false ? "error" : "success");
         await Promise.all([fetchDashboard(), fetchApiSales()]);
         switchTab("api-sales");
     } catch (err) {
@@ -1863,7 +1888,14 @@ async function saveApiSalesProduct() {
         document.getElementById("admin-api-sales-select").value = res.result.id;
         selectApiSalesProduct();
         toast("✅ API və qiyməti saxlanıldı.", "success");
-    } catch (err) { toast(err.message, "error"); }
+    } catch (err) {
+        if (err.savedLocally && err.savedResult?.id) {
+            // Retry the same product instead of creating duplicates.
+            await fetchApiSales();
+            document.getElementById("admin-api-sales-select").value = err.savedResult.id;
+        }
+        toast(err.message, "error");
+    }
 }
 
 async function toggleApiSalesProduct() {
