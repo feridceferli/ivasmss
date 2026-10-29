@@ -93,9 +93,16 @@ class ApiSalesTests(unittest.TestCase):
         self.assertEqual(item["id"], changed["id"])
         self.store.toggle_section(True)
         self.assertEqual(self.store.list_products("42")["products"][0]["price_cents"], 210)
-        receipt, charged = self.store.buy("42", item["id"], item["price_cents"])
+        receipt, charged = self.store.buy("42", item["id"], changed["price_cents"])
         self.assertTrue(charged)
         self.assertEqual(receipt["secret"], "test-only-secret")
+
+    def test_azerbaijani_price_and_retry_keeps_one_product(self):
+        first = self.item("2,25")
+        self.assertEqual(first["price_cents"], 225)
+        again = self.item("2.25")
+        self.assertEqual(first["id"], again["id"])
+        self.assertEqual(len(self.store.list_products("42", admin=True)["products"]), 1)
 
     def test_invalid_prices(self):
         for value in ["0", "-1", "1.001", "NaN", "Infinity", "10000.01", None]:
