@@ -35,6 +35,37 @@ Mini App-i botun menyusundan açın. Adi brauzerdə açılan səhifədə Telegra
 - [Yoxlama](#yoxlama)
 - [Problemlərin həlli](#problemlərin-həlli)
 
+## 📣 Saatlıq bot istifadəçi elanları
+
+Botun şəxsi çatını başlayan istifadəçilərə hər **60 dəqiqədən bir** qısa
+Azərbaycan dilli nömrə kataloqu xatırlatması göndərilir. Qrup mesajlarına
+və API Satışı reklamlarına aid deyil; ayrıca cədvəllə işləyir.
+
+- **Default**: aktiv, 60 dəqiqə, bir-birini təkrarlamayan 5 qısa mətn
+  növbə ilə paylaşılır; ilk göndəriş sistem işə düşəndən 1 saat sonra.
+- **Admin (sayt/Mini App)**: Admin → **📣 Saatlıq bot elanları**;
+  aktiv/deaktiv, 60–1440 dəqiqə interval, 1–10 qısa mətn
+  (hər biri 8–220 simvol), nümunə və yalnız özünə sınaq göndərmək.
+- **Admin (Telegram)**: **📣 SAATLIQ NÖMRƏ ELANLARI** düyməsi;
+  eyni parametrləri idarə etmək, nümunə və adminə sınaq.
+- **İstifadəçi**: `/promo_off` ilə bu mesajlardan çıxır,
+  `/promo_on` ilə yenidən qəbul edir. Bloklanmış və botu
+  başlamamış istifadəçilərə göndərilmir.
+- Nümunələr: “📱 Gəl, nömrə seçimlərinə bax!”, “🔥 Yaxşı nömrə
+  axtarırsan? Botda mövcud seçimləri yoxla!”, “🚀 Yeni nömrə seçimlərini
+  yoxlamağın vaxtıdır!”. Bu mətnlər faktiki stok haqqında iddia etmir.
+- **Yaddaş**: `bot_user_promos.json` və istifadəçilərin
+  `promo_opt_out` seçimi şəxsi arxivdə saxlanılır.
+  Göndərişdən **əvvəl** növbəti interval şəxsi yedəkdə qeydə alınır;
+  bu, Render yenilənəndə toplu mesajın yenidən başlamasının qarşısını alır.
+  Şəxsi GitHub arxivi əlçatan deyilsə avtomatik mesaj göndərilmir.
+- API: `GET /api/bot-promos` və
+  `POST /api/bot-promos` (yalnız autentifikasiyadan keçmiş admin).
+  `settings`, `preview` və `test` əməliyyatları.
+- İşçi Telegram-ın göndəriş limitlərini və bloklamaları nəzərə alır.
+  Eyni vaxtda iki toplu yayım başlamasın deyə mövcud
+  `broadcast_running` məhdudiyyətindən istifadə edir.
+
 ## 🛒 API Satışı (bot + sayt + Mini App)
 
 Admin panelində **🛒 API Satışı** bölməsi var. Admin API adı, təsvir,
