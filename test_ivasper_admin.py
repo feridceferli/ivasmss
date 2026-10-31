@@ -2,7 +2,7 @@ import ast
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from ivasper_admin import admin_allowed, archive_summary, build_report, service_summary
+from ivasper_admin import admin_allowed, archive_summary, build_report, service_summary, archive_detail_text, CALLBACK_PATTERN
 
 class IvasperTests(unittest.TestCase):
     def test_permissions(self):
@@ -25,6 +25,22 @@ class IvasperTests(unittest.TestCase):
         self.assertNotIn('987654', report)
         self.assertEqual(archive_summary(archive)[0], 1)
         self.assertEqual(service_summary({'wa': [{}, {}]})[1], 2)
+
+    def test_archive_country_callback_reveals_own_numbers_only(self):
+        import re
+        records = {
+            "994502110012": {"country": "🇦🇿 Azərbaycan", "number": "+994502110012",
+                              "user_id": "5", "range": "99450211"},
+            "994502118888": {"country": "🇦🇿 Azərbaycan", "number": "+994502118888",
+                              "user_id": "8", "range": "99450211"},
+        }
+        report, keyboard = archive_detail_text(records, 5, 0, 0)
+        self.assertIn("994502110012", report)
+        self.assertNotIn("994502118888", report)
+        self.assertIn("Öz nömrələrim", report)
+        self.assertTrue(re.match(CALLBACK_PATTERN, "ivasper_admin:country:0:0"))
+        self.assertTrue(re.match(CALLBACK_PATTERN, "ivasper_admin:archive_page:1"))
+        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "ivasper_admin:archive_page:0")
 
     def test_wiring_and_syntax(self):
         root = Path(__file__).resolve().parent
