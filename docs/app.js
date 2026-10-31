@@ -1322,6 +1322,33 @@ async function loadIvasperAdmin() {
     }
 }
 
+async function loadIvasperTxtFile(input) {
+    if (!state.isAdmin || !input?.files?.length) return;
+    const file = input.files[0];
+    const status = document.getElementById("ivasper-import-status");
+    const textarea = document.getElementById("ivasper-import-numbers");
+    if (!status || !textarea) return;
+    try {
+        if (file.size > 30000) {
+            status.textContent = "⚠️ TXT faylı çox böyükdür. Hər dəfə 100 nömrə qəbul edilir.";
+            return;
+        }
+        const content = await file.text();
+        const entries = content.split(/[\\r\\n,;]+/).map(x => x.trim()).filter(Boolean);
+        if (!entries.length || entries.length > 100) {
+            status.textContent = "⚠️ Faylda 1–100 nömrə olmalıdır.";
+            return;
+        }
+        textarea.value = entries.join("\\n");
+        status.textContent = "📄 " + entries.length +
+            " nömrə oxundu. Ölkəni/xidməti seçin və «Nömrələri qəbul et» düyməsini basın.";
+    } catch (_) {
+        status.textContent = "⚠️ TXT faylını oxumaq mümkün olmadı.";
+    } finally {
+        input.value = "";
+    }
+}
+
 async function saveIvasperNumbers() {
     if (!state.isAdmin) return;
     const source = document.getElementById("ivasper-import-numbers");
@@ -1383,8 +1410,8 @@ function renderIvasperNumbers() {
         (results.length > 200 ? " · ilk 200 göstərilir, axtarışla daraldın" : "");
     if (!results.length) {
         clearAndText(list, ivasperAdminState.connected
-            ? "Bu filtrə uyğun IVASPER nömrəsi tapılmadı."
-            : "IVASPER nömrələri mövcud IVASMS-dən götürülmür. Əvvəlcə müstəqil mənbəni qoşun.");
+            ? "IVASPER inventarı boşdur. Yuxarıdakı hissədən nömrə daxil edin və ya TXT faylı seçin."
+            : "IVASPER bazası əlçatan deyil. Render-də ayrıca servisin DATABASE_URL ayarını və xidmətin statusunu yoxlayın.");
         return;
     }
     for (const item of results.slice(0, 200)) {
