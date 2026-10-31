@@ -93,7 +93,9 @@ class AuthAndWiringTests(unittest.TestCase):
         self.assertIn('id="sms-diagnostics-tab-button" hidden', html)
         self.assertIn('id="admin-sms-lab-section"', html)
         self.assertNotIn(".innerHTML", js)
-        self.assertIn("Real göndərilən SMS: 0", js)
+        self.assertIn("Provayderə qəbul edilən real SMS:", js)
+        self.assertIn('body: {action: "send_live"', js)
+        self.assertIn("sms_live_sender.status()", main)
         self.assertIn("Simulyasiya", html)
 
 
