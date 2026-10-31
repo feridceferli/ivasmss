@@ -129,6 +129,14 @@ async def _http_json(url: str, *, headers=None, params=None):
             timeout=httpx.Timeout(12.0, connect=5.0), follow_redirects=False
         ) as client:
             response = await client.get(url, headers=headers, params=params)
+            if response.status_code == 401:
+                raise ProviderFeedError("upstream_unauthorized")
+            if response.status_code == 403:
+                raise ProviderFeedError("upstream_forbidden")
+            if response.status_code == 404:
+                raise ProviderFeedError("upstream_endpoint_missing")
+            if response.status_code == 429:
+                raise ProviderFeedError("upstream_rate_limited")
             if response.status_code >= 400:
                 raise ProviderFeedError("upstream_http_error")
             if response.is_redirect:
