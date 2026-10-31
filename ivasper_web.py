@@ -26,10 +26,10 @@ def archive_country_page(archived, owner_id, country="", page=0, page_size=25):
             if str(record.get("user_id") or "") != str(owner_id):
                 continue
             number = str(record.get("number") or key).strip()
-            if not re.fullmatch(r"\\+?[0-9 ()-]+", number):
+            if not re.fullmatch(r"\+?[0-9 ()-]+", number):
                 continue
-            digits = re.sub(r"\\D", "", number)
-            if not re.fullmatch(r"\\d{7,15}", digits):
+            digits = re.sub(r"\D", "", number)
+            if not re.fullmatch(r"\d{7,15}", digits):
                 continue
             own.setdefault(label, {})["+" + digits] = {
                 "number": "+" + digits,
@@ -67,7 +67,8 @@ def archive_country_page(archived, owner_id, country="", page=0, page_size=25):
     }
 
 
-def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_seconds,\n                     country="", page=0):
+def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_seconds,
+                     country="", page=0):
     """Return safe counts and only the requesting administrator's current leases."""
     catalogue = {}
     if isinstance(services, dict):
@@ -89,8 +90,8 @@ def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_se
     if isinstance(archived, dict):
         for record in archived.values():
             if isinstance(record, dict):
-                country = str(record.get("country") or "Naməlum").strip()[:70]
-                countries[country] += 1
+                label = str(record.get("country") or "Naməlum").strip()[:70]
+                countries[label] += 1
 
     archive_countries, archive_page = archive_country_page(\n        archived, owner_id, country, page)\n\n    own_active = []
     if isinstance(active, dict):
