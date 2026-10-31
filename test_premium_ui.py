@@ -84,6 +84,7 @@ class PremiumEmojiTests(unittest.TestCase):
                 "t": t,
                 "is_admin": lambda uid: uid == 42,
                 "az_range_allowed": lambda uid: uid == 42,
+                "api_sales_store": type("FakeStore", (), {"_read": lambda self: {"visible": False}})(),
             }
             exec(code, namespace)
             markup = namespace["main_keyboard"](42)
