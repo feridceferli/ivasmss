@@ -1334,12 +1334,12 @@ async function loadIvasperTxtFile(input) {
             return;
         }
         const content = await file.text();
-        const entries = content.split(/[\\r\\n,;]+/).map(x => x.trim()).filter(Boolean);
+        const entries = content.split(/[\r\n,;]+/).map(x => x.trim()).filter(Boolean);
         if (!entries.length || entries.length > 100) {
             status.textContent = "⚠️ Faylda 1–100 nömrə olmalıdır.";
             return;
         }
-        textarea.value = entries.join("\\n");
+        textarea.value = entries.join("\n");
         status.textContent = "📄 " + entries.length +
             " nömrə oxundu. Ölkəni/xidməti seçin və «Nömrələri qəbul et» düyməsini basın.";
     } catch (_) {
