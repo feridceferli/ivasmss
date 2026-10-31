@@ -643,6 +643,19 @@
                 <p class="notice-mini">Range-in görünməsi həmin nömrədən istifadə mümkünlüyünü təsdiqləmir. Nömrə seçimi mövcud /api/get-number vasitəsilə yoxlanır. Admin sifarişləri mövcud qaydalara əsasən pulsuzdur.</p>
                 <h4 style="margin:14px 0 8px">📱 Mənim aktiv nömrələrim</h4>
                 <div id="ivasper-own-active" class="catalog-scroll" aria-live="polite"></div>
+                <div class="card" style="margin-top:14px">
+                    <h4 style="margin:0 0 8px">📦 Ölkələr üzrə nömrə arxivim</h4>
+                    <p class="notice-mini">Azərbaycan daxil olmaqla arxivdəki ölkəni seçin. Nömrə müddəti bitdikdən sonra da tarixçədə qalır; bu, nömrənin hələ aktiv olması demək deyil. Başqa hesabların nömrələri göstərilmir.</p>
+                    <label class="notice-mini" for="ivasper-archive-country">🌍 Ölkəni seç</label>
+                    <select id="ivasper-archive-country" class="admin-input" onchange="loadIvasperArchivePage(0)" aria-label="Arxiv ölkəsini seç"></select>
+                    <p id="ivasper-archive-summary" class="notice-mini" role="status" aria-live="polite">Nömrə arxivi yüklənir...</p>
+                    <div id="ivasper-archive-list" class="catalog-scroll" aria-live="polite"></div>
+                    <div class="pager">
+                        <button class="action-small" type="button" id="ivasper-archive-prev" onclick="loadIvasperArchivePage(Math.max(0, (ivasperAdminState.archive_page?.page || 0) - 1))">◀ Əvvəlki</button>
+                        <span id="ivasper-archive-pages" class="notice-mini">—</span>
+                        <button class="action-small" type="button" id="ivasper-archive-next" onclick="loadIvasperArchivePage((ivasperAdminState.archive_page?.page || 0) + 1)">Növbəti ▶</button>
+                    </div>
+                </div>
             </section>
             <section class="card api-sales-admin" id="admin-hourly-promos-section">
                 <h4>📣 Bot istifadəçilərinə saatlıq nömrə elanları</h4>
@@ -925,7 +938,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261031-ivasper-admin-web"></script>
+    <script src="app.js?v=20261031-ivasper-country-archive"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
