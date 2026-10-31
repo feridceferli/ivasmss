@@ -6717,10 +6717,15 @@ async def miniapp_ivasper_api(request):
     if request.method != "GET":
         return _miniapp_cors(web.json_response(
             {"error": "method_not_allowed"}, status=405))
+    country = str(request.query.get("country") or "")[:70]
+    page_input = str(request.query.get("page") or "0")
+    if not page_input.isdecimal() or len(page_input) > 4:
+        return _miniapp_cors(web.json_response(
+            {"error": "invalid_page"}, status=400))
     services = await fetch_services_cached()
     snapshot = catalog_snapshot(
         services, load_range_db(), monitor_diagnostics, active_numbers,
-        uid, active_number_remaining,
+        uid, active_number_remaining, country=country, page=int(page_input),
     )
     return _miniapp_cors(web.json_response(
         snapshot, headers={"Cache-Control": "private, no-store"}))
