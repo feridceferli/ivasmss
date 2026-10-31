@@ -43,3 +43,22 @@ python -m unittest -v test_ivasper_admin.py test_ivasper_web.py
 node --check docs/app.js
 node test_ivasper_web_ui.cjs
 ```
+
+
+## Ölkələr üzrə arxivdə tam nömrələr
+
+**Sayt və Mini App:** Admin → IVASPER nömrələr → Ölkələr üzrə nömrə arxivim.
+Ölkəni (məsələn 🇦🇿 Azərbaycan) seçdikdə həmin adminin hesabına
+əvvəllər ayrılmış tam nömrələr və range qeydləri göstərilir. Bir səhifədə
+25 nömrə var; Növbəti/Əvvəlki ilə bütün şəxsi qeydləri görmək olar.
+Kopyala düyməsi mövcuddur. Arxiv nömrəsinin aktiv olmasına zəmanət yoxdur.
+
+**Telegram bot:** Şəxsi çatda /ivasper → 📦 Ölkələr üzrə arxiv → ölkəni
+seç. Eyni hesabın nömrələri 12-li səhifələrlə göstərilir.
+
+Ölkənin **ümumi** arxiv sayı bütün istifadəçilərin qeydlərini də əhatə
+edir, ancaq tam nömrələr yalnız həmin Telegram admin ID-sinə aid
+`datarange.json` qeydlərindən gəlir. Başqa istifadəçilərin nömrələri,
+OTP/SMS mətnləri və giriş açarları API-də qaytarılmır. Əgər həmin ölkədə
+sizin hesabınıza ayrılmış nömrə yoxdursa, boş siyahı və izahlı mətn
+göstərilir. Digər hesabların qeydini avtomatik özünüzə aid etmək olmaz.
