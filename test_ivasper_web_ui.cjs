@@ -9,13 +9,15 @@ for (const id of [
   "admin-ivasper-section", "ivasper-status", "ivasper-country-filter",
   "ivasper-service-filter", "ivasper-number-filter", "ivasper-number-count",
   "ivasper-number-list", "ivasper-import-country", "ivasper-import-service",
-  "ivasper-import-numbers", "ivasper-import-status"
+  "ivasper-import-numbers", "ivasper-import-status", "ivasper-import-txt"
 ]) assert.ok(html.includes('id="' + id + '"'), "Missing IVASPER UI id " + id);
 const admin = html.indexOf('id="tab-admin"');
 const panel = html.indexOf('id="admin-ivasper-section"');
 assert.ok(admin >= 0 && panel > admin, "IVASPER must remain admin-only");
 assert.ok(js.includes('api("/api/ivasper")'), "Dedicated inventory endpoint required");
 assert.ok(js.includes('async function saveIvasperNumbers()'), "Simple admin number submission is missing");
+assert.ok(js.includes("async function loadIvasperTxtFile(input)"), "TXT file receipt is missing");
+assert.ok(js.includes("const entries = content.split("), "TXT files must parse phone numbers");
 assert.ok(js.includes('method: "POST", body: {numbers, service, country}'), "IVASPER submission must use authorized POST");
 const start = js.indexOf("// IVASPER has a different, read-only inventory source");
 const end = js.indexOf("let adminUsersCache = [];", start);
