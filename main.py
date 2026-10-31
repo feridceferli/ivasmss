@@ -85,8 +85,6 @@ from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons
 
 from whatsapp_safe import register_whatsapp_handlers
 from admin_test_tools import register_admin_test_tools
-from ivasper_admin import register_ivasper_admin_handlers
-from ivasper_external import load_ivasper_inventory, valid_inventory_url
 
 # ==================== CONFIG SECTION ====================
 
@@ -1557,7 +1555,6 @@ def admin_main_keyboard():
         [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR"), KeyboardButton("⚡ FAKE OTP")],
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
         [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
-        [KeyboardButton("🧰 IVASPER NƏZARƏT")],
         [KeyboardButton("🛒 API SATIŞI (ADMIN)")],
         [KeyboardButton("📣 SAATLIQ NÖMRƏ ELANLARI")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
@@ -6703,93 +6700,6 @@ async def miniapp_api_sales_api(request):
             {"error": "storage_error"}, status=503))
 
 
-async def miniapp_ivasper_api(request):
-    """Read or append only separate IVASPER numbers (admin-only)."""
-    if request.method == "OPTIONS":
-        return _miniapp_cors(web.Response(status=204))
-    tg_user, err = _miniapp_auth(request)
-    if not tg_user:
-        return _miniapp_cors(web.json_response(
-            {"error": "unauthorized", "reason": err}, status=401))
-    uid = int(tg_user["id"])
-    if not is_admin(uid) or is_user_banned(uid):
-        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-    if request.method == "GET":
-        snapshot = await load_ivasper_inventory()
-        return _miniapp_cors(web.json_response(
-            snapshot, headers={"Cache-Control": "private, no-store"}))
-    if request.method != "POST":
-        return _miniapp_cors(web.json_response(
-            {"error": "method_not_allowed"}, status=405))
-
-    try:
-        body = await request.json()
-        if not isinstance(body, dict):
-            raise ValueError()
-        numbers = body.get("numbers")
-        service = str(body.get("service") or "IVASPER").strip()
-        country = str(body.get("country") or "Naməlum").strip()
-        if (not isinstance(numbers, list) or not 1 <= len(numbers) <= 100
-                or not 1 <= len(service) <= 48 or not 1 <= len(country) <= 48):
-            raise ValueError()
-        rows = []
-        for number in numbers:
-            if not isinstance(number, str):
-                raise ValueError()
-            raw = number.strip()
-            if not re.fullmatch(r"\+?[0-9 ()-]{7,22}", raw):
-                raise ValueError()
-            digits = re.sub(r"\D", "", raw)
-            if not 7 <= len(digits) <= 15:
-                raise ValueError()
-            rows.append({
-                "number": "+" + digits, "service": service, "country": country,
-            })
-        if len({item["number"] for item in rows}) != len(rows):
-            raise ValueError()
-    except (TypeError, ValueError, json.JSONDecodeError):
-        return _miniapp_cors(web.json_response(
-            {"error": "invalid_ivasper_numbers",
-             "message": "1–100 fərqli nömrə daxil edin; ölkə və xidmət adını yoxlayın."},
-            status=400))
-
-    source_url = os.environ.get("IVASPER_NUMBERS_URL", "").strip()
-    writer_token = os.environ.get("IVASPER_IMPORT_TOKEN", "").strip()
-    if (not valid_inventory_url(source_url) or not source_url.endswith("/numbers")
-            or len(writer_token) < 32):
-        return _miniapp_cors(web.json_response(
-            {"error": "ivasper_import_not_configured",
-             "message": "IVASPER qəbul ayarları Render-də tamamlanmayıb."},
-            status=503))
-    import_url = source_url[:-len("/numbers")] + "/import"
-    try:
-        async with httpx.AsyncClient(
-                timeout=httpx.Timeout(14.0), follow_redirects=False,
-                trust_env=False) as client:
-            response = await client.post(
-                import_url,
-                json={"numbers": rows},
-                headers={"Authorization": "Bearer " + writer_token,
-                         "Accept": "application/json"})
-    except httpx.HTTPError:
-        return _miniapp_cors(web.json_response(
-            {"error": "ivasper_connection_failed",
-             "message": "IVASPER servisinə bağlantı alınmadı."}, status=502))
-    if response.status_code == 503:
-        return _miniapp_cors(web.json_response(
-            {"error": "ivasper_storage_not_ready",
-             "message": "IVASPER PostgreSQL bağlantısını Render-də DATABASE_URL ilə qurun."},
-            status=503))
-    if response.status_code != 200:
-        return _miniapp_cors(web.json_response(
-            {"error": "ivasper_import_failed",
-             "message": "IVASPER nömrə qəbulunu təsdiqləmədi. API ayarlarını yoxlayın."},
-            status=502))
-    return _miniapp_cors(web.json_response(
-        {"ok": True, "accepted": len(rows)},
-        headers={"Cache-Control": "private, no-store"}))
-
-
 async def miniapp_admin_api(request):
     if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
     tg_user, err = _miniapp_auth(request)
@@ -7189,9 +7099,6 @@ async def post_init(application):
 def register_handlers(app):
     register_whatsapp_handlers(app, is_admin)
     register_admin_test_tools(app, is_admin, admin_main_keyboard)
-    register_ivasper_admin_handlers(
-        app, is_admin, is_user_banned, load_ivasper_inventory,
-    )
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
@@ -7286,7 +7193,6 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
-    server.router.add_route("*", "/api/ivasper", miniapp_ivasper_api)
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
