@@ -53,6 +53,28 @@ class InventoryServiceTests(unittest.TestCase):
         self.assertIn("asyncio.to_thread(add_inventory, rows)", inspect.getsource(import_inventory))
         self.assertIn("persistent_storage_not_connected", inspect.getsource(import_inventory))
 
+    def test_no_postgres_is_error_not_false_empty_inventory(self):
+        import asyncio
+        import json
+        from ivasper_inventory_service import health, get_numbers
+        from unittest.mock import patch as mock_patch
+        import secrets
+        secret = secrets.token_urlsafe(42)
+        with mock_patch("ivasper_inventory_service.DATABASE_URL", ""), \\
+             mock_patch.dict(os.environ, {"IVASPER_READER_TOKEN": secret}):
+            health_response = asyncio.run(
+                health(make_mocked_request("GET", "/health")))
+            self.assertEqual(health_response.status, 503)
+            result = json.loads(health_response.text)
+            self.assertFalse(result["ok"])
+            self.assertEqual(result["storage"], "database_not_connected")
+            request = make_mocked_request(
+                "GET", "/numbers", headers={"Authorization": "Bearer " + secret})
+            stock_response = asyncio.run(get_numbers(request))
+            self.assertEqual(stock_response.status, 503)
+            self.assertEqual(json.loads(stock_response.text)["error"],
+                             "persistent_storage_not_connected")
+
     def test_isolated_routes_only(self):
         app = create_app()
         routes = [route.resource.canonical for route in app.router.routes()]
