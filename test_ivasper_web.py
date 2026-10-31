@@ -4,7 +4,7 @@ import unittest
 from datetime import datetime
 from pathlib import Path
 
-from ivasper_web import catalog_snapshot
+from ivasper_web import catalog_snapshot, archive_country_page
 
 ROOT = Path(__file__).resolve().parent
 
@@ -52,6 +52,46 @@ class IvasperWebTests(unittest.TestCase):
         self.assertIsNone(result["monitor"]["http_status"])
         self.assertEqual(result["monitor"]["state"], "naməlum")
         self.assertNotIn("secret", str(result))
+
+    def test_country_archive_shows_own_full_numbers_only(self):
+        records = {
+            "994501234567": {"number": "+994501234567", "country": "🇦🇿 Azərbaycan",
+                             "user_id": "5", "range": "99450211"},
+            "994551239999": {"number": "+994551239999", "country": "🇦🇿 Azərbaycan",
+                             "user_id": "8", "message": "private code"},
+            "447701112222": {"number": "+447701112222", "country": "United Kingdom",
+                             "user_id": "5"},
+            "994509876543": {"number": "+994509876543", "country": "🇦🇿 Azərbaycan"},
+        }
+        countries, page = archive_country_page(records, owner_id=5)
+        self.assertEqual(page["country"], "🇦🇿 Azərbaycan")
+        self.assertEqual(page["total_count"], 3)
+        self.assertEqual(page["my_count"], 1)
+        self.assertEqual(page["entries"], [{"number": "+994501234567", "range": "99450211"}])
+        snapshot = catalog_snapshot({}, records, {}, {}, 5, lambda _: 0)
+        encoded = str(snapshot)
+        self.assertNotIn("994551239999", encoded)
+        self.assertNotIn("994509876543", encoded)
+        self.assertNotIn("private code", encoded)
+        self.assertEqual(len(countries), 2)
+        self.assertEqual(snapshot["archive_page"]["country"], "🇦🇿 Azərbaycan")
+
+    def test_country_archive_page_and_unknown_country(self):
+        records = {}
+        for i in range(55):
+            number = "99450" + str(i).zfill(7)
+            records[number] = {"country": "🇦🇿 Azərbaycan", "user_id": "5",
+                               "number": "+" + number}
+        countries, first = archive_country_page(records, 5, page=0)
+        _, second = archive_country_page(records, 5, page=1)
+        _, final = archive_country_page(records, 5, page=500)
+        self.assertEqual(first["pages"], 3)
+        self.assertEqual((len(first["entries"]), len(second["entries"]), len(final["entries"])),
+                         (25, 25, 5))
+        self.assertEqual(final["page"], 2)
+        self.assertEqual(first["my_count"], 55)
+        self.assertEqual(first["total_count"], 55)
+        self.assertEqual(len(countries), 1)
 
     def test_server_restricts_method_and_admin_identity(self):
         source = (ROOT / "main.py").read_text(encoding="utf-8")
