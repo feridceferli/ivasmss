@@ -1,5 +1,8 @@
 import asyncio
 from data_storage import data_path, atomic_save
+from admin_provider_feeds import (
+    ProviderFeedError, configured_status, feed_snapshot, run_ivasmsper_websocket,
+)
 from number_archive import NumberArchive, txt_chunks
 from otp_leaderboard import otp_leaderboards, leaderboard_page
 from user_backup import UserProfileBackup
@@ -7068,6 +7071,41 @@ async def miniapp_admin_tools_api(request):
     return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
 
 
+async def miniapp_admin_provider_feeds_api(request):
+    """Private provider feeds; the admin check is enforced on every request."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    user, error = _miniapp_auth(request)
+    if not user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": error}, status=401))
+    uid = int(user["id"])
+    if not is_admin(uid) or is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    if request.method != "GET":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    provider = request.query.get("provider", "").strip()
+    if not provider:
+        payload = {"providers": configured_status()}
+    else:
+        try:
+            limit = int(request.query.get("limit", "20"))
+            if not 1 <= limit <= 30:
+                raise ValueError("limit")
+        except ValueError:
+            return _miniapp_cors(web.json_response({"error": "invalid_limit"}, status=400))
+        try:
+            payload = await feed_snapshot(provider, limit)
+        except ProviderFeedError as exc:
+            response = _miniapp_cors(web.json_response(
+                {"error": exc.code}, status=exc.http_status))
+            response.headers["Cache-Control"] = "no-store"
+            return response
+    response = _miniapp_cors(web.json_response(payload))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
 async def post_init(application):
     # Preserve administrator-edited news settings across restarts.
     # Restore users, referrals, permissions and preferences BEFORE workers start.
@@ -7085,6 +7123,10 @@ async def post_init(application):
     application.bot_data["user_backup_task"] = asyncio.create_task(user_backup.run())
     await asyncio.to_thread(number_archive.import_legacy, load_range_db())
     application.bot_data["number_archive_task"] = asyncio.create_task(number_archive.run())
+    # Optional authorized Ivasmsper WebSocket source. Kept separate from public feeds.
+    if configured_status()["ivasmsper"]["websocket_configured"]:
+        application.bot_data["ivasmsper_ws_task"] = asyncio.create_task(
+            run_ivasmsper_websocket())
     for _ in range(20):
         asyncio.create_task(worker())
     asyncio.create_task(monitor_loop(application))
@@ -7193,6 +7235,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
+    server.router.add_route("*", "/api/admin-provider-feeds", miniapp_admin_provider_feeds_api)
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
