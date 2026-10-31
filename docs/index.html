@@ -631,6 +631,20 @@
                 <p id="admin-green_sms-status" class="notice-mini" role="status">Konfiqurasiya yoxlanır...</p>
                 <button type="button" class="action-small" onclick="refreshProviderFeed('green_sms')">🔄 Green SMS mesajlarını oxu</button>
                 <div id="admin-green_sms-messages" class="catalog-scroll" aria-live="polite"></div>
+                <div class="card" style="margin-top:12px" id="admin-green_sms-stock">
+                    <h4>📱 Green SMS — nömrə siyahısı</h4>
+                    <p class="notice-mini">Yalnız istifadə hüququ sizə məxsus olan nömrələri idxal edin. Bu mənbə özü yeni nömrə yaratmır; SMS hadisələri yuxarıda ayrıca görünür.</p>
+                    <p id="admin-green_sms-stock-status" class="notice-mini" role="status">Nömrələr yüklənir...</p>
+                    <div class="quick-actions">
+                        <button class="action-small" type="button" onclick="loadAdminProviderNumbers('green_sms')">🔄 Nömrələri yenilə</button>
+                        <label class="action-small">📁 TXT seç
+                            <input type="file" accept=".txt,text/plain" style="width:100%;max-width:180px" aria-label="Nömrələrin TXT faylı" onchange="importProviderTextFile('green_sms', this)">
+                        </label>
+                    </div>
+                    <textarea id="admin-green_sms-number-import" class="admin-input" rows="4" maxlength="12000" autocomplete="off" spellcheck="false" placeholder="+994501234567&#10;+994551234567" aria-label="Nömrələri sətir-sətir daxil edin"></textarea>
+                    <button class="action-small" type="button" onclick="importAdminProviderNumbers('green_sms')">➕ Nömrələri əlavə et (maksimum 200)</button>
+                    <div id="admin-green_sms-numbers" class="catalog-scroll" aria-live="polite"></div>
+                </div>
             </section>
             <section class="card" id="admin-ivasmsper-section" style="margin-top:12px" aria-label="Ivasmsper yalnız admin">
                 <h4>🔌 Ivasmsper — şəxsi admin paneli</h4>
@@ -638,6 +652,20 @@
                 <p id="admin-ivasmsper-status" class="notice-mini" role="status">Konfiqurasiya yoxlanır...</p>
                 <button type="button" class="action-small" onclick="refreshProviderFeed('ivasmsper')">🔄 Ivasmsper mesajlarını oxu</button>
                 <div id="admin-ivasmsper-messages" class="catalog-scroll" aria-live="polite"></div>
+                <div class="card" style="margin-top:12px" id="admin-ivasmsper-stock">
+                    <h4>📱 Ivasmsper — nömrə siyahısı</h4>
+                    <p class="notice-mini">Yalnız istifadə hüququ sizə məxsus olan nömrələri idxal edin. Bu mənbə özü yeni nömrə yaratmır; SMS hadisələri yuxarıda ayrıca görünür.</p>
+                    <p id="admin-ivasmsper-stock-status" class="notice-mini" role="status">Nömrələr yüklənir...</p>
+                    <div class="quick-actions">
+                        <button class="action-small" type="button" onclick="loadAdminProviderNumbers('ivasmsper')">🔄 Nömrələri yenilə</button>
+                        <label class="action-small">📁 TXT seç
+                            <input type="file" accept=".txt,text/plain" style="width:100%;max-width:180px" aria-label="Nömrələrin TXT faylı" onchange="importProviderTextFile('ivasmsper', this)">
+                        </label>
+                    </div>
+                    <textarea id="admin-ivasmsper-number-import" class="admin-input" rows="4" maxlength="12000" autocomplete="off" spellcheck="false" placeholder="+994501234567&#10;+994551234567" aria-label="Nömrələri sətir-sətir daxil edin"></textarea>
+                    <button class="action-small" type="button" onclick="importAdminProviderNumbers('ivasmsper')">➕ Nömrələri əlavə et (maksimum 200)</button>
+                    <div id="admin-ivasmsper-numbers" class="catalog-scroll" aria-live="polite"></div>
+                </div>
             </section>
             <section class="card api-sales-admin" id="admin-hourly-promos-section">
                 <h4>📣 Bot istifadəçilərinə saatlıq nömrə elanları</h4>
@@ -921,7 +949,7 @@
     </div>
     <script src="web-login.js?v=20261027-website"></script>
     <script src="app.js?v=20261031-admin-feeds"></script>
-    <script src="admin-provider-feeds.js?v=20261031-admin-feeds"></script>
+    <script src="admin-provider-feeds.js?v=20261031-number-stock"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
