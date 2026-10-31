@@ -161,7 +161,6 @@ function switchTab(tab) {
         fetchPrices();
         fetchApiSales();
         fetchBotHourlyPromos();
-        loadIvasperAdmin();
     }
 }
 
@@ -832,7 +831,6 @@ async function selectOfferedNumber(index) {
         switchTab("active");
         // Show the newly confirmed number even if one optional refresh fails.
         await Promise.allSettled([fetchOrders(), fetchDashboard()]);
-        // IVASPER inventory is refreshed independently in its own admin section.
     } catch (_) {
         // Navigation failures cannot undo a completed server transaction.
     }
@@ -1275,158 +1273,6 @@ async function adminBalanceChange() {
     }
 }
 
-
-// IVASPER has a different, read-only inventory source. Never use state.services,
-// /api/get-number, price rules, active orders or IVASMS number archives here.
-let ivasperAdminState = {connected: false, status: "not_configured", numbers: []};
-
-async function loadIvasperAdmin() {
-    if (!state.isAdmin) return;
-    const status = document.getElementById("ivasper-status");
-    if (!status) return;
-    status.textContent = "📡 IVASPER nömrələri ayrıca mənbədən oxunur...";
-    try {
-        const data = await api("/api/ivasper");
-        if (!state.isAdmin) return;
-        ivasperAdminState = {
-            connected: data.connected === true,
-            status: String(data.status || "source_unavailable"),
-            numbers: Array.isArray(data.numbers) ? data.numbers : [],
-        };
-        const valid = ivasperAdminState.numbers.filter(item =>
-            /^\+\d{7,15}$/.test(String(item.number || "")));
-        const countries = [...new Set(valid.map(item => String(item.country || "Naməlum")))].sort();
-        const services = [...new Set(valid.map(item => String(item.service || "IVASPER")))].sort();
-        const country = document.getElementById("ivasper-country-filter");
-        const service = document.getElementById("ivasper-service-filter");
-        const prevCountry = country?.value || "";
-        const prevService = service?.value || "";
-        if (country) {
-            country.replaceChildren(new Option("Bütün ölkələr", ""));
-            countries.forEach(name => country.appendChild(new Option(name, name)));
-            if (countries.includes(prevCountry)) country.value = prevCountry;
-        }
-        if (service) {
-            service.replaceChildren(new Option("Bütün xidmətlər", ""));
-            services.forEach(name => service.appendChild(new Option(name, name)));
-            if (services.includes(prevService)) service.value = prevService;
-        }
-        status.textContent = ivasperAdminState.connected
-            ? "✅ IVASPER — ayrıca mənbə qoşulub. Nömrələr yalnız burada görünür."
-            : "⚠️ " + String(data.message || "IVASPER mənbəyi hazır deyil.");
-        renderIvasperNumbers();
-    } catch (err) {
-        ivasperAdminState = {connected: false, status: "source_unavailable", numbers: []};
-        status.textContent = "⚠️ IVASPER: " + err.message;
-        renderIvasperNumbers();
-    }
-}
-
-async function loadIvasperTxtFile(input) {
-    if (!state.isAdmin || !input?.files?.length) return;
-    const file = input.files[0];
-    const status = document.getElementById("ivasper-import-status");
-    const textarea = document.getElementById("ivasper-import-numbers");
-    if (!status || !textarea) return;
-    try {
-        if (file.size > 30000) {
-            status.textContent = "⚠️ TXT faylı çox böyükdür. Hər dəfə 100 nömrə qəbul edilir.";
-            return;
-        }
-        const content = await file.text();
-        const entries = content.split(/[\r\n,;]+/).map(x => x.trim()).filter(Boolean);
-        if (!entries.length || entries.length > 100) {
-            status.textContent = "⚠️ Faylda 1–100 nömrə olmalıdır.";
-            return;
-        }
-        textarea.value = entries.join("\n");
-        status.textContent = "📄 " + entries.length +
-            " nömrə oxundu. Ölkəni/xidməti seçin və «Nömrələri qəbul et» düyməsini basın.";
-    } catch (_) {
-        status.textContent = "⚠️ TXT faylını oxumaq mümkün olmadı.";
-    } finally {
-        input.value = "";
-    }
-}
-
-async function saveIvasperNumbers() {
-    if (!state.isAdmin) return;
-    const source = document.getElementById("ivasper-import-numbers");
-    const status = document.getElementById("ivasper-import-status");
-    if (!source || !status) return;
-    const country = (document.getElementById("ivasper-import-country")?.value || "").trim();
-    const service = (document.getElementById("ivasper-import-service")?.value || "").trim();
-    const inputs = source.value.split(/[\r\n,;]+/).map(item => item.trim()).filter(Boolean);
-    if (!country || !service || !inputs.length || inputs.length > 100) {
-        status.textContent = "⚠️ Ölkə, xidmət və 1–100 nömrə daxil edin.";
-        return;
-    }
-    const numbers = [];
-    for (const phone of inputs) {
-        const digits = phone.replace(/\D/g, "");
-        if (!/^\+?[0-9 ()-]{7,22}$/.test(phone) || digits.length < 7 || digits.length > 15) {
-            status.textContent = "⚠️ Düzgün nömrələr daxil edin; yalnız telefon nömrələri qəbul edilir.";
-            return;
-        }
-        numbers.push("+" + digits);
-    }
-    if (new Set(numbers).size !== numbers.length) {
-        status.textContent = "⚠️ Eyni nömrəni bir siyahıda təkrar yazmayın.";
-        return;
-    }
-    status.textContent = "📥 IVASPER nömrələri saxlanılır...";
-    try {
-        const result = await api("/api/ivasper", {
-            method: "POST", body: {numbers, service, country}
-        });
-        if (result.ok !== true) throw new Error("IVASPER qəbulu təsdiqlənmədi.");
-        source.value = "";
-        await loadIvasperAdmin();
-        status.textContent = "✅ " + Number(result.accepted || 0) +
-            " nömrə ayrıca IVASPER inventarına qəbul edildi.";
-    } catch (err) {
-        status.textContent = "⚠️ Nömrə qəbulu alınmadı: " + err.message;
-    }
-}
-
-function renderIvasperNumbers() {
-    if (!state.isAdmin) return;
-    const list = document.getElementById("ivasper-number-list");
-    const count = document.getElementById("ivasper-number-count");
-    if (!list || !count) return;
-    list.replaceChildren();
-    const filterCountry = document.getElementById("ivasper-country-filter")?.value || "";
-    const filterService = document.getElementById("ivasper-service-filter")?.value || "";
-    const filterNumber = (document.getElementById("ivasper-number-filter")?.value || "")
-        .replace(/\D/g, "");
-    const results = (ivasperAdminState.numbers || []).filter(item => {
-        const phone = String(item.number || "");
-        if (!/^\+\d{7,15}$/.test(phone)) return false;
-        return (!filterCountry || item.country === filterCountry) &&
-            (!filterService || item.service === filterService) &&
-            (!filterNumber || phone.replace(/\D/g, "").includes(filterNumber));
-    });
-    count.textContent = "📱 " + results.length + " IVASPER nömrəsi" +
-        (results.length > 200 ? " · ilk 200 göstərilir, axtarışla daraldın" : "");
-    if (!results.length) {
-        clearAndText(list, ivasperAdminState.connected
-            ? "IVASPER inventarı boşdur. Yuxarıdakı hissədən nömrə daxil edin və ya TXT faylı seçin."
-            : "IVASPER bazası əlçatan deyil. Render-də ayrıca servisin DATABASE_URL ayarını və xidmətin statusunu yoxlayın.");
-        return;
-    }
-    for (const item of results.slice(0, 200)) {
-        const row = node("div", null, "admin-user-line");
-        const details = node("div", null, "admin-user-identity");
-        details.appendChild(node("strong", "📱 " + item.number, "full-phone-number"));
-        details.appendChild(node("small", "🌍 " + String(item.country || "Naməlum") +
-            " · 📡 " + String(item.service || "IVASPER")));
-        const copy = node("button", "📋 Kopyala", "action-small");
-        copy.type = "button";
-        copy.addEventListener("click", () => copyPhoneNumber(item.number));
-        row.append(details, copy);
-        list.appendChild(row);
-    }
-}
 
 let adminUsersCache = [];
 
