@@ -1322,6 +1322,46 @@ async function loadIvasperAdmin() {
     }
 }
 
+async function saveIvasperNumbers() {
+    if (!state.isAdmin) return;
+    const source = document.getElementById("ivasper-import-numbers");
+    const status = document.getElementById("ivasper-import-status");
+    if (!source || !status) return;
+    const country = (document.getElementById("ivasper-import-country")?.value || "").trim();
+    const service = (document.getElementById("ivasper-import-service")?.value || "").trim();
+    const inputs = source.value.split(/[\r\n,;]+/).map(item => item.trim()).filter(Boolean);
+    if (!country || !service || !inputs.length || inputs.length > 100) {
+        status.textContent = "⚠️ Ölkə, xidmət və 1–100 nömrə daxil edin.";
+        return;
+    }
+    const numbers = [];
+    for (const phone of inputs) {
+        const digits = phone.replace(/\D/g, "");
+        if (!/^\+?[0-9 ()-]{7,22}$/.test(phone) || digits.length < 7 || digits.length > 15) {
+            status.textContent = "⚠️ Düzgün nömrələr daxil edin; yalnız telefon nömrələri qəbul edilir.";
+            return;
+        }
+        numbers.push("+" + digits);
+    }
+    if (new Set(numbers).size !== numbers.length) {
+        status.textContent = "⚠️ Eyni nömrəni bir siyahıda təkrar yazmayın.";
+        return;
+    }
+    status.textContent = "📥 IVASPER nömrələri saxlanılır...";
+    try {
+        const result = await api("/api/ivasper", {
+            method: "POST", body: {numbers, service, country}
+        });
+        if (result.ok !== true) throw new Error("IVASPER qəbulu təsdiqlənmədi.");
+        source.value = "";
+        await loadIvasperAdmin();
+        status.textContent = "✅ " + Number(result.accepted || 0) +
+            " nömrə ayrıca IVASPER inventarına qəbul edildi.";
+    } catch (err) {
+        status.textContent = "⚠️ Nömrə qəbulu alınmadı: " + err.message;
+    }
+}
+
 function renderIvasperNumbers() {
     if (!state.isAdmin) return;
     const list = document.getElementById("ivasper-number-list");

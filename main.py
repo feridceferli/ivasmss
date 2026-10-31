@@ -86,7 +86,7 @@ from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons
 from whatsapp_safe import register_whatsapp_handlers
 from admin_test_tools import register_admin_test_tools
 from ivasper_admin import register_ivasper_admin_handlers
-from ivasper_external import load_ivasper_inventory
+from ivasper_external import load_ivasper_inventory, valid_inventory_url
 
 # ==================== CONFIG SECTION ====================
 
@@ -6704,7 +6704,7 @@ async def miniapp_api_sales_api(request):
 
 
 async def miniapp_ivasper_api(request):
-    """Read only a dedicated IVASPER inventory feed (never IVASMS stock)."""
+    """Read or append only separate IVASPER numbers (admin-only)."""
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
     tg_user, err = _miniapp_auth(request)
@@ -6714,14 +6714,80 @@ async def miniapp_ivasper_api(request):
     uid = int(tg_user["id"])
     if not is_admin(uid) or is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-    if request.method != "GET":
+    if request.method == "GET":
+        snapshot = await load_ivasper_inventory()
+        return _miniapp_cors(web.json_response(
+            snapshot, headers={"Cache-Control": "private, no-store"}))
+    if request.method != "POST":
         return _miniapp_cors(web.json_response(
             {"error": "method_not_allowed"}, status=405))
-    # The independent IVASPER source must be explicitly configured.
-    # This endpoint never interacts with the existing provider or user data.
-    snapshot = await load_ivasper_inventory()
+
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+        numbers = body.get("numbers")
+        service = str(body.get("service") or "IVASPER").strip()
+        country = str(body.get("country") or "Naməlum").strip()
+        if (not isinstance(numbers, list) or not 1 <= len(numbers) <= 100
+                or not 1 <= len(service) <= 48 or not 1 <= len(country) <= 48):
+            raise ValueError()
+        rows = []
+        for number in numbers:
+            if not isinstance(number, str):
+                raise ValueError()
+            raw = number.strip()
+            if not re.fullmatch(r"\+?[0-9 ()-]{7,22}", raw):
+                raise ValueError()
+            digits = re.sub(r"\D", "", raw)
+            if not 7 <= len(digits) <= 15:
+                raise ValueError()
+            rows.append({
+                "number": "+" + digits, "service": service, "country": country,
+            })
+        if len({item["number"] for item in rows}) != len(rows):
+            raise ValueError()
+    except (TypeError, ValueError, json.JSONDecodeError):
+        return _miniapp_cors(web.json_response(
+            {"error": "invalid_ivasper_numbers",
+             "message": "1–100 fərqli nömrə daxil edin; ölkə və xidmət adını yoxlayın."},
+            status=400))
+
+    source_url = os.environ.get("IVASPER_NUMBERS_URL", "").strip()
+    writer_token = os.environ.get("IVASPER_IMPORT_TOKEN", "").strip()
+    if (not valid_inventory_url(source_url) or not source_url.endswith("/numbers")
+            or len(writer_token) < 32):
+        return _miniapp_cors(web.json_response(
+            {"error": "ivasper_import_not_configured",
+             "message": "IVASPER qəbul ayarları Render-də tamamlanmayıb."},
+            status=503))
+    import_url = source_url[:-len("/numbers")] + "/import"
+    try:
+        async with httpx.AsyncClient(
+                timeout=httpx.Timeout(14.0), follow_redirects=False,
+                trust_env=False) as client:
+            response = await client.post(
+                import_url,
+                json={"numbers": rows},
+                headers={"Authorization": "Bearer " + writer_token,
+                         "Accept": "application/json"})
+    except httpx.HTTPError:
+        return _miniapp_cors(web.json_response(
+            {"error": "ivasper_connection_failed",
+             "message": "IVASPER servisinə bağlantı alınmadı."}, status=502))
+    if response.status_code == 503:
+        return _miniapp_cors(web.json_response(
+            {"error": "ivasper_storage_not_ready",
+             "message": "IVASPER PostgreSQL bağlantısını Render-də DATABASE_URL ilə qurun."},
+            status=503))
+    if response.status_code != 200:
+        return _miniapp_cors(web.json_response(
+            {"error": "ivasper_import_failed",
+             "message": "IVASPER nömrə qəbulunu təsdiqləmədi. API ayarlarını yoxlayın."},
+            status=502))
     return _miniapp_cors(web.json_response(
-        snapshot, headers={"Cache-Control": "private, no-store"}))
+        {"ok": True, "accepted": len(rows)},
+        headers={"Cache-Control": "private, no-store"}))
 
 
 async def miniapp_admin_api(request):
