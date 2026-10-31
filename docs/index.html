@@ -609,6 +609,7 @@
                 <p class="notice-mini">Bölməni seçərək birbaşa idarəetmə alətlərinə keçin. Səlahiyyətlər serverdə yoxlanılır.</p>
                 <div class="admin-nav-grid">
                     <button class="action-small" onclick="adminJump('admin-users-section')">👥 İstifadəçilər</button>
+                    <button class="action-small" onclick="adminJump('admin-ivasper-section')">🧰 IVASPER nömrələr</button>
                     <button class="action-small" onclick="adminJump('admin-wa-referral-section')">🎁 WhatsApp dəvətləri</button>
                     <button class="action-small" onclick="adminJump('admin-api-sales-section')">🛒 API Satışı</button>
                     <button class="action-small" onclick="adminJump('admin-hourly-promos-section')">📣 Saatlıq bot elanları</button>
@@ -623,6 +624,26 @@
                     <button class="action-small" onclick="adminJump('admin-archive-section')">📦 Arxiv</button>
                 </div>
             </div>
+            <section class="card" id="admin-ivasper-section" aria-labelledby="admin-ivasper-heading">
+                <h4 id="admin-ivasper-heading">🧰 IVASPER — nömrələr və xidmətlər</h4>
+                <p class="notice-mini">Yalnız admin üçün. Mövcud IVASMS API-dən xidmət və ölkə/range seçin, 5 nömrə variantını yoxlayın və öz hesabınıza birini ayırın. Xarici layihənin şəxsi API açarları istifadə olunmur.</p>
+                <p class="notice-mini" id="ivasper-status" role="status" aria-live="polite">Xidmət siyahısı yüklənir...</p>
+                <div class="quick-actions">
+                    <button class="action-small" type="button" onclick="loadIvasperAdmin()">🔄 Yenilə</button>
+                    <button class="action-small" type="button" onclick="switchTab('active')">📱 Bütün aktiv nömrələrim</button>
+                </div>
+                <div class="catalog-tools" style="flex-wrap:wrap">
+                    <label for="ivasper-service-select" class="notice-mini">Xidmət</label>
+                    <select id="ivasper-service-select" class="admin-input" onchange="renderIvasperRanges()" aria-label="IVASPER xidmət seçimi"></select>
+                    <label for="ivasper-country-select" class="notice-mini">Ölkə / telefon kodu</label>
+                    <select id="ivasper-country-select" class="admin-input" onchange="renderIvasperRangeList()" aria-label="IVASPER ölkə seçimi"></select>
+                    <input id="ivasper-range-search" class="admin-input" type="search" placeholder="🔎 Range axtar, məsələn 99450" aria-label="IVASPER range axtarışı" oninput="renderIvasperRangeList()" autocomplete="off">
+                </div>
+                <div id="ivasper-range-list" class="catalog-scroll" aria-live="polite"></div>
+                <p class="notice-mini">Range-in görünməsi həmin nömrədən istifadə mümkünlüyünü təsdiqləmir. Nömrə seçimi mövcud /api/get-number vasitəsilə yoxlanır. Admin sifarişləri mövcud qaydalara əsasən pulsuzdur.</p>
+                <h4 style="margin:14px 0 8px">📱 Mənim aktiv nömrələrim</h4>
+                <div id="ivasper-own-active" class="catalog-scroll" aria-live="polite"></div>
+            </section>
             <section class="card api-sales-admin" id="admin-hourly-promos-section">
                 <h4>📣 Bot istifadəçilərinə saatlıq nömrə elanları</h4>
                 <p class="notice-mini">Qısa elanlar qeydiyyatlı bot istifadəçilərinin şəxsi çatlarına göndərilir, qrupa yox. Mesajlar növbə ilə dəyişir. Heç bir OTP, API açarı və ya şəxsi nömrə paylaşılmır.</p>
@@ -904,7 +925,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261029-bot-hourly-promos"></script>
+    <script src="app.js?v=20261031-ivasper-admin-web"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
