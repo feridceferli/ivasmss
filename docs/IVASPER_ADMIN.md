@@ -19,6 +19,33 @@ Nömrələrin siyahıya əlavə edilməsi onların SMS/OTP qəbul etdiyini
 təsdiqləmir. Yalnız idarə etdiyiniz və istifadəsinə icazəniz olan
 nömrələri əlavə edin.
 
+## Niyə siyahıda 0 nömrə görünür?
+
+Siyahı yalnız ayrıca IVASPER inventarına **həqiqətən qəbul edilmiş**
+nömrələri göstərir. GitHub layihəsində və Render-də avtomatik olaraq
+yeni real telefon nömrələri yaranmır. Orijinal IVASPER botunun da
+nömrə hovuzu admin tərəfindən doldurulur.
+
+İki vəziyyəti ayırd edin:
+
+- **«IVASPER bazası əlçatan deyil»** — ayrıca API-nin
+  `DATABASE_URL` dəyişəni yoxdur və ya PostgreSQL bağlantısı nasazdır.
+  <https://dashboard.render.com/web/srv-dbittqoae00c73cm5rr0>
+  səhifəsində **Environment** bölməsinə
+  <https://dashboard.render.com/d/dpg-dbitrics728c7389r7m0-a>
+  resursunun **Internal Database URL** dəyərini məxfi olaraq yazın və
+  **Save and deploy** seçin. `GET /health` düzgün bağlı bazada
+  `"persistent_import_enabled": true` qaytaracaq.
+- **«İnventar boşdur»** — ayrıca bazaya hələ nömrə daxil edilməyib.
+  Sayt/Mini App **Admin → IVASPER → Nömrə qəbul et** bölməsində öz
+  nömrələrinizi alt-alta yazın və ya `.txt` faylından seçib
+  qəbul edin. Nömrə daxil olunmadıqda heç bir sistem avtomatik olaraq
+  real nömrə uydurmur.
+
+PostgreSQL bağlantısı olmadan əvvəlki boş JSON fallback-ı artıq
+uğurlu mənbə kimi göstərilmir. Bu dəyişiklik problemi gizlətmək
+əvəzinə adminə səbəbini göstərir.
+
 ## Render konfiqurasiyası
 
 Hazırda üç resurs var:
