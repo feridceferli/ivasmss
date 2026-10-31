@@ -11,6 +11,22 @@ for (const id of [
   "ivasper-own-active"
 ]) assert.ok(html.includes('id="' + id + '"'), "Missing admin panel element: " + id);
 
+for (const id of [
+  "ivasper-archive-country", "ivasper-archive-summary", "ivasper-archive-list",
+  "ivasper-archive-prev", "ivasper-archive-next", "ivasper-archive-pages"
+]) assert.ok(html.includes('id="' + id + '"'), "Missing country archive element: " + id);
+assert.ok(js.includes("function renderIvasperArchive()"));
+assert.ok(js.includes("async function loadIvasperArchivePage(page = 0)"));
+assert.ok(js.includes('api("/api/ivasper?country="'));
+assert.ok(js.includes("encodeURIComponent(country)"));
+assert.ok(js.includes("renderIvasperArchive();"));
+assert.ok(js.includes('copy.addEventListener("click", () => copyPhoneNumber(number))'));
+const archiveStart = js.indexOf("function renderIvasperArchive()");
+const archiveEnd = js.indexOf("let adminUsersCache = []", archiveStart);
+assert.ok(archiveStart >= 0 && archiveEnd > archiveStart, "Archive renderer missing");
+assert.ok(!js.slice(archiveStart, archiveEnd).includes(".innerHTML"),
+  "Archived numbers must be rendered as text nodes, not HTML");
+
 const adminStart = html.indexOf('id="tab-admin"');
 const panelStart = html.indexOf('id="admin-ivasper-section"');
 assert.ok(adminStart >= 0 && panelStart > adminStart, "IVASPER must remain in protected admin tab");
