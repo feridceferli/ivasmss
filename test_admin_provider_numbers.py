@@ -83,6 +83,13 @@ class NumberStockAccessTests(unittest.TestCase):
         self.assertIn('"/api/admin-provider-numbers", miniapp_admin_provider_numbers_api', main)
         self.assertIn('"admin_provider_numbers": ADMIN_PROVIDER_NUMBERS_FILE', main)
         self.assertIn('"admin_provider_numbers",', backup)
+        self.assertIn('CommandHandler("green_sms", admin_provider_number_command)', main)
+        self.assertIn('CommandHandler("ivasmsper", admin_provider_number_command)', main)
+        private_command = next(n for n in tree.body if isinstance(n, ast.AsyncFunctionDef)
+                               and n.name == "admin_provider_number_command")
+        command_code = ast.get_source_segment(main, private_command)
+        self.assertIn('update.effective_chat.type != "private" or not is_admin', command_code)
+        self.assertIn('await feed_snapshot(provider, limit=5)', command_code)
 
     def test_ui_renders_only_in_admin_and_without_raw_html(self):
         html = Path("docs/index.html").read_text(encoding="utf-8")

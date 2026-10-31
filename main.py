@@ -7181,6 +7181,51 @@ async def admin_provider_number_command(update: Update, context: ContextTypes.DE
         return
     provider = "green_sms" if update.message.text.split()[0].split("@")[0] == "/green_sms" else "ivasmsper"
     args = context.args or []
+    if args and args[0].lower() == "status":
+        state = configured_status()[provider]
+        rest = "aktiv konfiqurasiya" if state.get("rest_configured") else "HTTPS API açarı/ünvanı yoxdur"
+        websocket = ""
+        if provider == "ivasmsper":
+            websocket = ("\\nWebSocket: " +
+                         ("qoşulub" if state.get("live_connected") else
+                          "konfiqurasiya var, bağlantı yoxdur" if state.get("websocket_configured")
+                          else "konfiqurasiya edilməyib"))
+        await update.message.reply_text(
+            f"🔐 {provider}\\nREST: {rest}" + websocket +
+            "\\nProvayder mesajlarına baxmaq üçün /" + provider + " sms yazın."
+        )
+        return
+    if args and args[0].lower() in ("sms", "messages"):
+        try:
+            response = await feed_snapshot(provider, limit=5)
+        except ProviderFeedError as exc:
+            explanations = {
+                "provider_not_configured": "HTTPS API ünvanı və şəxsi açar mövcud deyil.",
+                "upstream_unauthorized": "API açarı qəbul edilmədi (401).",
+                "upstream_forbidden": "API girişə icazə vermir (403).",
+                "upstream_endpoint_missing": "API endpoint tapılmadı (404).",
+                "upstream_rate_limited": "Provayder sorğu limitini keçib (429).",
+                "upstream_unreachable_or_invalid": "Provayderə qoşulmaq mümkün olmadı.",
+                "invalid_provider_response": "API gözlənilməyən cavab qaytardı.",
+            }
+            await update.message.reply_text(
+                "⚠️ " + explanations.get(exc.code, "Mənbə xətası: " + exc.code))
+            return
+        rows = response.get("records", [])[:5]
+        if not rows:
+            await update.message.reply_text(
+                "📭 Bu provayderin hesabında hazırda oxuna bilən SMS yoxdur. "
+                "Nömrə ehtiyatı SMS axınından ayrıca idarə olunur."
+            )
+            return
+        lines = []
+        for record in rows:
+            number = str(record.get("number") or "—")[:30]
+            service = str(record.get("service") or "SMS")[:40]
+            message = str(record.get("message") or "Mətn yoxdur")[:350]
+            lines.append(f"📱 {number} | {service}\\n{message}")
+        await update.message.reply_text("🔐 Şəxsi SMS görünüşü:\\n\\n" + "\\n\\n".join(lines))
+        return
     if args and args[0].lower() == "add":
         if not user_backup.ready:
             await update.message.reply_text("⛔ Şəxsi arxiv bağlantısı hazır deyil; əlavə etmək dayandırıldı.")
@@ -7207,6 +7252,7 @@ async def admin_provider_number_command(update: Update, context: ContextTypes.DE
         f"🔐 {title} — admin nömrələri: {items['count']}\n" +
         ("\n".join(first) if first else "Hazırda idxal edilmiş nömrə yoxdur.") +
         f"\n\nƏlavə et: /{provider} add +994501234567\n"
+        "SMS-lər: /" + provider + " sms · Bağlantı: /" + provider + " status\\n"
         "Daha çox nömrə üçün sayt və Mini App → Admin bölməsini açın."
     )
 
