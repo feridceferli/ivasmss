@@ -4,6 +4,7 @@ on:
     paths:
       - ivasper_admin.py
       - ivasper_web.py
+      - ivasper_external.py
       - main.py
       - docs/app.js
       - docs/index.html
@@ -14,6 +15,7 @@ on:
     paths:
       - ivasper_admin.py
       - ivasper_web.py
+      - ivasper_external.py
       - main.py
       - docs/app.js
       - docs/index.html
