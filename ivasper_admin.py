@@ -163,7 +163,7 @@ def archive_detail_text(archived, owner_id, country_index, page):
         "🔙 Ölkələr", callback_data=f"ivasper_admin:archive_page:{country_index // 10}")])
     rows.append([InlineKeyboardButton(
         "🏠 Admin paneli", callback_data="ivasper_admin:summary")])
-    return "\\n".join(lines), InlineKeyboardMarkup(rows)
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
 
 
 def register_ivasper_admin_handlers(app, is_admin, is_banned, load_archive,
@@ -184,7 +184,7 @@ def register_ivasper_admin_handlers(app, is_admin, is_banned, load_archive,
             countries, _ = archive_country_page(archive, uid)
             list_page = int(mode.split(":")[1]) if ":" in mode else 0
             report = build_report("archive", {}, archive, {})
-            return (report + "\\n\\n🌍 Ölkəyə toxunaraq öz tam nömrələrinizi görün.",
+            return (report + "\n\n🌍 Ölkəyə toxunaraq öz tam nömrələrinizi görün.",
                     archive_country_keyboard(countries, list_page))
         try:
             services = await asyncio.wait_for(fetch_services(), timeout=8)
