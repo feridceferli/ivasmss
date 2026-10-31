@@ -42,6 +42,17 @@ class InventoryServiceTests(unittest.TestCase):
             request = make_mocked_request("GET", "/numbers")
             self.assertFalse(_authorized(request, "IVASPER_READER_TOKEN"))
 
+    def test_number_import_appends_without_destroying_stock(self):
+        import inspect
+        from ivasper_inventory_service import add_inventory, read_inventory, import_inventory
+        source = inspect.getsource(add_inventory)
+        self.assertIn("INSERT INTO ivasper_inventory", source)
+        self.assertIn("ON CONFLICT", source)
+        self.assertNotIn("DELETE FROM ivasper_inventory", source)
+        self.assertIn("init_storage()", inspect.getsource(read_inventory))
+        self.assertIn("asyncio.to_thread(add_inventory, rows)", inspect.getsource(import_inventory))
+        self.assertIn("persistent_storage_not_connected", inspect.getsource(import_inventory))
+
     def test_isolated_routes_only(self):
         app = create_app()
         routes = [route.resource.canonical for route in app.router.routes()]
