@@ -39,6 +39,8 @@
             const data = await api("/api/admin-provider-feeds");
             for (const name of Object.keys(NAMES)) {
                 sourceStatus(name, (data.providers || {})[name]);
+                loadAdminProviderNumbers(name);
+                refreshProviderFeed(name);
             }
         } catch (error) {
             for (const name of Object.keys(NAMES)) sourceStatus(name, null);
@@ -115,10 +117,13 @@
             const data = await api("/api/admin-provider-feeds?provider=" +
                 encodeURIComponent(provider) + "&limit=20");
             renderFeed(provider, data.records);
-            await loadAdminProviderFeeds();
         } catch (error) {
             const map = {
-                provider_not_configured: "Render Environment-də bu provayderin şəxsi API məlumatları yoxdur.",
+                provider_not_configured: "HTTPS mənbə ünvanı və ya şəxsi API açarı konfiqurasiya edilməyib. Açıq HTTP linkləri bloklanır.",
+                upstream_unauthorized: "API açarı qəbul edilmədi (HTTP 401).",
+                upstream_forbidden: "Provayder icazə vermir (HTTP 403). Hesab səlahiyyətlərini yoxlayın.",
+                upstream_endpoint_missing: "API endpoint tapılmadı (HTTP 404). Ünvanı yoxlayın.",
+                upstream_rate_limited: "Provayder sorğunu məhdudlaşdırıb (HTTP 429).",
                 upstream_http_error: "Provayder HTTP xətası qaytardı. Açarı və icazələri yoxlayın.",
                 upstream_redirect_rejected: "Provayder gözlənilməz yönləndirmə qaytardı.",
                 upstream_unreachable_or_invalid: "Provayderdən düzgün cavab alınmadı.",
@@ -128,6 +133,106 @@
         }
     }
 
+    async function loadAdminProviderNumbers(provider) {
+        if (!state.isAdmin || !Object.prototype.hasOwnProperty.call(NAMES, provider)) return;
+        const box = $("admin-" + provider + "-numbers");
+        const status = $("admin-" + provider + "-stock-status");
+        if (!box || !status) return;
+        try {
+            const data = await api("/api/admin-provider-numbers?provider=" + encodeURIComponent(provider));
+            status.textContent = "📱 Nömrə ehtiyatı: " + data.count +
+                " · " + (data.backup_ready ? "Şəxsi yedək hazırdır" :
+                           "⚠️ Şəxsi yedək hazır deyil — idxal bağlanıb");
+            box.replaceChildren();
+            if (!data.count) {
+                box.appendChild(block("Bu provayderdə avtomatik nömrə yaradılmır. " +
+                    "İcazəli nömrələrinizi aşağıdakı sahə ilə əlavə edin."));
+                return;
+            }
+            for (const entry of (data.numbers || [])) {
+                const row = document.createElement("div");
+                row.className = "admin-user-line";
+                row.style.cssText = "display:flex;align-items:center;flex-wrap:wrap;gap:8px";
+                row.appendChild(block(entry.number, "notice-mini"));
+                const copy = document.createElement("button");
+                copy.type = "button";
+                copy.className = "action-small";
+                copy.textContent = "📋 Kopyala";
+                copy.addEventListener("click", () => copyPrivate(entry.number));
+                row.appendChild(copy);
+                const remove = document.createElement("button");
+                remove.type = "button";
+                remove.className = "action-small";
+                remove.textContent = "🗑 Sil";
+                remove.addEventListener("click", () => deleteAdminProviderNumber(provider, entry.number));
+                row.appendChild(remove);
+                box.appendChild(row);
+            }
+        } catch (error) {
+            status.textContent = "⚠️ Nömrə siyahısı alınmadı: " + error.message;
+        }
+    }
+
+    async function importAdminProviderNumbers(provider) {
+        if (!state.isAdmin || !Object.prototype.hasOwnProperty.call(NAMES, provider)) return;
+        const input = $("admin-" + provider + "-number-import");
+        const text = (input?.value || "").trim();
+        if (!text) {
+            toast("Əlavə ediləcək öz nömrələrinizi daxil edin.", "error");
+            return;
+        }
+        try {
+            const result = await api("/api/admin-provider-numbers?provider=" +
+                encodeURIComponent(provider), {
+                method: "POST", body: {action: "import", numbers: text}
+            });
+            input.value = "";
+            toast("✅ " + result.added + " nömrə əlavə edildi.", "success");
+            await loadAdminProviderNumbers(provider);
+        } catch (error) {
+            const messages = {
+                invalid_count: "Bir dəfəyə 1–200 nömrə əlavə edin.",
+                invalid_number: "Nömrələr beynəlxalq formatda olmalıdır (məs: +994501234567).",
+                invalid_import: "Mətn faylı çox böyükdür.",
+                stock_limit: "Bir mənbədə maksimum 4000 nömrə saxlanıla bilər.",
+                backup_not_ready: "Şəxsi yedəkləmə hazır deyil. Render-də özəl arxiv bağlantısını yoxlayın.",
+                backup_failed: "Yerli yaddaşda saxlanıldı, amma yedəyə yazılmadı. Təkrar idxal etməzdən əvvəl yedəyi yoxlayın."
+            };
+            toast("⚠️ " + (messages[error.code] || error.message), "error");
+            await loadAdminProviderNumbers(provider);
+        }
+    }
+
+    async function deleteAdminProviderNumber(provider, number) {
+        if (!state.isAdmin || !Object.prototype.hasOwnProperty.call(NAMES, provider)) return;
+        if (!window.confirm("Bu nömrəni yalnız " + NAMES[provider] + " siyahısından silək?")) return;
+        try {
+            await api("/api/admin-provider-numbers?provider=" + encodeURIComponent(provider), {
+                method: "POST", body: {action: "delete", number}
+            });
+            toast("✅ Nömrə siyahıdan silindi.", "success");
+            await loadAdminProviderNumbers(provider);
+        } catch (error) {
+            toast("⚠️ " + error.message, "error");
+        }
+    }
+
+    async function importProviderTextFile(provider, input) {
+        if (!state.isAdmin || !Object.prototype.hasOwnProperty.call(NAMES, provider)) return;
+        const file = input.files?.[0];
+        if (!file) return;
+        if (file.size > 12000) {
+            toast("TXT fayl 12 KB-dan böyük ola bilməz.", "error");
+        } else {
+            $("admin-" + provider + "-number-import").value = await file.text();
+            toast("TXT oxundu; saxlanılması üçün 'Nömrələri əlavə et' düyməsinə basın.");
+        }
+        input.value = "";
+    }
+
     window.loadAdminProviderFeeds = loadAdminProviderFeeds;
+    window.loadAdminProviderNumbers = loadAdminProviderNumbers;
+    window.importAdminProviderNumbers = importAdminProviderNumbers;
+    window.importProviderTextFile = importProviderTextFile;
     window.refreshProviderFeed = refreshProviderFeed;
 })();

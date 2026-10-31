@@ -56,3 +56,46 @@ The app intentionally refuses insecure HTTP/Ws upstream URLs to keep private
 keys and messages from being transmitted without transport encryption.
 For a legacy HTTP-only provider, install an authenticated HTTPS reverse proxy
 under your control before pointing the application to it.
+
+## Admin-only number lists (new)
+
+These two source repositories do not document a number-purchase or stock API.
+The SMS `number` field is the destination number in a delivered message;
+it must not be represented as a currently available number for allocation.
+
+For a usable admin-only authorized number list, open **Admin → Green SMS**
+or **Admin → Ivasmsper** in the website/Mini App and:
+
+1. Paste phone numbers (one per line, E.164 international format), or choose a
+   plain `.txt` file, then press **Nömrələri əlavə et**.
+2. Use **Kopyala** for one of your imported numbers or **Sil** to remove it.
+3. Keep SMS events in the separate **mesajlar** view above the inventory.
+
+Each provider has a completely separate stored list. The `/green_sms` and
+`/ivasmsper` Telegram commands are private and admin-only, showing the count
+and five sample numbers. An admin can send
+`/green_sms add +994501234567` or `/ivasmsper add +994501234567` to import
+a number. No regular Telegram user can see or modify these lists.
+
+The source of numbers is **explicit admin input**, not arbitrary generation or
+an unverified external stock feed. Imported numbers are NOT automatically
+rentable, and incoming SMS is only available when the upstream service
+actually routes SMS to those numbers.
+
+`admin_provider_numbers.json` is included in `user_backup`'s private GitHub
+snapshot. Writes are refused while that private backup is not ready, and the
+site reports a backup error if a local save was not synchronized remotely.
+Do not set `NUMBER_ARCHIVE_GITHUB_REPO` to a public repository.
+
+## If no messages show up
+
+- First check whether the admin status reports the provider as configured.
+- The Green SMS sample hardcodes an **HTTP-only IP address**. That is not a
+  secure HTTPS API endpoint and will be rejected by this integration.
+  Configure a legitimate HTTPS endpoint offered by your provider, or a
+  properly secured TLS reverse proxy you own.
+- Ivasmsper's sample uses manually entered REST panels and optional Socket.IO
+  credentials, not a discovered inventory. If an authorized REST panel has no
+  messages, its result may be empty.
+- Render deploying successfully confirms that the bot server started, not
+  that a provider authorized requests or had SMS/number inventory.

@@ -3,6 +3,7 @@ from data_storage import data_path, atomic_save
 from admin_provider_feeds import (
     ProviderFeedError, configured_status, feed_snapshot, run_ivasmsper_websocket,
 )
+from admin_provider_numbers import AdminNumberStock, NumberStockError, PROVIDERS
 from number_archive import NumberArchive, txt_chunks
 from otp_leaderboard import otp_leaderboards, leaderboard_page
 from user_backup import UserProfileBackup
@@ -122,6 +123,8 @@ FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 ACTIVE_LEASES_FILE = data_path("active_leases.json")
 API_SALES_FILE = data_path("api_sales_private.json")
 BOT_PROMO_FILE = data_path("bot_user_promos.json")
+ADMIN_PROVIDER_NUMBERS_FILE = data_path("admin_provider_numbers.json")
+admin_provider_numbers = AdminNumberStock(ADMIN_PROVIDER_NUMBERS_FILE)
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
@@ -142,6 +145,7 @@ user_backup = UserProfileBackup(
         "active_leases": ACTIVE_LEASES_FILE,
         "api_sales": API_SALES_FILE,
         "bot_user_promos": BOT_PROMO_FILE,
+        "admin_provider_numbers": ADMIN_PROVIDER_NUMBERS_FILE,
     },
 )
 
@@ -7106,6 +7110,107 @@ async def miniapp_admin_provider_feeds_api(request):
     return response
 
 
+async def _commit_admin_number_changes():
+    """Only report durable import success after the private backup accepts it."""
+    user_backup.changed()
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
+        await user_backup.sync_once(client)
+
+
+async def miniapp_admin_provider_numbers_api(request):
+    """List/import/delete numbers from admin-owned inventories only."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    user, err = _miniapp_auth(request)
+    if not user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": err}, status=401))
+    uid = int(user["id"])
+    if not is_admin(uid) or is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    provider = request.query.get("provider", "").strip()
+    if provider not in PROVIDERS:
+        return _miniapp_cors(web.json_response({"error": "invalid_provider"}, status=400))
+    if request.method == "GET":
+        try:
+            snapshot = admin_provider_numbers.list(provider)
+        except NumberStockError as exc:
+            return _miniapp_cors(web.json_response({"error": exc.code}, status=503))
+        response = _miniapp_cors(web.json_response({
+            **snapshot, "backup_ready": bool(user_backup.ready),
+        }))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    if not user_backup.ready:
+        return _miniapp_cors(web.json_response({"error": "backup_not_ready"}, status=503))
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
+    if not isinstance(body, dict):
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
+    action = body.get("action")
+    try:
+        if action == "import":
+            result = await admin_provider_numbers.import_text(provider, body.get("numbers"))
+        elif action == "delete":
+            result = await admin_provider_numbers.delete(provider, body.get("number"))
+        else:
+            return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
+    except NumberStockError as exc:
+        return _miniapp_cors(web.json_response({"error": exc.code}, status=400
+            if exc.code not in ("inventory_unavailable",) else 503))
+    try:
+        await _commit_admin_number_changes()
+    except (OSError, RuntimeError, ValueError, httpx.HTTPError) as exc:
+        print("[admin-number-stock] backup pending: " + type(exc).__name__, flush=True)
+        return _miniapp_cors(web.json_response(
+            {"error": "backup_failed", "saved_locally": True}, status=503))
+    response = _miniapp_cors(web.json_response({"ok": True, **result}))
+    response.headers["Cache-Control"] = "no-store"
+    return response
+
+
+async def admin_provider_number_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Private Telegram commands: /green_sms and /ivasmsper (no OTP forwarding)."""
+    if not update.effective_user or not update.effective_chat:
+        return
+    if update.effective_chat.type != "private" or not is_admin(update.effective_user.id):
+        return
+    provider = "green_sms" if update.message.text.split()[0].split("@")[0] == "/green_sms" else "ivasmsper"
+    args = context.args or []
+    if args and args[0].lower() == "add":
+        if not user_backup.ready:
+            await update.message.reply_text("⛔ Şəxsi arxiv bağlantısı hazır deyil; əlavə etmək dayandırıldı.")
+            return
+        try:
+            result = await admin_provider_numbers.import_text(provider, "\n".join(args[1:]))
+            await _commit_admin_number_changes()
+        except NumberStockError as exc:
+            await update.message.reply_text("⚠️ Nömrə formatı və ya limit xətası: " + exc.code)
+            return
+        except (OSError, RuntimeError, ValueError, httpx.HTTPError):
+            await update.message.reply_text("⚠️ Yerli yaddaş yeniləndi, şəxsi arxivə sinxronizasiya alınmadı.")
+            return
+        await update.message.reply_text(f"✅ {result['added']} yeni nömrə əlavə edildi. Cəmi: {result['count']}.")
+        return
+    try:
+        items = admin_provider_numbers.list(provider)
+    except NumberStockError:
+        await update.message.reply_text("⚠️ Nömrə arxivi oxunmur.")
+        return
+    title = "Green SMS" if provider == "green_sms" else "Ivasmsper"
+    first = [row["number"] for row in items["numbers"][:5]]
+    await update.message.reply_text(
+        f"🔐 {title} — admin nömrələri: {items['count']}\n" +
+        ("\n".join(first) if first else "Hazırda idxal edilmiş nömrə yoxdur.") +
+        f"\n\nƏlavə et: /{provider} add +994501234567\n"
+        "Daha çox nömrə üçün sayt və Mini App → Admin bölməsini açın."
+    )
+
+
 async def post_init(application):
     # Preserve administrator-edited news settings across restarts.
     # Restore users, referrals, permissions and preferences BEFORE workers start.
@@ -7144,6 +7249,8 @@ def register_handlers(app):
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
+    app.add_handler(CommandHandler("green_sms", admin_provider_number_command))
+    app.add_handler(CommandHandler("ivasmsper", admin_provider_number_command))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("referral", referral_command))
     app.add_handler(CommandHandler("menu", legacy_menu_command))
@@ -7236,6 +7343,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
     server.router.add_route("*", "/api/admin-provider-feeds", miniapp_admin_provider_feeds_api)
+    server.router.add_route("*", "/api/admin-provider-numbers", miniapp_admin_provider_numbers_api)
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
