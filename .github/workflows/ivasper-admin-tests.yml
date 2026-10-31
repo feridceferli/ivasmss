@@ -1,9 +1,25 @@
 name: Ivasper admin tests
 on:
   push:
-    paths: [ivasper_admin.py, main.py, test_ivasper_admin.py]
+    paths:
+      - ivasper_admin.py
+      - ivasper_web.py
+      - main.py
+      - docs/app.js
+      - docs/index.html
+      - test_ivasper_admin.py
+      - test_ivasper_web.py
+      - test_ivasper_web_ui.cjs
   pull_request:
-    paths: [ivasper_admin.py, main.py, test_ivasper_admin.py]
+    paths:
+      - ivasper_admin.py
+      - ivasper_web.py
+      - main.py
+      - docs/app.js
+      - docs/index.html
+      - test_ivasper_admin.py
+      - test_ivasper_web.py
+      - test_ivasper_web_ui.cjs
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -11,5 +27,9 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.12'
-      - run: python -m unittest -v test_ivasper_admin.py
+          python-version: "3.12"
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - run: python -m unittest -v test_ivasper_admin.py test_ivasper_web.py
+      - run: node --check docs/app.js && node test_ivasper_web_ui.cjs
