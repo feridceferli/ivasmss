@@ -5,6 +5,7 @@ from admin_provider_feeds import (
 )
 from admin_provider_numbers import AdminNumberStock, NumberStockError, PROVIDERS
 from sms_test_diagnostics import SmsDiagnosticStore, SmsDiagnosticError
+from sms_live_sender import TwilioAllowlistedSender, SmsLiveError
 from number_archive import NumberArchive, txt_chunks
 from otp_leaderboard import otp_leaderboards, leaderboard_page
 from user_backup import UserProfileBackup
@@ -128,6 +129,7 @@ ADMIN_PROVIDER_NUMBERS_FILE = data_path("admin_provider_numbers.json")
 admin_provider_numbers = AdminNumberStock(ADMIN_PROVIDER_NUMBERS_FILE)
 SMS_TEST_DIAGNOSTICS_FILE = data_path("sms_test_diagnostics_private.json")
 sms_diagnostic_store = SmsDiagnosticStore(SMS_TEST_DIAGNOSTICS_FILE)
+sms_live_sender = TwilioAllowlistedSender()
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
@@ -7087,7 +7089,7 @@ async def _sync_sms_diagnostics():
 
 
 async def miniapp_sms_diagnostics_api(request):
-    """Dry-run only. Never invokes any third-party SMS/OTP endpoint."""
+    """Simulate for eligible users; real provider test SMS is admin-only and allowlisted."""
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
     user, reason = _miniapp_auth(request)
@@ -7101,6 +7103,8 @@ async def miniapp_sms_diagnostics_api(request):
     if request.method == "GET":
         try:
             payload = sms_diagnostic_store.snapshot(uid, admin)
+            if admin:
+                payload["live_sms"] = sms_live_sender.status()
         except SmsDiagnosticError as exc:
             return _miniapp_cors(web.json_response({"error": exc.code}, status=503))
         payload["backup_ready"] = bool(user_backup.ready) if admin else None
@@ -7128,21 +7132,37 @@ async def miniapp_sms_diagnostics_api(request):
         elif action == "simulate":
             payload = await sms_diagnostic_store.simulate(
                 uid, body.get("number"), body.get("consent"), is_admin=admin)
+        elif action == "send_live":
+            if not admin:
+                return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+            payload = await sms_diagnostic_store.send_live(
+                uid, body.get("number"), body.get("consent"),
+                is_admin=admin, sender=sms_live_sender)
         else:
             return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
     except SmsDiagnosticError as exc:
         response_status = 503 if exc.code == "storage_unavailable" else (
-            403 if exc.code == "feature_disabled" else
-            429 if exc.code in ("rate_limited", "daily_limit") else 400)
+            403 if exc.code in ("feature_disabled", "forbidden") else
+            429 if exc.code in ("rate_limited", "daily_limit", "live_daily_limit",
+                                 "live_phone_cooldown") else 400)
         return _miniapp_cors(web.json_response({"error": exc.code}, status=response_status))
+    except SmsLiveError as exc:
+        return _miniapp_cors(web.json_response(
+            {"error": exc.code}, status=503 if exc.code == "provider_not_configured" else 403))
     try:
         await _sync_sms_diagnostics()
     except (OSError, RuntimeError, ValueError, httpx.HTTPError) as exc:
         print("[sms-diagnostics] private sync pending: " + type(exc).__name__, flush=True)
         return _miniapp_cors(web.json_response(
             {"error": "backup_failed", "saved_locally": True}, status=503))
+    if action == "send_live" and not payload["ok"]:
+        return _miniapp_cors(web.json_response({
+            "error": payload["error"], "saved_locally": True,
+            "mode": "twilio_submission_attempt",
+        }, status=502))
     result = _miniapp_cors(web.json_response({
-        "ok": True, "result": payload, "mode": "dry_run_no_sms_sent",
+        "ok": True, "result": payload,
+        "mode": "twilio_submission_attempt" if action == "send_live" else "dry_run_no_sms_sent",
     }))
     result.headers["Cache-Control"] = "no-store"
     return result
