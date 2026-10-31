@@ -161,6 +161,7 @@ function switchTab(tab) {
         fetchPrices();
         fetchApiSales();
         fetchBotHourlyPromos();
+        window.loadAdminProviderFeeds?.();
     }
 }
 

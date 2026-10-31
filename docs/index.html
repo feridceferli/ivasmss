@@ -621,8 +621,24 @@
                     <button class="action-small" onclick="adminJump('admin-balance-section')">💳 Balans</button>
                     <button class="action-small" onclick="adminJump('admin-news-section')">🌍 Xəbərlər</button>
                     <button class="action-small" onclick="adminJump('admin-archive-section')">📦 Arxiv</button>
+                    <button class="action-small" onclick="adminJump('admin-green_sms-section')">🟢 Green SMS (admin)</button>
+                    <button class="action-small" onclick="adminJump('admin-ivasmsper-section')">🔌 Ivasmsper (admin)</button>
                 </div>
             </div>
+            <section class="card" id="admin-green_sms-section" style="margin-top:12px" aria-label="Green SMS yalnız admin">
+                <h4>🟢 Green SMS — şəxsi admin paneli</h4>
+                <p class="notice-mini">Yalnız təsdiqlənmiş admin üçün ayrıca SMS mənbəyi. Əlavə edilən mesajlar digər istifadəçilərin xidmətlərinə, tarixçəsinə və qruplara ötürülmür.</p>
+                <p id="admin-green_sms-status" class="notice-mini" role="status">Konfiqurasiya yoxlanır...</p>
+                <button type="button" class="action-small" onclick="refreshProviderFeed('green_sms')">🔄 Green SMS mesajlarını oxu</button>
+                <div id="admin-green_sms-messages" class="catalog-scroll" aria-live="polite"></div>
+            </section>
+            <section class="card" id="admin-ivasmsper-section" style="margin-top:12px" aria-label="Ivasmsper yalnız admin">
+                <h4>🔌 Ivasmsper — şəxsi admin paneli</h4>
+                <p class="notice-mini">REST mesajları və konfiqurasiya edilərsə canlı WSS hadisələri ayrıca göstərilir. Mənbənin şəxsi tokenləri yalnız Render Environment-də saxlanılmalıdır.</p>
+                <p id="admin-ivasmsper-status" class="notice-mini" role="status">Konfiqurasiya yoxlanır...</p>
+                <button type="button" class="action-small" onclick="refreshProviderFeed('ivasmsper')">🔄 Ivasmsper mesajlarını oxu</button>
+                <div id="admin-ivasmsper-messages" class="catalog-scroll" aria-live="polite"></div>
+            </section>
             <section class="card api-sales-admin" id="admin-hourly-promos-section">
                 <h4>📣 Bot istifadəçilərinə saatlıq nömrə elanları</h4>
                 <p class="notice-mini">Qısa elanlar qeydiyyatlı bot istifadəçilərinin şəxsi çatlarına göndərilir, qrupa yox. Mesajlar növbə ilə dəyişir. Heç bir OTP, API açarı və ya şəxsi nömrə paylaşılmır.</p>
@@ -904,7 +920,8 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261031-ivasms-cleanup"></script>
+    <script src="app.js?v=20261031-admin-feeds"></script>
+    <script src="admin-provider-feeds.js?v=20261031-admin-feeds"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
