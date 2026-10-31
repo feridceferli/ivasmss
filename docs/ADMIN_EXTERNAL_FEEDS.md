@@ -99,3 +99,21 @@ Do not set `NUMBER_ARCHIVE_GITHUB_REPO` to a public repository.
   messages, its result may be empty.
 - Render deploying successfully confirms that the bot server started, not
   that a provider authorized requests or had SMS/number inventory.
+
+## Telegram admin checks
+
+In the **bot's private chat**, use:
+
+- `/green_sms` / `/ivasmsper`: count and first five imported numbers.
+- `/green_sms status` / `/ivasmsper status`: provider configuration and
+  optional live socket status, **without displaying secret tokens**.
+- `/green_sms sms` / `/ivasmsper sms`: up to five actual records from the
+  configured provider feed. If the provider returns no records or HTTP 401,
+  403, 404 or 429, the bot explains that status rather than inventing numbers.
+- `/green_sms add +994501234567` and
+  `/ivasmsper add +994501234567`: add explicitly authorized stock after
+  successfully synchronizing to the private backup.
+
+Only server-confirmed bot administrators in private conversations can execute
+these commands; nothing is forwarded to a group. Telegram commands and
+website/Mini App share the **same** two inventories.
