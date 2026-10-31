@@ -7,9 +7,10 @@ import asyncio
 import html
 import re
 from collections import Counter
+from ivasper_web import archive_country_page
 
 ADMIN_LABEL = "🧰 IVASPER NƏZARƏT"
-CALLBACK_PATTERN = r"^ivasper_admin:(summary|archive|services|close)$"
+CALLBACK_PATTERN = r"^ivasper_admin:(?:summary|archive|services|close|archive_page:[0-9]{1,3}|country:[0-9]{1,3}:[0-9]{1,4})$"
 SOURCE_REPO = "shagunallrepo/Ivasmsper"
 
 
@@ -100,17 +101,91 @@ def panel_keyboard():
     ])
 
 
+
+def archive_country_keyboard(countries, list_page=0):
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    max_pages = max(1, (len(countries) + 9) // 10)
+    page = min(max(0, int(list_page)), max_pages - 1)
+    rows = []
+    for idx in range(page * 10, min(len(countries), (page + 1) * 10)):
+        item = countries[idx]
+        label = str(item["country"])[:30] + " · " + str(item["my_count"]) + " mənim"
+        rows.append([InlineKeyboardButton(
+            label, callback_data=f"ivasper_admin:country:{idx}:0")])
+    navigation = []
+    if page:
+        navigation.append(InlineKeyboardButton(
+            "◀ Ölkələr", callback_data=f"ivasper_admin:archive_page:{page - 1}"))
+    if page < max_pages - 1:
+        navigation.append(InlineKeyboardButton(
+            "Ölkələr ▶", callback_data=f"ivasper_admin:archive_page:{page + 1}"))
+    if navigation:
+        rows.append(navigation)
+    rows.append([InlineKeyboardButton("🔙 Əsas panel", callback_data="ivasper_admin:summary")])
+    return InlineKeyboardMarkup(rows)
+
+
+def archive_detail_text(archived, owner_id, country_index, page):
+    """One country's *owner-only* allocated numbers, never other users' phones."""
+    from telegram import InlineKeyboardButton, InlineKeyboardMarkup
+    countries, _ = archive_country_page(archived, owner_id)
+    if not countries or country_index not in range(len(countries)):
+        return ("Arxivdə ölkə tapılmadı.", archive_country_keyboard(countries))
+    country = countries[country_index]["country"]
+    _, selected = archive_country_page(
+        archived, owner_id, country=country, page=page, page_size=12)
+    lines = [
+        "📦 <b>IVASPER — ÖLKƏ ÜZRƏ ARXİV</b>",
+        f"🌍 <b>{html.escape(country)}</b>",
+        f"📊 Ümumi arxiv qeydi: <b>{selected['total_count']}</b>",
+        f"📱 Öz nömrələrim: <b>{selected['my_count']}</b>",
+        "",
+    ]
+    if selected["entries"]:
+        lines.extend(f"• <code>{html.escape(item['number'])}</code> "
+                     f"— {html.escape(item['range'])}"
+                     for item in selected["entries"])
+    else:
+        lines.append("Bu ölkədə sizə ayrılmış arxiv nömrəsi yoxdur.")
+    lines.extend(["", "ℹ️ Arxivdəki nömrə hazırda aktiv olmaya bilər.",
+                  "🔒 Başqa istifadəçilərin tam nömrələri göstərilmir."])
+    rows = []
+    nav = []
+    if selected["page"] > 0:
+        nav.append(InlineKeyboardButton(
+            "◀", callback_data=f"ivasper_admin:country:{country_index}:{selected['page'] - 1}"))
+    if selected["page"] + 1 < selected["pages"]:
+        nav.append(InlineKeyboardButton(
+            "▶", callback_data=f"ivasper_admin:country:{country_index}:{selected['page'] + 1}"))
+    if nav:
+        rows.append(nav)
+    rows.append([InlineKeyboardButton(
+        "🔙 Ölkələr", callback_data=f"ivasper_admin:archive_page:{country_index // 10}")])
+    rows.append([InlineKeyboardButton(
+        "🏠 Admin paneli", callback_data="ivasper_admin:summary")])
+    return "\n".join(lines), InlineKeyboardMarkup(rows)
+
+
 def register_ivasper_admin_handlers(app, is_admin, is_banned, load_archive,
                                    fetch_services, get_monitor):
     """Install before the generic Telegram message and callback handlers."""
     from telegram.ext import CommandHandler, MessageHandler, CallbackQueryHandler, filters
     from telegram.error import BadRequest
 
-    async def render(mode):
+    async def render(mode, uid):
         try:
             archive = load_archive()
         except (OSError, ValueError, TypeError):
             archive = {}
+        if mode.startswith("country:"):
+            _, index, page = mode.split(":")
+            return archive_detail_text(archive, uid, int(index), int(page))
+        if mode == "archive" or mode.startswith("archive_page:"):
+            countries, _ = archive_country_page(archive, uid)
+            list_page = int(mode.split(":")[1]) if ":" in mode else 0
+            report = build_report("archive", {}, archive, {})
+            return (report + "\n\n🌍 Ölkəyə toxunaraq öz tam nömrələrinizi görün.",
+                    archive_country_keyboard(countries, list_page))
         try:
             services = await asyncio.wait_for(fetch_services(), timeout=8)
         except (asyncio.TimeoutError, OSError, ValueError, RuntimeError):
@@ -119,15 +194,15 @@ def register_ivasper_admin_handlers(app, is_admin, is_banned, load_archive,
             monitor = get_monitor()
         except (TypeError, ValueError, RuntimeError):
             monitor = {}
-        return build_report(mode, services, archive, monitor)
+        return build_report(mode, services, archive, monitor), panel_keyboard()
 
     async def open_panel(update, context):
         if not admin_allowed(update.effective_user, update.effective_chat,
                              is_admin, is_banned):
             return
-        message = await render("summary")
+        message, keyboard = await render("summary", update.effective_user.id)
         await update.effective_message.reply_text(
-            message, parse_mode="HTML", reply_markup=panel_keyboard())
+            message, parse_mode="HTML", reply_markup=keyboard)
 
     async def callback(update, context):
         query = update.callback_query
@@ -138,14 +213,14 @@ def register_ivasper_admin_handlers(app, is_admin, is_banned, load_archive,
             await query.answer("⛔ İcazə yoxdur.", show_alert=True)
             return
         await query.answer()
-        mode = query.data.rsplit(":", 1)[-1]
+        mode = query.data[len("ivasper_admin:"):]
         if mode == "close":
             await query.edit_message_text("IVASPER admin paneli bağlandı.")
             return
-        message = await render(mode)
+        message, keyboard = await render(mode, update.effective_user.id)
         try:
             await query.edit_message_text(
-                message, parse_mode="HTML", reply_markup=panel_keyboard())
+                message, parse_mode="HTML", reply_markup=keyboard)
         except BadRequest as exc:
             if "message is not modified" not in str(exc).lower():
                 raise

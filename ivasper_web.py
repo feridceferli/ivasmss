@@ -7,7 +7,73 @@ import re
 from collections import Counter
 
 
-def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_seconds):
+
+def archive_country_page(archived, owner_id, country="", page=0, page_size=25):
+    """Country totals and paginated owner-only numbers from the local archive.
+
+    Archive entries belong to users; a country aggregate never grants access
+    to another person's allocation. An unowned number is never revealed.
+    """
+    totals = Counter()
+    own = {}
+    if isinstance(archived, dict):
+        for key, record in archived.items():
+            if not isinstance(record, dict):
+                continue
+            label = str(record.get("country") or "Naməlum").strip()[:70]
+            label = label or "Naməlum"
+            totals[label] += 1
+            if str(record.get("user_id") or "") != str(owner_id):
+                continue
+            number = str(record.get("number") or key).strip()
+            if not re.fullmatch(r"\+?[0-9 ()-]+", number):
+                continue
+            digits = re.sub(r"\D", "", number)
+            if not re.fullmatch(r"\d{7,15}", digits):
+                continue
+            own.setdefault(label, {})["+" + digits] = {
+                "number": "+" + digits,
+                "range": str(record.get("range") or "")[:35],
+            }
+
+    countries = [
+        {"country": label, "count": count, "my_count": len(own.get(label, {}))}
+        for label, count in sorted(totals.items(),
+                                   key=lambda pair: (-pair[1], pair[0]))
+    ]
+    if not countries:
+        return countries, {
+            "country": "", "page": 0, "pages": 0, "my_count": 0,
+            "total_count": 0, "entries": [],
+        }
+    names = {item["country"] for item in countries}
+    if country not in names:
+        preferred = next(
+            (item["country"] for item in countries
+             if ("azərbaycan" in item["country"].casefold()
+                 or "azerbaijan" in item["country"].casefold()
+                 or "🇦🇿" in item["country"])), None)
+        country = preferred or countries[0]["country"]
+    page_size = max(1, min(int(page_size), 50))
+    all_numbers = sorted(own.get(country, {}).values(),
+                         key=lambda item: item["number"])
+    pages = max(1, (len(all_numbers) + page_size - 1) // page_size)
+    try:
+        index = min(max(0, int(page)), pages - 1)
+    except (ValueError, TypeError, OverflowError):
+        index = 0
+    return countries, {
+        "country": country,
+        "page": index,
+        "pages": pages,
+        "my_count": len(all_numbers),
+        "total_count": totals[country],
+        "entries": all_numbers[index * page_size:(index + 1) * page_size],
+    }
+
+
+def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_seconds,
+                     country="", page=0):
     """Return safe counts and only the requesting administrator's current leases."""
     catalogue = {}
     if isinstance(services, dict):
@@ -29,8 +95,11 @@ def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_se
     if isinstance(archived, dict):
         for record in archived.values():
             if isinstance(record, dict):
-                country = str(record.get("country") or "Naməlum").strip()[:70]
-                countries[country] += 1
+                label = str(record.get("country") or "Naməlum").strip()[:70]
+                countries[label] += 1
+
+    archive_countries, archive_page = archive_country_page(
+        archived, owner_id, country, page)
 
     own_active = []
     if isinstance(active, dict):
@@ -68,7 +137,9 @@ def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_se
         "range_count": sum(len(ranges) for ranges in catalogue.values()),
         "archive_count": sum(countries.values()),
         "archive_countries": len(countries),
+        "archive_country_list": archive_countries,
+        "archive_page": archive_page,
         "own_active": own_active,
         "monitor": {"state": state, "http_status": http_status},
-        "note": "Range siyahısı nömrə ehtiyatını təsdiqləmir. Yalnız sizə ayrılmış aktiv nömrələr görünür.",
+        "note": "Ölkə statistikası ümumi arxiv sayıdır. Tam nömrələr yalnız sizin arxiv qeydlərinizdən göstərilir; bu, nömrənin hazırda aktiv olduğunu sübut etmir.",
     }
