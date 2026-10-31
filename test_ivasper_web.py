@@ -62,6 +62,23 @@ class IvasperExternalTests(unittest.TestCase):
         self.assertNotIn("get_number_from_api", body)
         self.assertIn('"Cache-Control": "private, no-store"', body)
 
+    def test_admin_import_separate_from_ivasmss(self):
+        from pathlib import Path
+        import ast
+        code = Path(__file__).resolve().parent.joinpath("main.py").read_text(encoding="utf-8")
+        node = next(n for n in ast.parse(code).body
+                    if isinstance(n, ast.AsyncFunctionDef)
+                    and n.name == "miniapp_ivasper_api")
+        body = ast.get_source_segment(code, node)
+        self.assertIn('request.method != "POST"', body)
+        self.assertIn('not is_admin(uid) or is_user_banned(uid)', body)
+        self.assertIn('IVASPER_IMPORT_TOKEN', body)
+        self.assertIn('"/import"', body)
+        self.assertIn('json={"numbers": rows}', body)
+        for forbidden in ('save_range_db(', 'number_archive.record(',
+                          'assign_active_number(', 'get_number_from_api('):
+            self.assertNotIn(forbidden, body)
+
     def test_unconfigured_does_not_use_ivasmss_as_fallback(self):
         import asyncio
         with patch.dict(os.environ, {"IVASPER_NUMBERS_URL": ""}):
