@@ -4,6 +4,8 @@ on:
   push:
     paths:
       - "sms_test_diagnostics.py"
+      - "sms_live_sender.py"
+      - "test_sms_live_sender.py"
       - "test_sms_test_diagnostics.py"
       - "main.py"
       - "user_backup.py"
@@ -14,6 +16,8 @@ on:
   pull_request:
     paths:
       - "sms_test_diagnostics.py"
+      - "sms_live_sender.py"
+      - "test_sms_live_sender.py"
       - "test_sms_test_diagnostics.py"
       - "main.py"
       - "user_backup.py"
@@ -31,8 +35,8 @@ jobs:
         with:
           python-version: "3.11"
       - name: Check Python syntax
-        run: python -m py_compile sms_test_diagnostics.py main.py user_backup.py
+        run: python -m py_compile sms_test_diagnostics.py sms_live_sender.py main.py user_backup.py
       - name: Test diagnostics, history, permission and consent
-        run: python -m unittest -v test_sms_test_diagnostics
+        run: python -m unittest -v test_sms_test_diagnostics test_sms_live_sender
       - name: Check JavaScript syntax
         run: node --check docs/sms-test-diagnostics.js && node --check docs/app.js
