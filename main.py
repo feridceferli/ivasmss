@@ -6717,8 +6717,8 @@ async def miniapp_ivasper_api(request):
     if request.method != "GET":
         return _miniapp_cors(web.json_response(
             {"error": "method_not_allowed"}, status=405))
-    # No load_range_db / fetch_services_cached / price / archive calls.
     # The independent IVASPER source must be explicitly configured.
+    # This endpoint never interacts with the existing provider or user data.
     snapshot = await load_ivasper_inventory()
     return _miniapp_cors(web.json_response(
         snapshot, headers={"Cache-Control": "private, no-store"}))
