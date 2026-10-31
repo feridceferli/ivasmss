@@ -643,6 +643,12 @@
                     <textarea id="ivasper-import-numbers" class="admin-input" rows="5"
                               placeholder="+994501234567&#10;+994551234567"
                               aria-label="IVASPER nömrələri alt-alta" autocomplete="off"></textarea>
+                    <div class="catalog-tools" style="flex-wrap:wrap">
+                        <label class="notice-mini" for="ivasper-import-txt">📄 TXT fayldan nömrə seç (istəyə bağlı)</label>
+                        <input id="ivasper-import-txt" class="admin-input" type="file"
+                               accept=".txt,.csv,text/plain,text/csv"
+                               onchange="loadIvasperTxtFile(this)" aria-label="Nömrə siyahısını TXT fayldan yüklə">
+                    </div>
                     <button class="action-small" type="button" onclick="saveIvasperNumbers()">📥 Nömrələri qəbul et</button>
                     <p id="ivasper-import-status" class="notice-mini" role="status" aria-live="polite">Nömrələr yalnız admin tərəfindən əlavə edilə bilər.</p>
                 </div>
@@ -944,7 +950,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261031-ivasper-simple-intake"></script>
+    <script src="app.js?v=20261031-ivasper-stock-diagnostics"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
