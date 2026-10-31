@@ -1,0 +1,15 @@
+name: Ivasper admin tests
+on:
+  push:
+    paths: [ivasper_admin.py, main.py, test_ivasper_admin.py]
+  pull_request:
+    paths: [ivasper_admin.py, main.py, test_ivasper_admin.py]
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest -v test_ivasper_admin.py
