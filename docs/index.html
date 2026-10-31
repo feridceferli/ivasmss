@@ -649,12 +649,26 @@
             </div>
             <section class="card" id="admin-sms-lab-section" style="margin-top:12px">
                 <h4>🧪 SMS simulyasiya bölməsini idarə et</h4>
-                <p class="notice-mini">Standart rejim yalnız admindir. Hamıya açdıqda istifadəçilər yalnız SMS göndərməyən simulyatordan yararlanacaqlar. Real SMS göndərişi heç vaxt aktivləşdirilmir.</p>
+                <p class="notice-mini">Hamıya açma düyməsi yalnız simulyasiyaya aiddir. Real SMS göndərişi həmişə adminə və əvvəlcədən icazə verilmiş test nömrələrinə məhduddur.</p>
                 <p id="admin-sms-lab-status" class="notice-mini" role="status">Status yüklənir...</p>
                 <button class="action-small" type="button" id="admin-sms-lab-toggle"
                     onclick="toggleSmsDiagnosticsPublic()">Hamı üçün aç / bağla</button>
                 <button class="action-small" type="button" onclick="refreshSmsDiagnostics()">🔄 Test tarixçəsi və diaqnostika</button>
                 <p id="admin-sms-lab-metrics" class="notice-mini"></p>
+                <div class="card" style="margin-top:12px" id="admin-live-sms-section">
+                    <h4>📲 Real SMS — yalnız admin, rəsmi provayder</h4>
+                    <p class="notice-mini">Twilio vasitəsilə yalnız Render-də `SMS_LIVE_ALLOWED_NUMBERS` siyahısında təsdiqlənmiş nömrəyə sabit test mesajı göndərilir. Hər nömrəyə saatda 1 cəhd, ümumilikdə gündə 10 cəhd. Mesajın API tərəfindən qəbul edilməsi telefona çatdırıldığını sübut etmir.</p>
+                    <p id="admin-live-sms-status" class="notice-mini" role="status">SMS provayderi yoxlanır...</p>
+                    <label for="admin-live-sms-phone">İcazəli test nömrəsi</label>
+                    <input id="admin-live-sms-phone" type="tel" class="admin-input" maxlength="24" autocomplete="off" placeholder="+994501234567">
+                    <label style="display:block;margin:12px 0">
+                        <input type="checkbox" id="admin-live-sms-consent"> Nömrənin sahibi test SMS-ni almağa razıdır.
+                    </label>
+                    <button type="button" class="action-small" id="admin-live-sms-send" onclick="sendAdminLiveTestSms()">📨 Real test SMS göndər</button>
+                    <p id="admin-live-sms-result" class="notice-mini" role="status"></p>
+                    <h4>📜 Canlı SMS sorğularının jurnalı</h4>
+                    <div id="admin-live-sms-history" class="catalog-scroll" aria-live="polite"></div>
+                </div>
             </section>
             <section class="card" id="admin-green_sms-section" style="margin-top:12px" aria-label="Green SMS yalnız admin">
                 <h4>🟢 Green SMS — şəxsi admin paneli</h4>
