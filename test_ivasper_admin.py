@@ -1,55 +1,63 @@
 import ast
+import re
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
-from ivasper_admin import admin_allowed, archive_summary, build_report, service_summary, archive_detail_text, CALLBACK_PATTERN
 
-class IvasperTests(unittest.TestCase):
-    def test_permissions(self):
-        admin = SimpleNamespace(id=5)
-        outsider = SimpleNamespace(id=6)
-        priv = SimpleNamespace(type='private')
-        group = SimpleNamespace(type='group')
+from ivasper_admin import admin_allowed, render_inventory, CALLBACK_PATTERN
+
+
+class IvasperAdminTests(unittest.TestCase):
+    def test_private_admin_only(self):
         allow = lambda uid: uid == 5
-        no_bans = lambda uid: False
-        self.assertTrue(admin_allowed(admin, priv, allow, no_bans))
-        self.assertFalse(admin_allowed(outsider, priv, allow, no_bans))
-        self.assertFalse(admin_allowed(admin, group, allow, no_bans))
-        self.assertFalse(admin_allowed(None, priv, allow, no_bans))
+        no_bans = lambda _: False
+        self.assertTrue(admin_allowed(SimpleNamespace(id=5),
+                                      SimpleNamespace(type="private"), allow, no_bans))
+        self.assertFalse(admin_allowed(SimpleNamespace(id=6),
+                                       SimpleNamespace(type="private"), allow, no_bans))
+        self.assertFalse(admin_allowed(SimpleNamespace(id=5),
+                                       SimpleNamespace(type="group"), allow, no_bans))
+        self.assertFalse(admin_allowed(SimpleNamespace(id=5),
+                                       SimpleNamespace(type="private"), allow,
+                                       lambda _: True))
 
-    def test_reports_aggregate_only(self):
-        archive = {'994501234567': {'country': 'Azerbaijan', 'number': '+994501234567', 'user_id': '987654'}}
-        report = build_report('archive', {}, archive, {})
-        self.assertIn('Azerbaijan', report)
-        self.assertNotIn('994501234567', report)
-        self.assertNotIn('987654', report)
-        self.assertEqual(archive_summary(archive)[0], 1)
-        self.assertEqual(service_summary({'wa': [{}, {}]})[1], 2)
-
-    def test_archive_country_callback_reveals_own_numbers_only(self):
-        import re
-        records = {
-            "994502110012": {"country": "🇦🇿 Azərbaycan", "number": "+994502110012",
-                              "user_id": "5", "range": "99450211"},
-            "994502118888": {"country": "🇦🇿 Azərbaycan", "number": "+994502118888",
-                              "user_id": "8", "range": "99450211"},
-        }
-        report, keyboard = archive_detail_text(records, 5, 0, 0)
-        self.assertIn("994502110012", report)
-        self.assertNotIn("994502118888", report)
-        self.assertIn("Öz nömrələrim", report)
+    def test_bot_shows_independent_stock_only(self):
+        stock = {"status": "ok", "numbers": [
+            {"number": "+994501234567", "country": "Azerbaijan",
+             "service": "Telegram"},
+            {"number": "+4915112345678", "country": "Germany",
+             "service": "WhatsApp"},
+        ]}
+        title, keyboard = render_inventory("summary", stock)
+        self.assertIn("2", title)
+        self.assertIn("IVASMS nömrə bazası", title)
+        countries, nav = render_inventory("archive", stock)
+        self.assertIn("ÖLKƏLƏR", countries)
+        self.assertTrue(nav.inline_keyboard)
+        report, nav = render_inventory("country:0:0", stock)
+        self.assertIn("+994501234567", report)
+        self.assertNotIn("+4915112345678", report)
         self.assertTrue(re.match(CALLBACK_PATTERN, "ivasper_admin:country:0:0"))
-        self.assertTrue(re.match(CALLBACK_PATTERN, "ivasper_admin:archive_page:1"))
-        self.assertEqual(keyboard.inline_keyboard[0][0].callback_data, "ivasper_admin:archive_page:0")
 
-    def test_wiring_and_syntax(self):
+    def test_no_fallback_when_no_authorized_source(self):
+        message, keyboard = render_inventory(
+            "summary", {"status": "not_configured", "numbers": [],
+                        "message": "IVASPER mənbəyi qoşulmayıb."})
+        self.assertIn("qoşulmayıb", message)
+        self.assertNotIn("+99450", message)
+        self.assertTrue(keyboard.inline_keyboard)
+
+    def test_registration_wiring(self):
         root = Path(__file__).resolve().parent
-        main = (root / 'main.py').read_text(encoding='utf-8')
+        main = (root / "main.py").read_text(encoding="utf-8")
         ast.parse(main)
-        ast.parse((root / 'ivasper_admin.py').read_text(encoding='utf-8'))
-        self.assertIn('register_ivasper_admin_handlers(', main)
-        self.assertIn('🧰 IVASPER NƏZARƏT', main)
-        self.assertLess(main.index('    register_ivasper_admin_handlers('), main.index('    app.add_handler(CallbackQueryHandler(button_callback))'))
+        ast.parse((root / "ivasper_admin.py").read_text(encoding="utf-8"))
+        self.assertIn("register_ivasper_admin_handlers(", main)
+        self.assertIn("load_ivasper_inventory,", main)
+        self.assertIn("🧰 IVASPER NƏZARƏT", main)
+        self.assertLess(main.index("    register_ivasper_admin_handlers("),
+                        main.index("    app.add_handler(CallbackQueryHandler(button_callback))"))
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     unittest.main()

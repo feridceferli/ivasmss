@@ -832,7 +832,7 @@ async function selectOfferedNumber(index) {
         switchTab("active");
         // Show the newly confirmed number even if one optional refresh fails.
         await Promise.allSettled([fetchOrders(), fetchDashboard()]);
-        if (state.isAdmin && state.activeTab === "admin") void loadIvasperAdmin();
+        // IVASPER inventory is refreshed independently in its own admin section.
     } catch (_) {
         // Navigation failures cannot undo a completed server transaction.
     }
@@ -1276,204 +1276,88 @@ async function adminBalanceChange() {
 }
 
 
-// IVASPER: one admin-scoped view for both the browser and Telegram Mini App.
-// This uses the existing allocation/choice flow; no third-party credentials or OTP feed.
-let ivasperAdminState = {services: {}, own_active: [], groups: [], selectedService: ""};
+// IVASPER has a different, read-only inventory source. Never use state.services,
+// /api/get-number, price rules, active orders or IVASMS number archives here.
+let ivasperAdminState = {connected: false, status: "not_configured", numbers: []};
 
 async function loadIvasperAdmin() {
     if (!state.isAdmin) return;
     const status = document.getElementById("ivasper-status");
-    const servicePicker = document.getElementById("ivasper-service-select");
-    if (!status || !servicePicker) return;
-    status.textContent = "📡 IVASMS kataloqu yoxlanır...";
+    if (!status) return;
+    status.textContent = "📡 IVASPER nömrələri ayrıca mənbədən oxunur...";
     try {
         const data = await api("/api/ivasper");
         if (!state.isAdmin) return;
-        ivasperAdminState = {...data, groups: [], selectedService: ivasperAdminState.selectedService || ""};
-        // The admin-only endpoint and public service cards use the same trusted
-        // provider, while purchase authorization is always checked server-side.
-        state.services = data.services || {};
-        if (!state.countries.length) await fetchCountries();
-        if (!state.pricing) await fetchPrices();
-        const previouslySelected = servicePicker.value;
-        servicePicker.replaceChildren();
-        for (const name of Object.keys(state.services).sort()) {
-            const option = document.createElement("option");
-            option.value = name;
-            option.textContent = name.toUpperCase() + " · " + state.services[name].length + " range";
-            servicePicker.appendChild(option);
+        ivasperAdminState = {
+            connected: data.connected === true,
+            status: String(data.status || "source_unavailable"),
+            numbers: Array.isArray(data.numbers) ? data.numbers : [],
+        };
+        const valid = ivasperAdminState.numbers.filter(item =>
+            /^\+\d{7,15}$/.test(String(item.number || "")));
+        const countries = [...new Set(valid.map(item => String(item.country || "Naməlum")))].sort();
+        const services = [...new Set(valid.map(item => String(item.service || "IVASPER")))].sort();
+        const country = document.getElementById("ivasper-country-filter");
+        const service = document.getElementById("ivasper-service-filter");
+        const prevCountry = country?.value || "";
+        const prevService = service?.value || "";
+        if (country) {
+            country.replaceChildren(new Option("Bütün ölkələr", ""));
+            countries.forEach(name => country.appendChild(new Option(name, name)));
+            if (countries.includes(prevCountry)) country.value = prevCountry;
         }
-        if (state.services[previouslySelected]) servicePicker.value = previouslySelected;
-        status.textContent = "📡 " + Number(data.service_count || 0) + " xidmət · " +
-            Number(data.range_count || 0) + " range · 📦 " +
-            Number(data.archive_count || 0) + " arxiv qeydi · Monitor: " +
-            String(data.monitor?.state || "naməlum") +
-            " · HTTP " + String(data.monitor?.http_status ?? "—");
-        renderIvasperRanges();
-        renderIvasperOwnNumbers();
-        renderIvasperArchive();
+        if (service) {
+            service.replaceChildren(new Option("Bütün xidmətlər", ""));
+            services.forEach(name => service.appendChild(new Option(name, name)));
+            if (services.includes(prevService)) service.value = prevService;
+        }
+        status.textContent = ivasperAdminState.connected
+            ? "✅ IVASPER — ayrıca mənbə qoşulub. Nömrələr yalnız burada görünür."
+            : "⚠️ " + String(data.message || "IVASPER mənbəyi hazır deyil.");
+        renderIvasperNumbers();
     } catch (err) {
+        ivasperAdminState = {connected: false, status: "source_unavailable", numbers: []};
         status.textContent = "⚠️ IVASPER: " + err.message;
-        document.getElementById("ivasper-range-list")?.replaceChildren();
-        document.getElementById("ivasper-own-active")?.replaceChildren();
-        document.getElementById("ivasper-archive-list")?.replaceChildren();
-        const archiveStatus = document.getElementById("ivasper-archive-summary");
-        if (archiveStatus) archiveStatus.textContent = "⚠️ Arxiv yüklənmədi: " + err.message;
+        renderIvasperNumbers();
     }
 }
 
-function renderIvasperRanges() {
+function renderIvasperNumbers() {
     if (!state.isAdmin) return;
-    const service = document.getElementById("ivasper-service-select")?.value || "";
-    const picker = document.getElementById("ivasper-country-select");
-    if (!picker) return;
-    const keepCountry = service === ivasperAdminState.selectedService ? picker.value : "0";
-    ivasperAdminState.selectedService = service;
-    ivasperAdminState.groups = serviceCountryGroups(service);
-    picker.replaceChildren();
-    ivasperAdminState.groups.forEach((group, index) => {
-        const option = document.createElement("option");
-        option.value = String(index);
-        option.textContent = group.label +
-            (group.code ? " (+" + group.code + ")" : "") +
-            " · " + group.items.length + " range";
-        picker.appendChild(option);
+    const list = document.getElementById("ivasper-number-list");
+    const count = document.getElementById("ivasper-number-count");
+    if (!list || !count) return;
+    list.replaceChildren();
+    const filterCountry = document.getElementById("ivasper-country-filter")?.value || "";
+    const filterService = document.getElementById("ivasper-service-filter")?.value || "";
+    const filterNumber = (document.getElementById("ivasper-number-filter")?.value || "")
+        .replace(/\D/g, "");
+    const results = (ivasperAdminState.numbers || []).filter(item => {
+        const phone = String(item.number || "");
+        if (!/^\+\d{7,15}$/.test(phone)) return false;
+        return (!filterCountry || item.country === filterCountry) &&
+            (!filterService || item.service === filterService) &&
+            (!filterNumber || phone.replace(/\D/g, "").includes(filterNumber));
     });
-    if ([...picker.options].some(option => option.value === keepCountry)) picker.value = keepCountry;
-    renderIvasperRangeList();
-}
-
-function renderIvasperRangeList() {
-    if (!state.isAdmin) return;
-    const list = document.getElementById("ivasper-range-list");
-    if (!list) return;
-    list.replaceChildren();
-    const service = document.getElementById("ivasper-service-select")?.value || "";
-    const index = Number(document.getElementById("ivasper-country-select")?.value || 0);
-    const group = ivasperAdminState.groups[index];
-    if (!service || !group) {
-        clearAndText(list, "Bu xidmət üçün hazırda API range-i yoxdur.");
+    count.textContent = "📱 " + results.length + " IVASPER nömrəsi" +
+        (results.length > 200 ? " · ilk 200 göstərilir, axtarışla daraldın" : "");
+    if (!results.length) {
+        clearAndText(list, ivasperAdminState.connected
+            ? "Bu filtrə uyğun IVASPER nömrəsi tapılmadı."
+            : "IVASPER nömrələri mövcud IVASMS-dən götürülmür. Əvvəlcə müstəqil mənbəni qoşun.");
         return;
     }
-    const term = (document.getElementById("ivasper-range-search")?.value || "").replace(/\D/g, "");
-    const matching = group.items.filter(rid => rid.includes(term));
-    for (const rid of matching.slice(0, 120)) {
-        addRangeButton(list, "📱 +" + rid + " — 5 variantı yoxla", {
-            service, country: group.code, rid, iso: group.iso, isAz: rid.startsWith("994")
-        });
-    }
-    if (!matching.length) clearAndText(list, "Bu ölkə və axtarış üzrə uyğun range yoxdur.");
-    if (matching.length > 120) list.appendChild(node("p",
-        "İlk 120 range göstərilir. Daha dəqiq axtarış yazın.", "notice-mini"));
-}
-
-function renderIvasperOwnNumbers() {
-    if (!state.isAdmin) return;
-    const container = document.getElementById("ivasper-own-active");
-    if (!container) return;
-    container.replaceChildren();
-    const numbers = (ivasperAdminState.own_active || [])
-        .filter(item => /^\+\d{7,15}$/.test(String(item.number || "")));
-    if (!numbers.length) {
-        clearAndText(container, "Hazırda sizə ayrılmış aktiv nömrə yoxdur. Range seçərək nömrə variantlarını yoxlayın.");
-        return;
-    }
-    for (const item of numbers) {
+    for (const item of results.slice(0, 200)) {
         const row = node("div", null, "admin-user-line");
-        const detail = node("div", null, "admin-user-identity");
-        detail.appendChild(node("strong", "📱 " + item.number, "full-phone-number"));
-        detail.appendChild(node("small", "📶 " + (item.range || "—") +
-            " · " + Number(item.remaining_seconds || 0) + " saniyə qalıb"));
-        const button = node("button", "📋 Kopyala", "action-small");
-        button.type = "button";
-        button.addEventListener("click", () => copyPhoneNumber(item.number));
-        row.append(detail, button);
-        container.appendChild(row);
-    }
-}
-
-// Archive history is independent of the 3-minute active-number lease.
-function renderIvasperArchive() {
-    if (!state.isAdmin) return;
-    const picker = document.getElementById("ivasper-archive-country");
-    const summary = document.getElementById("ivasper-archive-summary");
-    const list = document.getElementById("ivasper-archive-list");
-    const back = document.getElementById("ivasper-archive-prev");
-    const next = document.getElementById("ivasper-archive-next");
-    const pagesLabel = document.getElementById("ivasper-archive-pages");
-    if (!picker || !summary || !list || !back || !next || !pagesLabel) return;
-
-    const previous = picker.value;
-    const countries = Array.isArray(ivasperAdminState.archive_country_list)
-        ? ivasperAdminState.archive_country_list : [];
-    const page = ivasperAdminState.archive_page || {};
-    picker.replaceChildren();
-    for (const item of countries) {
-        const option = document.createElement("option");
-        option.value = String(item.country || "");
-        option.textContent = String(item.country || "Naməlum") + " · " +
-            Number(item.count || 0) + " qeyd · mənim: " + Number(item.my_count || 0);
-        picker.appendChild(option);
-    }
-    if (countries.some(item => item.country === page.country)) {
-        picker.value = page.country;
-    } else if (countries.some(item => item.country === previous)) {
-        picker.value = previous;
-    }
-    list.replaceChildren();
-    if (!countries.length) {
-        summary.textContent = "Arxivdə ölkə və nömrə qeydi yoxdur.";
-        pagesLabel.textContent = "—";
-        back.disabled = true;
-        next.disabled = true;
-        return;
-    }
-    const mine = Number(page.my_count || 0);
-    summary.textContent = "🌍 " + String(page.country || "Naməlum") +
-        " · Arxiv: " + Number(page.total_count || 0) +
-        " qeyd · Sizə aid tam nömrələr: " + mine;
-    const entries = Array.isArray(page.entries) ? page.entries : [];
-    if (!entries.length) {
-        clearAndText(list, mine
-            ? "Bu səhifədə nömrə yoxdur. Arxiv səhifəsini yeniləyin."
-            : "Bu ölkənin arxivində sizə ayrılmış nömrə qeydi yoxdur. Ümumi say başqa istifadəçilərin qeydlərini də əhatə edə bilər.");
-    }
-    for (const item of entries) {
-        const number = String(item.number || "");
-        if (!/^\+\d{7,15}$/.test(number)) continue;
-        const row = node("div", null, "admin-user-line");
-        const detail = node("div", null, "admin-user-identity");
-        detail.appendChild(node("strong", "📱 " + number, "full-phone-number"));
-        detail.appendChild(node("small", "📶 " + (item.range || "—") +
-            " · Arxiv nömrəsi, hazırda aktiv olmaya bilər"));
+        const details = node("div", null, "admin-user-identity");
+        details.appendChild(node("strong", "📱 " + item.number, "full-phone-number"));
+        details.appendChild(node("small", "🌍 " + String(item.country || "Naməlum") +
+            " · 📡 " + String(item.service || "IVASPER")));
         const copy = node("button", "📋 Kopyala", "action-small");
         copy.type = "button";
-        copy.addEventListener("click", () => copyPhoneNumber(number));
-        row.append(detail, copy);
+        copy.addEventListener("click", () => copyPhoneNumber(item.number));
+        row.append(details, copy);
         list.appendChild(row);
-    }
-    const pageIndex = Number(page.page || 0);
-    const totalPages = Number(page.pages || 0);
-    pagesLabel.textContent = totalPages ? (pageIndex + 1) + " / " + totalPages : "—";
-    back.disabled = pageIndex <= 0;
-    next.disabled = totalPages <= 0 || pageIndex >= totalPages - 1;
-}
-
-async function loadIvasperArchivePage(page = 0) {
-    if (!state.isAdmin) return;
-    const picker = document.getElementById("ivasper-archive-country");
-    const country = String(picker?.value || "");
-    const summary = document.getElementById("ivasper-archive-summary");
-    if (summary) summary.textContent = "📦 Arxiv nömrələri yüklənir...";
-    try {
-        const data = await api("/api/ivasper?country=" +
-            encodeURIComponent(country) + "&page=" + Math.max(0, Math.floor(Number(page) || 0)));
-        if (!state.isAdmin || document.getElementById("ivasper-archive-country")?.value !== country) return;
-        ivasperAdminState.archive_country_list = data.archive_country_list || [];
-        ivasperAdminState.archive_page = data.archive_page || {};
-        renderIvasperArchive();
-    } catch (err) {
-        if (summary) summary.textContent = "⚠️ Arxiv nömrələri yüklənmədi: " + err.message;
     }
 }
 

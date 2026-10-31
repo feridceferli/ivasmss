@@ -86,7 +86,7 @@ from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons
 from whatsapp_safe import register_whatsapp_handlers
 from admin_test_tools import register_admin_test_tools
 from ivasper_admin import register_ivasper_admin_handlers
-from ivasper_web import catalog_snapshot
+from ivasper_external import load_ivasper_inventory
 
 # ==================== CONFIG SECTION ====================
 
@@ -6704,7 +6704,7 @@ async def miniapp_api_sales_api(request):
 
 
 async def miniapp_ivasper_api(request):
-    """Admin-only catalogue/own active numbers shared by website and Mini App."""
+    """Read only a dedicated IVASPER inventory feed (never IVASMS stock)."""
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
     tg_user, err = _miniapp_auth(request)
@@ -6717,16 +6717,9 @@ async def miniapp_ivasper_api(request):
     if request.method != "GET":
         return _miniapp_cors(web.json_response(
             {"error": "method_not_allowed"}, status=405))
-    country = str(request.query.get("country") or "")[:70]
-    page_input = str(request.query.get("page") or "0")
-    if not page_input.isdecimal() or len(page_input) > 4:
-        return _miniapp_cors(web.json_response(
-            {"error": "invalid_page"}, status=400))
-    services = await fetch_services_cached()
-    snapshot = catalog_snapshot(
-        services, load_range_db(), monitor_diagnostics, active_numbers,
-        uid, active_number_remaining, country=country, page=int(page_input),
-    )
+    # The independent IVASPER source must be explicitly configured.
+    # This endpoint never interacts with the existing provider or user data.
+    snapshot = await load_ivasper_inventory()
     return _miniapp_cors(web.json_response(
         snapshot, headers={"Cache-Control": "private, no-store"}))
 
@@ -7131,8 +7124,7 @@ def register_handlers(app):
     register_whatsapp_handlers(app, is_admin)
     register_admin_test_tools(app, is_admin, admin_main_keyboard)
     register_ivasper_admin_handlers(
-        app, is_admin, is_user_banned, load_range_db,
-        fetch_services_cached, lambda: monitor_diagnostics,
+        app, is_admin, is_user_banned, load_ivasper_inventory,
     )
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))

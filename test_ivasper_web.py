@@ -1,111 +1,74 @@
-"""Offline privacy, catalogue and allocation-scope checks for the web IVASPER panel."""
+"""Offline tests for the separate IVASPER inventory; no external traffic."""
 import ast
+import os
 import unittest
-from datetime import datetime
 from pathlib import Path
+from unittest.mock import patch
 
-from ivasper_web import catalog_snapshot, archive_country_page
-
-ROOT = Path(__file__).resolve().parent
+from ivasper_external import normalize_inventory, valid_inventory_url, load_ivasper_inventory
 
 
-class IvasperWebTests(unittest.TestCase):
-    def test_only_owned_current_numbers_and_clean_catalogue(self):
-        timestamp = datetime(2026, 10, 31)
-        services = {
-            "wa": ["99450210", "99450210", "1202444"],
-            "tg": ["44770"],
-            "<bad>": ["99450"],
-            "empty": ["xyz"],
-        }
-        archive = {
-            "994502101122": {"country": "Azerbaijan", "user_id": "7777",
-                             "message": "otp-secrets-must-not-leak"},
-        }
-        active = {
-            "994502101122": {"uid": 5, "range": "99450210", "timestamp": timestamp, "left": 90},
-            "447701234567": {"uid": 8, "range": "44770", "timestamp": timestamp, "left": 90},
-            "994502199999": {"uid": 5, "range": "99450219", "timestamp": timestamp, "left": 0},
-        }
-        result = catalog_snapshot(
-            services, archive, {"state": "ok", "http_status": 200,
-                                "last_error": "password=test-secret"},
-            active, 5, lambda info: info["left"])
-        self.assertEqual(result["services"]["wa"], ["1202444", "99450210"])
-        self.assertNotIn("<bad>", result["services"])
-        self.assertEqual((result["service_count"], result["range_count"]), (2, 3))
-        self.assertEqual(result["archive_count"], 1)
-        self.assertEqual(len(result["own_active"]), 1)
-        self.assertEqual(result["own_active"][0]["number"], "+994502101122")
-        encoded = str(result)
-        for secret in ("447701234567", "994502199999", "otp-secrets-must-not-leak", "7777", "test-secret"):
-            self.assertNotIn(secret, encoded)
+class IvasperExternalTests(unittest.TestCase):
+    def test_flat_stock_and_no_sms_feed(self):
+        output = normalize_inventory({
+            "numbers": [
+                {"number": "+994501234567", "country": "Azərbaycan",
+                 "service": "Telegram", "message": "SMS secret"},
+                {"number": "+994501234567", "country": "Azərbaycan", "service": "Telegram"},
+                {"number": "+447701112222", "service": "WhatsApp", "otp": "746829"},
+                {"num": "+994551111111", "message": "This is an SMS receipt"},
+                {"number": "<script>alert(1)</script>"},
+            ]
+        })
+        self.assertEqual(len(output), 2)
+        text = str(output)
+        self.assertIn("+994501234567", text)
+        for private in ("SMS secret", "746829", "script", "+994551111111"):
+            self.assertNotIn(private, text)
 
-    def test_input_validations_and_monitored_status(self):
-        result = catalog_snapshot(
-            {"bad": {"ranges": ["1"]}, "wa": ["abc", "", "12345678901", "9945"]},
-            [], {"state": "<error>", "http_status": "200", "token": "secret"},
-            {"994501234567": {"uid": 0, "left": 45}},
-            5, lambda info: info["left"])
-        self.assertEqual(result["services"], {"wa": ["9945"]})
-        self.assertEqual(result["own_active"], [])
-        self.assertIsNone(result["monitor"]["http_status"])
-        self.assertEqual(result["monitor"]["state"], "naməlum")
-        self.assertNotIn("secret", str(result))
+    def test_ivasmsper_nested_stock(self):
+        payload = {"services": {
+            "Telegram": {"countries": {
+                "Azerbaijan": {"numbers": ["+994501111111", "994502222222"]}}},
+            "WhatsApp": {"countries": {"Germany": {"numbers": ["+4915112345678"]}}},
+        }}
+        output = normalize_inventory(payload)
+        self.assertEqual(len(output), 3)
+        self.assertEqual({item["service"] for item in output},
+                         {"Telegram", "WhatsApp"})
+        self.assertEqual({item["country"] for item in output},
+                         {"Azerbaijan", "Germany"})
 
-    def test_country_archive_shows_own_full_numbers_only(self):
-        records = {
-            "994501234567": {"number": "+994501234567", "country": "🇦🇿 Azərbaycan",
-                             "user_id": "5", "range": "99450211"},
-            "994551239999": {"number": "+994551239999", "country": "🇦🇿 Azərbaycan",
-                             "user_id": "8", "message": "private code"},
-            "447701112222": {"number": "+447701112222", "country": "United Kingdom",
-                             "user_id": "5"},
-            "994509876543": {"number": "+994509876543", "country": "🇦🇿 Azərbaycan"},
-        }
-        countries, page = archive_country_page(records, owner_id=5)
-        self.assertEqual(page["country"], "🇦🇿 Azərbaycan")
-        self.assertEqual(page["total_count"], 3)
-        self.assertEqual(page["my_count"], 1)
-        self.assertEqual(page["entries"], [{"number": "+994501234567", "range": "99450211"}])
-        snapshot = catalog_snapshot({}, records, {}, {}, 5, lambda _: 0)
-        encoded = str(snapshot)
-        self.assertNotIn("994551239999", encoded)
-        self.assertNotIn("994509876543", encoded)
-        self.assertNotIn("private code", encoded)
-        self.assertEqual(len(countries), 2)
-        self.assertEqual(snapshot["archive_page"]["country"], "🇦🇿 Azərbaycan")
-
-    def test_country_archive_page_and_unknown_country(self):
-        records = {}
-        for i in range(55):
-            number = "99450" + str(i).zfill(7)
-            records[number] = {"country": "🇦🇿 Azərbaycan", "user_id": "5",
-                               "number": "+" + number}
-        countries, first = archive_country_page(records, 5, page=0)
-        _, second = archive_country_page(records, 5, page=1)
-        _, final = archive_country_page(records, 5, page=500)
-        self.assertEqual(first["pages"], 3)
-        self.assertEqual((len(first["entries"]), len(second["entries"]), len(final["entries"])),
-                         (25, 25, 5))
-        self.assertEqual(final["page"], 2)
-        self.assertEqual(first["my_count"], 55)
-        self.assertEqual(first["total_count"], 55)
-        self.assertEqual(len(countries), 1)
-
-    def test_server_restricts_method_and_admin_identity(self):
-        source = (ROOT / "main.py").read_text(encoding="utf-8")
-        tree = ast.parse(source)
-        function = next(node for node in tree.body
-                        if isinstance(node, ast.AsyncFunctionDef)
-                        and node.name == "miniapp_ivasper_api")
-        body = ast.get_source_segment(source, function)
+    def test_no_ivasms_fallback_and_no_credentials(self):
+        for bad in ("http://example.com/feed", "https://127.0.0.1/stock",
+                    "https://localhost/private", "https://[::1]/x",
+                    "https://user:pass@example.com/stock",
+                    "https://example.com:8080/api", "https://example.internal/stock"):
+            self.assertFalse(valid_inventory_url(bad), bad)
+        self.assertTrue(valid_inventory_url("https://inventory.example.com/api/numbers"))
+        source = Path(__file__).resolve().parent
+        code = (source / "main.py").read_text(encoding="utf-8")
+        ast.parse(code)
+        node = next(n for n in ast.parse(code).body
+                    if isinstance(n, ast.AsyncFunctionDef)
+                    and n.name == "miniapp_ivasper_api")
+        body = ast.get_source_segment(code, node)
         self.assertIn("_miniapp_auth(request)", body)
         self.assertIn("not is_admin(uid) or is_user_banned(uid)", body)
-        self.assertIn('request.method != "GET"', body)
+        self.assertIn("await load_ivasper_inventory()", body)
+        self.assertNotIn("load_range_db", body)
+        self.assertNotIn("fetch_services_cached", body)
+        self.assertNotIn("number_archive", body)
+        self.assertNotIn("get_number_from_api", body)
         self.assertIn('"Cache-Control": "private, no-store"', body)
-        self.assertIn("catalog_snapshot(", body)
-        self.assertIn('"/api/ivasper", miniapp_ivasper_api', source)
+
+    def test_unconfigured_does_not_use_ivasmss_as_fallback(self):
+        import asyncio
+        with patch.dict(os.environ, {"IVASPER_NUMBERS_URL": ""}):
+            result = asyncio.run(load_ivasper_inventory())
+        self.assertFalse(result["connected"])
+        self.assertEqual(result["status"], "not_configured")
+        self.assertEqual(result["numbers"], [])
 
 
 if __name__ == "__main__":
