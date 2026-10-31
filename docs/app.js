@@ -1311,10 +1311,14 @@ async function loadIvasperAdmin() {
             " · HTTP " + String(data.monitor?.http_status ?? "—");
         renderIvasperRanges();
         renderIvasperOwnNumbers();
+        renderIvasperArchive();
     } catch (err) {
         status.textContent = "⚠️ IVASPER: " + err.message;
         document.getElementById("ivasper-range-list")?.replaceChildren();
         document.getElementById("ivasper-own-active")?.replaceChildren();
+        document.getElementById("ivasper-archive-list")?.replaceChildren();
+        const archiveStatus = document.getElementById("ivasper-archive-summary");
+        if (archiveStatus) archiveStatus.textContent = "⚠️ Arxiv yüklənmədi: " + err.message;
     }
 }
 
@@ -1385,6 +1389,91 @@ function renderIvasperOwnNumbers() {
         button.addEventListener("click", () => copyPhoneNumber(item.number));
         row.append(detail, button);
         container.appendChild(row);
+    }
+}
+
+// Archive history is independent of the 3-minute active-number lease.
+function renderIvasperArchive() {
+    if (!state.isAdmin) return;
+    const picker = document.getElementById("ivasper-archive-country");
+    const summary = document.getElementById("ivasper-archive-summary");
+    const list = document.getElementById("ivasper-archive-list");
+    const back = document.getElementById("ivasper-archive-prev");
+    const next = document.getElementById("ivasper-archive-next");
+    const pagesLabel = document.getElementById("ivasper-archive-pages");
+    if (!picker || !summary || !list || !back || !next || !pagesLabel) return;
+
+    const previous = picker.value;
+    const countries = Array.isArray(ivasperAdminState.archive_country_list)
+        ? ivasperAdminState.archive_country_list : [];
+    const page = ivasperAdminState.archive_page || {};
+    picker.replaceChildren();
+    for (const item of countries) {
+        const option = document.createElement("option");
+        option.value = String(item.country || "");
+        option.textContent = String(item.country || "Naməlum") + " · " +
+            Number(item.count || 0) + " qeyd · mənim: " + Number(item.my_count || 0);
+        picker.appendChild(option);
+    }
+    if (countries.some(item => item.country === page.country)) {
+        picker.value = page.country;
+    } else if (countries.some(item => item.country === previous)) {
+        picker.value = previous;
+    }
+    list.replaceChildren();
+    if (!countries.length) {
+        summary.textContent = "Arxivdə ölkə və nömrə qeydi yoxdur.";
+        pagesLabel.textContent = "—";
+        back.disabled = true;
+        next.disabled = true;
+        return;
+    }
+    const mine = Number(page.my_count || 0);
+    summary.textContent = "🌍 " + String(page.country || "Naməlum") +
+        " · Arxiv: " + Number(page.total_count || 0) +
+        " qeyd · Sizə aid tam nömrələr: " + mine;
+    const entries = Array.isArray(page.entries) ? page.entries : [];
+    if (!entries.length) {
+        clearAndText(list, mine
+            ? "Bu səhifədə nömrə yoxdur. Arxiv səhifəsini yeniləyin."
+            : "Bu ölkənin arxivində sizə ayrılmış nömrə qeydi yoxdur. Ümumi say başqa istifadəçilərin qeydlərini də əhatə edə bilər.");
+    }
+    for (const item of entries) {
+        const number = String(item.number || "");
+        if (!/^\+\d{7,15}$/.test(number)) continue;
+        const row = node("div", null, "admin-user-line");
+        const detail = node("div", null, "admin-user-identity");
+        detail.appendChild(node("strong", "📱 " + number, "full-phone-number"));
+        detail.appendChild(node("small", "📶 " + (item.range || "—") +
+            " · Arxiv nömrəsi, hazırda aktiv olmaya bilər"));
+        const copy = node("button", "📋 Kopyala", "action-small");
+        copy.type = "button";
+        copy.addEventListener("click", () => copyPhoneNumber(number));
+        row.append(detail, copy);
+        list.appendChild(row);
+    }
+    const pageIndex = Number(page.page || 0);
+    const totalPages = Number(page.pages || 0);
+    pagesLabel.textContent = totalPages ? (pageIndex + 1) + " / " + totalPages : "—";
+    back.disabled = pageIndex <= 0;
+    next.disabled = totalPages <= 0 || pageIndex >= totalPages - 1;
+}
+
+async function loadIvasperArchivePage(page = 0) {
+    if (!state.isAdmin) return;
+    const picker = document.getElementById("ivasper-archive-country");
+    const country = String(picker?.value || "");
+    const summary = document.getElementById("ivasper-archive-summary");
+    if (summary) summary.textContent = "📦 Arxiv nömrələri yüklənir...";
+    try {
+        const data = await api("/api/ivasper?country=" +
+            encodeURIComponent(country) + "&page=" + Math.max(0, Math.floor(Number(page) || 0)));
+        if (!state.isAdmin || document.getElementById("ivasper-archive-country")?.value !== country) return;
+        ivasperAdminState.archive_country_list = data.archive_country_list || [];
+        ivasperAdminState.archive_page = data.archive_page || {};
+        renderIvasperArchive();
+    } catch (err) {
+        if (summary) summary.textContent = "⚠️ Arxiv nömrələri yüklənmədi: " + err.message;
     }
 }
 
