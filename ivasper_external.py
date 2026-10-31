@@ -125,6 +125,21 @@ async def load_ivasper_inventory():
             async with client.stream("GET", url, headers=headers) as response:
                 if response.status_code in (401, 403):
                     raise IvasperSourceError("access_denied")
+                if response.status_code == 503:
+                    # The dedicated source explicitly reports whether its
+                    # own PostgreSQL storage has not yet been connected.
+                    raw = b""
+                    async for chunk in response.aiter_bytes():
+                        raw += chunk
+                        if len(raw) > 2048:
+                            break
+                    try:
+                        status = json.loads(raw).get("error")
+                    except (ValueError, AttributeError):
+                        status = None
+                    if status == "persistent_storage_not_connected":
+                        raise IvasperSourceError("database_not_connected")
+                    raise IvasperSourceError("storage_unavailable")
                 if response.status_code != 200:
                     raise IvasperSourceError("upstream_unavailable")
                 if "application/json" not in response.headers.get("content-type", ""):
@@ -144,5 +159,18 @@ async def load_ivasper_inventory():
         status = str(exc)
     except (httpx.HTTPError, ValueError, TypeError, json.JSONDecodeError):
         status = "source_unavailable"
+    problems = {
+        "database_not_connected": (
+            "IVASPER PostgreSQL bağlı deyil. Render → ivasper-independent-api "
+            "→ Environment → DATABASE_URL hissəsinə ayrıca PostgreSQL "
+            "resursunun Internal Database URL ünvanını yazın."),
+        "storage_unavailable": (
+            "IVASPER verilənlər bazası cavab vermir. Render-də PostgreSQL "
+            "bağlantısını və servisin loglarını yoxlayın."),
+        "access_denied": (
+            "IVASPER API giriş açarı uyğun deyil. Render-də READER və "
+            "NUMBERS_TOKEN dəyərlərini yoxlayın."),
+    }
     return {"connected": False, "status": status, "numbers": [],
-            "message": "IVASPER inventarı oxunmadı. Mənbə bağlantısını yoxlayın."}
+            "message": problems.get(
+                status, "IVASPER inventarı oxunmadı. Mənbə bağlantısını yoxlayın.")}
