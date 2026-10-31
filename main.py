@@ -86,6 +86,7 @@ from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons
 from whatsapp_safe import register_whatsapp_handlers
 from admin_test_tools import register_admin_test_tools
 from ivasper_admin import register_ivasper_admin_handlers
+from ivasper_web import catalog_snapshot
 
 # ==================== CONFIG SECTION ====================
 
@@ -6702,6 +6703,29 @@ async def miniapp_api_sales_api(request):
             {"error": "storage_error"}, status=503))
 
 
+async def miniapp_ivasper_api(request):
+    """Admin-only catalogue/own active numbers shared by website and Mini App."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if not is_admin(uid) or is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    if request.method != "GET":
+        return _miniapp_cors(web.json_response(
+            {"error": "method_not_allowed"}, status=405))
+    services = await fetch_services_cached()
+    snapshot = catalog_snapshot(
+        services, load_range_db(), monitor_diagnostics, active_numbers,
+        uid, active_number_remaining,
+    )
+    return _miniapp_cors(web.json_response(
+        snapshot, headers={"Cache-Control": "private, no-store"}))
+
+
 async def miniapp_admin_api(request):
     if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
     tg_user, err = _miniapp_auth(request)
@@ -7199,6 +7223,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
+    server.router.add_route("*", "/api/ivasper", miniapp_ivasper_api)
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)

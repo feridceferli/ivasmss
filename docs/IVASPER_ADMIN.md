@@ -19,3 +19,27 @@ Mənbədə açıq yerləşdirilmiş bot/API tokenləri, başqa admin ID-ləri, x
 ## Test
 
 `python -m unittest -v test_ivasper_admin.py`
+
+
+## Sayt və Telegram Mini App inteqrasiyası
+
+Hər iki mühitdə **⚙️ Admin → 🧰 IVASPER nömrələr** bölməsi mövcuddur.
+Orada servis və ölkə/range siyahıları eyni mövcud IVASMS API-dən götürülür.
+Range seçimi köhnə `/api/get-number` iki mərhələli axınına yönləndirilir:
+əvvəl 5 nömrə variantı, sonra seçilən 1 nömrənin admin hesabına ayrılması.
+Xidmət/range siyahısı real vaxt ehtiyatı deyil.
+
+`GET /api/ivasper` yalnız doğrulanmış Telegram Mini App initData
+və ya Telegram ilə əlaqələndirilmiş etibarlı sayt sessiyası olduqda işləyir.
+Server bütün çağırışlarda admin və bloklanma statusunu yoxlayır. Yalnız
+həmin adminin aktiv nömrələri qaytarılır; digər istifadəçilərə məxsus
+nömrələr, OTP mətnləri, API tokenləri və kənar panel məlumatları ötürülmür.
+İnterfeys açıq internetdə olsa da, giriş serverdə 403 ilə məhdudlaşdırılır.
+
+Testlər:
+
+```bash
+python -m unittest -v test_ivasper_admin.py test_ivasper_web.py
+node --check docs/app.js
+node test_ivasper_web_ui.cjs
+```

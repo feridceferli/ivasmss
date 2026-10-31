@@ -161,6 +161,7 @@ function switchTab(tab) {
         fetchPrices();
         fetchApiSales();
         fetchBotHourlyPromos();
+        loadIvasperAdmin();
     }
 }
 
@@ -831,6 +832,7 @@ async function selectOfferedNumber(index) {
         switchTab("active");
         // Show the newly confirmed number even if one optional refresh fails.
         await Promise.allSettled([fetchOrders(), fetchDashboard()]);
+        if (state.isAdmin && state.activeTab === "admin") void loadIvasperAdmin();
     } catch (_) {
         // Navigation failures cannot undo a completed server transaction.
     }
@@ -1273,6 +1275,118 @@ async function adminBalanceChange() {
     }
 }
 
+
+// IVASPER: one admin-scoped view for both the browser and Telegram Mini App.
+// This uses the existing allocation/choice flow; no third-party credentials or OTP feed.
+let ivasperAdminState = {services: {}, own_active: [], groups: [], selectedService: ""};
+
+async function loadIvasperAdmin() {
+    if (!state.isAdmin) return;
+    const status = document.getElementById("ivasper-status");
+    const servicePicker = document.getElementById("ivasper-service-select");
+    if (!status || !servicePicker) return;
+    status.textContent = "📡 IVASMS kataloqu yoxlanır...";
+    try {
+        const data = await api("/api/ivasper");
+        if (!state.isAdmin) return;
+        ivasperAdminState = {...data, groups: [], selectedService: ivasperAdminState.selectedService || ""};
+        // The admin-only endpoint and public service cards use the same trusted
+        // provider, while purchase authorization is always checked server-side.
+        state.services = data.services || {};
+        if (!state.countries.length) await fetchCountries();
+        if (!state.pricing) await fetchPrices();
+        const previouslySelected = servicePicker.value;
+        servicePicker.replaceChildren();
+        for (const name of Object.keys(state.services).sort()) {
+            const option = document.createElement("option");
+            option.value = name;
+            option.textContent = name.toUpperCase() + " · " + state.services[name].length + " range";
+            servicePicker.appendChild(option);
+        }
+        if (state.services[previouslySelected]) servicePicker.value = previouslySelected;
+        status.textContent = "📡 " + Number(data.service_count || 0) + " xidmət · " +
+            Number(data.range_count || 0) + " range · 📦 " +
+            Number(data.archive_count || 0) + " arxiv qeydi · Monitor: " +
+            String(data.monitor?.state || "naməlum") +
+            " · HTTP " + String(data.monitor?.http_status ?? "—");
+        renderIvasperRanges();
+        renderIvasperOwnNumbers();
+    } catch (err) {
+        status.textContent = "⚠️ IVASPER: " + err.message;
+        document.getElementById("ivasper-range-list")?.replaceChildren();
+        document.getElementById("ivasper-own-active")?.replaceChildren();
+    }
+}
+
+function renderIvasperRanges() {
+    if (!state.isAdmin) return;
+    const service = document.getElementById("ivasper-service-select")?.value || "";
+    const picker = document.getElementById("ivasper-country-select");
+    if (!picker) return;
+    const keepCountry = service === ivasperAdminState.selectedService ? picker.value : "0";
+    ivasperAdminState.selectedService = service;
+    ivasperAdminState.groups = serviceCountryGroups(service);
+    picker.replaceChildren();
+    ivasperAdminState.groups.forEach((group, index) => {
+        const option = document.createElement("option");
+        option.value = String(index);
+        option.textContent = group.label +
+            (group.code ? " (+" + group.code + ")" : "") +
+            " · " + group.items.length + " range";
+        picker.appendChild(option);
+    });
+    if ([...picker.options].some(option => option.value === keepCountry)) picker.value = keepCountry;
+    renderIvasperRangeList();
+}
+
+function renderIvasperRangeList() {
+    if (!state.isAdmin) return;
+    const list = document.getElementById("ivasper-range-list");
+    if (!list) return;
+    list.replaceChildren();
+    const service = document.getElementById("ivasper-service-select")?.value || "";
+    const index = Number(document.getElementById("ivasper-country-select")?.value || 0);
+    const group = ivasperAdminState.groups[index];
+    if (!service || !group) {
+        clearAndText(list, "Bu xidmət üçün hazırda API range-i yoxdur.");
+        return;
+    }
+    const term = (document.getElementById("ivasper-range-search")?.value || "").replace(/\D/g, "");
+    const matching = group.items.filter(rid => rid.includes(term));
+    for (const rid of matching.slice(0, 120)) {
+        addRangeButton(list, "📱 +" + rid + " — 5 variantı yoxla", {
+            service, country: group.code, rid, iso: group.iso, isAz: rid.startsWith("994")
+        });
+    }
+    if (!matching.length) clearAndText(list, "Bu ölkə və axtarış üzrə uyğun range yoxdur.");
+    if (matching.length > 120) list.appendChild(node("p",
+        "İlk 120 range göstərilir. Daha dəqiq axtarış yazın.", "notice-mini"));
+}
+
+function renderIvasperOwnNumbers() {
+    if (!state.isAdmin) return;
+    const container = document.getElementById("ivasper-own-active");
+    if (!container) return;
+    container.replaceChildren();
+    const numbers = (ivasperAdminState.own_active || [])
+        .filter(item => /^\+\d{7,15}$/.test(String(item.number || "")));
+    if (!numbers.length) {
+        clearAndText(container, "Hazırda sizə ayrılmış aktiv nömrə yoxdur. Range seçərək nömrə variantlarını yoxlayın.");
+        return;
+    }
+    for (const item of numbers) {
+        const row = node("div", null, "admin-user-line");
+        const detail = node("div", null, "admin-user-identity");
+        detail.appendChild(node("strong", "📱 " + item.number, "full-phone-number"));
+        detail.appendChild(node("small", "📶 " + (item.range || "—") +
+            " · " + Number(item.remaining_seconds || 0) + " saniyə qalıb"));
+        const button = node("button", "📋 Kopyala", "action-small");
+        button.type = "button";
+        button.addEventListener("click", () => copyPhoneNumber(item.number));
+        row.append(detail, button);
+        container.appendChild(row);
+    }
+}
 
 let adminUsersCache = [];
 
