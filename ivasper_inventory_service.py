@@ -156,7 +156,7 @@ async def import_inventory(request):
     if len(payload["numbers"]) > 1000:
         return web.json_response({"error": "too_many_numbers"}, status=413)
     rows = normalize_inventory(payload)
-    if not rows and not (payload.get("clear") is True and not payload["numbers"]):
+    if not rows:
         return web.json_response({"error": "no_valid_numbers"}, status=400)
     if len(rows) != len(payload["numbers"]):
         return web.json_response(
