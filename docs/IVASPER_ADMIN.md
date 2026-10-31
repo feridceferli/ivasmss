@@ -1,60 +1,79 @@
-# IVASPER — ayrı inventar (admin üçün)
+# IVASPER — sadə nömrə qəbulu və siyahı
 
-Bu bölüm mövcud IVASMS nömrə bazasına **qoşulmur** və heç bir
-IVASPER nömrəsini IVASMS aktiv nömrələr, qiymətlər, balans, tarixçə,
-range və ya GitHub nömrə arxivinə yazmır.
+IVASPER istifadəçi üçün deyil, **yalnız admin üçün** ayrıca nömrə
+inventarıdır. Mövcud IVASMS kataloqu, aktiv nömrələri, balansı,
+SMS/OTP mətnləri və nömrə arxivinə heç nə yazılmır.
 
-## Mənbə
+## İstifadə
 
-Orijinal `shagunallrepo/Ivasmsper` layihəsi nömrələri öz SQLite
-`numbers` cədvəlində və ayrıca GN_DATA servis/ölkə ehtiyatında saxlayır.
-GitHub kodu öz-özlüyündə həmin canlı bazanı və ya nömrə inventarı
-üçün hazır API təqdim etmir. Oradakı `/api/v1/messages` çağırışı
-SMS tarixçəsidir; **nömrə inventarı deyil**. Kənar layihədə açıq
-qalmış token və bot hesablarından istifadə edilmir.
+1. [Sayta](https://ivasmss.onrender.com) Telegram hesabı ilə daxil olun
+   (və ya botdakı Mini App-ı açın).
+2. **Admin → IVASPER nömrələr → Nömrə qəbul et** hissəsinə keçin.
+3. Ölkə və xidməti yazın. Nömrələri alt-alta əlavə edin (1–100 ədəd).
+4. **Nömrələri qəbul et** düyməsini sıxın.
+5. Səhifəni yenilədikdə nömrələr ayrıca IVASPER siyahısında görünür;
+   əvvəlki qeydlər silinmir. Telegram şəxsi çatında `/ivasper`
+   siyahıya baxış üçündür.
 
-İdarə etdiyiniz IVASPER instansiyasında yalnız istifadəsinə icazə verilmiş
-nömrələr üçün ayrıca HTTPS JSON endpoint-i təqdim edin. Render
-servisinin **Environment** bölməsində bu dəyərləri təyin edin:
+Nömrələrin siyahıya əlavə edilməsi onların SMS/OTP qəbul etdiyini
+təsdiqləmir. Yalnız idarə etdiyiniz və istifadəsinə icazəniz olan
+nömrələri əlavə edin.
 
-- `IVASPER_NUMBERS_URL`: öz HTTPS nömrə inventar endpoint-iniz
-- `IVASPER_NUMBERS_TOKEN`: endpoint Bearer token tələb edirsə, öz məxfi tokeniniz
+## Render konfiqurasiyası
 
-*Bu dəyərləri GitHub koduna yazmayın.* Endpoint özünüzə məxsus
-nömrə inventarı mənbəyi olmalıdır; SMS/OTP feed-i olmamalıdır.
+Hazırda üç resurs var:
+- IVASMS əsas xidmət: `srv-db1pbl9srm7s73co1im0`
+- Ayrı IVASPER API: `srv-dbittqoae00c73cm5rr0`
+- Ayrı PostgreSQL: `dpg-dbitrics728c7389r7m0-a`
 
-Dəstəklənən sadə JSON:
+IVASPER API-sində aşağıdakı ayarlar lazımdır:
+- `IVASPER_READER_TOKEN` — yalnız oxuma açarı
+- `IVASPER_WRITER_TOKEN` — yalnız nömrə qəbulu açarı
+- `DATABASE_URL` — **IVASPER PostgreSQL** resursunun
+  Render Dashboard → **Connect → Internal Database URL** dəyəri
+
+Əsas IVASMS servisində:
+- `IVASPER_NUMBERS_URL=https://ivasper-independent-api.onrender.com/numbers`
+- `IVASPER_NUMBERS_TOKEN` — IVASPER API-nin READER açarı ilə eyni
+- `IVASPER_IMPORT_TOKEN` — IVASPER API-nin WRITER açarı ilə eyni
+
+İki servisin tokenləri ayrı-ayrı, amma doğru cütlərlə eyni olmalıdır.
+**Tokenləri və PostgreSQL bağlantı parolunu GitHub-a və çata
+yazmayın.** Render-in Environment səhifəsində məxfi dəyişən kimi saxlayın.
+
+Qeyd: Render bağlantı vasitəsi PostgreSQL bağlantısının məxfi URL-sini
+oxumağa imkan vermədiyi üçün `DATABASE_URL` bir dəfə Dashboard-da
+özünüz tərəfindən doldurulmalıdır. API-də `DATABASE_URL` olmadığı
+halda `/import` HTTP 503 qaytarır — nömrələr **yadda saxlanmır**.
+Bağlantı qurulduqdan sonra API öz cədvəlini ilk sorğuda yaradacaq;
+əlavə SQL əmri tələb olunmur.
+
+Postgres və IVASPER API eyni workspace və Oregon regionundadır;
+daxili baza URL-sini işlədin. Pulsuz bazanın son istifadə tarixi
+`2026-11-30`-dur; həmin tarixdən əvvəl davamlı bazaya keçid planlayın.
+
+## Ayrıca API (yalnız səlahiyyətli sistem inteqrasiyası)
+
+Bir müstəqil IVASPER nömrə mənbəyi daxil etmək istəyirsinizsə
+`POST https://ivasper-independent-api.onrender.com/import`
+(Bearer `IVASPER_WRITER_TOKEN`, Content-Type: application/json)
+belə JSON qəbul edir:
 
 ```json
 {
   "numbers": [
-    {"number": "+994501234567", "country": "Azerbaijan", "service": "Telegram"},
-    {"number": "+447701112222", "country": "United Kingdom", "service": "WhatsApp"}
+    {"number": "+994501234567", "country": "Azərbaycan", "service": "IVASPER"}
   ]
 }
 ```
 
-Bu nömrələr yalnız format nümunəsidir. Adapter həmçinin Ivasmsper-in
-`services → Telegram → countries → Azerbaijan → numbers`
-formatını oxuya bilir. Nömrələr yalnız ayrıca `/api/ivasper` admin
-endpoint-ində **oxuma rejimində** görünür.
+Bu sadəcə format nümunəsidir; real ehtiyat deyil.
+`GET /numbers` yalnız READER tokenlə işləyir. Əsas sayt vasitəsilə
+admin idxalında token istifadəçiyə göndərilmir; backend proxy edir.
 
-## İstifadə
-
-Sayt və Telegram Mini App → **⚙️ Admin → 🧰 IVASPER nömrələr**.
-Ölkə, xidmət və nömrə axtarışı; kopyalama düyməsi.
-
-Telegram şəxsi çat: `/ivasper` → **IVASPER nömrələr** → ölkə → səhifə.
-Admin girişinin serverdə yoxlanması məcburidir.
-
-`IVASPER_NUMBERS_URL` təyin edilməyibsə, bölmə **mənbə qoşulmayıb**
-xəbərdarlığı göstərir və IVASMS nömrələri ilə siyahını doldurmur.
-Provider xətası və ya boş inventar real nömrə varmış kimi göstərilmir.
-
-Testlər:
+## Test
 
 ```bash
-python -m unittest -v test_ivasper_admin.py test_ivasper_web.py
-node --check docs/app.js
-node test_ivasper_web_ui.cjs
+python -m unittest -v test_ivasper_web.py test_ivasper_admin.py test_ivasper_inventory_service.py
+node --check docs/app.js && node test_ivasper_web_ui.cjs
 ```
