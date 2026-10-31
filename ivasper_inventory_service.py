@@ -58,6 +58,7 @@ def init_storage():
 
 
 def read_inventory():
+    init_storage()
     with _connection() as conn:
         with conn.cursor() as cur:
             cur.execute(
@@ -72,14 +73,16 @@ def read_inventory():
             ]
 
 
-def replace_inventory(rows):
+def add_inventory(rows):
+    """Append authenticated stock records; never wipe previous numbers."""
+    init_storage()
     with _connection() as conn:
         with conn.cursor() as cur:
-            cur.execute("DELETE FROM ivasper_inventory")
             cur.executemany(
-                """INSERT INTO ivasper_inventory
-                   (number,service,country)
-                   VALUES (%s,%s,%s)""",
+                """INSERT INTO ivasper_inventory (number,service,country)
+                   VALUES (%s,%s,%s)
+                   ON CONFLICT (number,service,country)
+                   DO UPDATE SET updated_at = NOW()""",
                 [(x["number"], x["service"], x["country"]) for x in rows],
             )
 
@@ -159,11 +162,11 @@ async def import_inventory(request):
         return web.json_response(
             {"error": "invalid_or_duplicate_numbers"}, status=400)
     try:
-        await asyncio.wait_for(asyncio.to_thread(replace_inventory, rows), timeout=15)
+        await asyncio.wait_for(asyncio.to_thread(add_inventory, rows), timeout=15)
     except Exception:
         return web.json_response({"error": "storage_unavailable"}, status=503)
     return web.json_response(
-        {"ok": True, "imported": len(rows), "source": "ivasper_only"},
+        {"ok": True, "accepted": len(rows), "source": "ivasper_only"},
         headers={"Cache-Control": "no-store"},
     )
 
