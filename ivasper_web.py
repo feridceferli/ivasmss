@@ -98,7 +98,10 @@ def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_se
                 label = str(record.get("country") or "Naməlum").strip()[:70]
                 countries[label] += 1
 
-    archive_countries, archive_page = archive_country_page(\n        archived, owner_id, country, page)\n\n    own_active = []
+    archive_countries, archive_page = archive_country_page(
+        archived, owner_id, country, page)
+
+    own_active = []
     if isinstance(active, dict):
         for number, info in active.items():
             if not isinstance(info, dict):
@@ -133,7 +136,9 @@ def catalog_snapshot(services, archived, monitor, active, owner_id, remaining_se
         "service_count": len(catalogue),
         "range_count": sum(len(ranges) for ranges in catalogue.values()),
         "archive_count": sum(countries.values()),
-        "archive_countries": len(countries),\n        "archive_country_list": archive_countries,\n        "archive_page": archive_page,
+        "archive_countries": len(countries),
+        "archive_country_list": archive_countries,
+        "archive_page": archive_page,
         "own_active": own_active,
         "monitor": {"state": state, "http_status": http_status},
         "note": "Ölkə statistikası ümumi arxiv sayıdır. Tam nömrələr yalnız sizin arxiv qeydlərinizdən göstərilir; bu, nömrənin hazırda aktiv olduğunu sübut etmir.",
