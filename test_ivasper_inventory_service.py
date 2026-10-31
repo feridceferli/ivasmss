@@ -60,8 +60,8 @@ class InventoryServiceTests(unittest.TestCase):
         from unittest.mock import patch as mock_patch
         import secrets
         secret = secrets.token_urlsafe(42)
-        with mock_patch("ivasper_inventory_service.DATABASE_URL", ""), \\
-             mock_patch.dict(os.environ, {"IVASPER_READER_TOKEN": secret}):
+        with (mock_patch("ivasper_inventory_service.DATABASE_URL", ""),
+              mock_patch.dict(os.environ, {"IVASPER_READER_TOKEN": secret})):
             health_response = asyncio.run(
                 health(make_mocked_request("GET", "/health")))
             self.assertEqual(health_response.status, 503)
