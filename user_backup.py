@@ -46,6 +46,7 @@ class UserProfileBackup:
         "withdraw_requests", "datarange", "fake_otp_config",
         "world_news_settings", "ai_post_settings", "active_leases",
         "api_sales", "bot_user_promos", "admin_provider_numbers",
+        "sms_test_diagnostics",
     ))
     _LIST_EXTRAS = frozenset(("required_channels", "banned_users"))
     _MAX_EXTRA_BYTES = 12_000_000
