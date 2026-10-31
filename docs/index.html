@@ -609,7 +609,6 @@
                 <p class="notice-mini">Bölməni seçərək birbaşa idarəetmə alətlərinə keçin. Səlahiyyətlər serverdə yoxlanılır.</p>
                 <div class="admin-nav-grid">
                     <button class="action-small" onclick="adminJump('admin-users-section')">👥 İstifadəçilər</button>
-                    <button class="action-small" onclick="adminJump('admin-ivasper-section')">🧰 IVASPER nömrələr</button>
                     <button class="action-small" onclick="adminJump('admin-wa-referral-section')">🎁 WhatsApp dəvətləri</button>
                     <button class="action-small" onclick="adminJump('admin-api-sales-section')">🛒 API Satışı</button>
                     <button class="action-small" onclick="adminJump('admin-hourly-promos-section')">📣 Saatlıq bot elanları</button>
@@ -624,51 +623,6 @@
                     <button class="action-small" onclick="adminJump('admin-archive-section')">📦 Arxiv</button>
                 </div>
             </div>
-            <section class="card" id="admin-ivasper-section" aria-labelledby="admin-ivasper-heading">
-                <h4 id="admin-ivasper-heading">🧰 IVASPER — ayrıca nömrələr</h4>
-                <p class="notice-mini">Bu siyahı yalnız öz IVASPER mənbəyindən oxunur. Mövcud IVASMS xidmətlərinə, aktiv nömrələrinə, balansına və arxivinə əlavə olunmur. Yalnız admin görə bilər.</p>
-                <div class="quick-actions">
-                    <button class="action-small" type="button" onclick="loadIvasperAdmin()">🔄 IVASPER siyahısını yenilə</button>
-                </div>
-                <p class="notice-mini" id="ivasper-status" role="status" aria-live="polite">IVASPER mənbəyi yoxlanır...</p>
-                <div class="card" style="margin:12px 0">
-                    <h4 style="margin:0 0 8px">➕ IVASPER nömrə qəbul et</h4>
-                    <p class="notice-mini">Öz istifadəniz üçün nömrələri alt-alta yazın. Nömrələr yalnız ayrıca IVASPER bazasına əlavə olunur; əvvəlkilər silinmir.</p>
-                    <div class="catalog-tools" style="flex-wrap:wrap">
-                        <label for="ivasper-import-country" class="notice-mini">🌍 Ölkə</label>
-                        <input id="ivasper-import-country" class="admin-input" type="text" value="Azərbaycan" maxlength="48" autocomplete="off">
-                        <label for="ivasper-import-service" class="notice-mini">📡 Xidmət</label>
-                        <input id="ivasper-import-service" class="admin-input" type="text" value="IVASPER" maxlength="48" autocomplete="off">
-                    </div>
-                    <textarea id="ivasper-import-numbers" class="admin-input" rows="5"
-                              placeholder="+994501234567&#10;+994551234567"
-                              aria-label="IVASPER nömrələri alt-alta" autocomplete="off"></textarea>
-                    <div class="catalog-tools" style="flex-wrap:wrap">
-                        <label class="notice-mini" for="ivasper-import-txt">📄 TXT fayldan nömrə seç (istəyə bağlı)</label>
-                        <input id="ivasper-import-txt" class="admin-input" type="file"
-                               accept=".txt,.csv,text/plain,text/csv"
-                               onchange="loadIvasperTxtFile(this)" aria-label="Nömrə siyahısını TXT fayldan yüklə">
-                    </div>
-                    <button class="action-small" type="button" onclick="saveIvasperNumbers()">📥 Nömrələri qəbul et</button>
-                    <p id="ivasper-import-status" class="notice-mini" role="status" aria-live="polite">Nömrələr yalnız admin tərəfindən əlavə edilə bilər.</p>
-                </div>
-                <div class="catalog-tools" style="flex-wrap:wrap">
-                    <label class="notice-mini" for="ivasper-country-filter">🌍 Ölkə</label>
-                    <select id="ivasper-country-filter" class="admin-input" onchange="renderIvasperNumbers()" aria-label="IVASPER ölkə filtri">
-                        <option value="">Bütün ölkələr</option>
-                    </select>
-                    <label class="notice-mini" for="ivasper-service-filter">📡 Xidmət</label>
-                    <select id="ivasper-service-filter" class="admin-input" onchange="renderIvasperNumbers()" aria-label="IVASPER xidmət filtri">
-                        <option value="">Bütün xidmətlər</option>
-                    </select>
-                    <input id="ivasper-number-filter" class="admin-input" type="search"
-                           placeholder="🔎 Nömrə axtar" aria-label="IVASPER nömrə axtarışı"
-                           oninput="renderIvasperNumbers()" autocomplete="off">
-                </div>
-                <p class="notice-mini" id="ivasper-number-count">Mənbədən nömrə gözlənilir.</p>
-                <div id="ivasper-number-list" class="catalog-scroll" aria-live="polite"></div>
-                <p class="notice-mini">Bağlantı üçün Render-də öz autorizə olunmuş IVASPER inventar endpoint-inin `IVASPER_NUMBERS_URL` ünvanını və tələb olunursa `IVASPER_NUMBERS_TOKEN` açarını təyin edin. Başqa layihədə açıq qalan tokenlər istifadə olunmur. Nömrənin siyahıda olması SMS/OTP qəbulunu təsdiqləmir.</p>
-            </section>
             <section class="card api-sales-admin" id="admin-hourly-promos-section">
                 <h4>📣 Bot istifadəçilərinə saatlıq nömrə elanları</h4>
                 <p class="notice-mini">Qısa elanlar qeydiyyatlı bot istifadəçilərinin şəxsi çatlarına göndərilir, qrupa yox. Mesajlar növbə ilə dəyişir. Heç bir OTP, API açarı və ya şəxsi nömrə paylaşılmır.</p>
@@ -950,7 +904,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261027-website"></script>
-    <script src="app.js?v=20261031-ivasper-stock-diagnostics"></script>
+    <script src="app.js?v=20261031-ivasms-cleanup"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
