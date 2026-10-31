@@ -40,6 +40,7 @@
             for (const name of Object.keys(NAMES)) {
                 sourceStatus(name, (data.providers || {})[name]);
                 loadAdminProviderNumbers(name);
+                refreshProviderFeed(name);
             }
         } catch (error) {
             for (const name of Object.keys(NAMES)) sourceStatus(name, null);
@@ -116,10 +117,13 @@
             const data = await api("/api/admin-provider-feeds?provider=" +
                 encodeURIComponent(provider) + "&limit=20");
             renderFeed(provider, data.records);
-            await loadAdminProviderFeeds();
         } catch (error) {
             const map = {
-                provider_not_configured: "Render Environment-də bu provayderin şəxsi API məlumatları yoxdur.",
+                provider_not_configured: "HTTPS mənbə ünvanı və ya şəxsi API açarı konfiqurasiya edilməyib. Açıq HTTP linkləri bloklanır.",
+                upstream_unauthorized: "API açarı qəbul edilmədi (HTTP 401).",
+                upstream_forbidden: "Provayder icazə vermir (HTTP 403). Hesab səlahiyyətlərini yoxlayın.",
+                upstream_endpoint_missing: "API endpoint tapılmadı (HTTP 404). Ünvanı yoxlayın.",
+                upstream_rate_limited: "Provayder sorğunu məhdudlaşdırıb (HTTP 429).",
                 upstream_http_error: "Provayder HTTP xətası qaytardı. Açarı və icazələri yoxlayın.",
                 upstream_redirect_rejected: "Provayder gözlənilməz yönləndirmə qaytardı.",
                 upstream_unreachable_or_invalid: "Provayderdən düzgün cavab alınmadı.",
