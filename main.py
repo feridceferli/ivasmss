@@ -85,6 +85,7 @@ from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons
 
 from whatsapp_safe import register_whatsapp_handlers
 from admin_test_tools import register_admin_test_tools
+from ivasper_admin import register_ivasper_admin_handlers
 
 # ==================== CONFIG SECTION ====================
 
@@ -1555,6 +1556,7 @@ def admin_main_keyboard():
         [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR"), KeyboardButton("⚡ FAKE OTP")],
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
         [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
+        [KeyboardButton("🧰 IVASPER NƏZARƏT")],
         [KeyboardButton("🛒 API SATIŞI (ADMIN)")],
         [KeyboardButton("📣 SAATLIQ NÖMRƏ ELANLARI")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
@@ -7099,6 +7101,10 @@ async def post_init(application):
 def register_handlers(app):
     register_whatsapp_handlers(app, is_admin)
     register_admin_test_tools(app, is_admin, admin_main_keyboard)
+    register_ivasper_admin_handlers(
+        app, is_admin, is_user_banned, load_range_db,
+        fetch_services_cached, lambda: monitor_diagnostics,
+    )
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))

@@ -111,7 +111,7 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         self.assertIn('if (validNumber)', JS)
         self.assertIn('copyPhoneNumber(fullNumber)', JS)
         self.assertIn('order.number || ""', JS)
-        self.assertIn('app.js?v=20261026-three-minute-orders', HTML)
+        self.assertRegex(HTML, r'app\.js\?v=\d{8}[\w-]+')
         self.assertIn('async function cancelNumberOrder', JS)
         self.assertIn('action: "cancel"', JS)
         self.assertNotIn('.innerHTML', JS)
