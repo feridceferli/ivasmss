@@ -48,7 +48,12 @@ def archive_country_page(archived, owner_id, country="", page=0, page_size=25):
         }
     names = {item["country"] for item in countries}
     if country not in names:
-        country = countries[0]["country"]
+        preferred = next(
+            (item["country"] for item in countries
+             if ("azərbaycan" in item["country"].casefold()
+                 or "azerbaijan" in item["country"].casefold()
+                 or "🇦🇿" in item["country"])), None)
+        country = preferred or countries[0]["country"]
     page_size = max(1, min(int(page_size), 50))
     all_numbers = sorted(own.get(country, {}).values(),
                          key=lambda item: item["number"])
