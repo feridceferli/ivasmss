@@ -1,0 +1,26 @@
+name: IVASPER live health probe
+on:
+  pull_request:
+    paths:
+      - ivasper_inventory_service.py
+      - .github/workflows/ivasper-live-health.yml
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Inspect public health status without credentials
+        run: |
+          python - <<'PY'
+          import json, urllib.request
+          url = "https://ivasper-independent-api.onrender.com/health"
+          try:
+              with urllib.request.urlopen(url, timeout=90) as r:
+                  status, data = r.status, json.load(r)
+          except Exception as exc:
+              print(f"IVASPER probe error: {type(exc).__name__}")
+          else:
+              print(f"IVASPER public health: HTTP {status}; ready={data.get('ok')}; "
+                    f"storage={data.get('storage', 'unknown')}; "
+                    f"persistent_import_enabled={data.get('persistent_import_enabled', 'unknown')}")
+          PY

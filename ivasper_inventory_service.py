@@ -89,15 +89,21 @@ def add_inventory(rows):
 
 async def health(request):
     if not DATABASE_URL:
+        # An empty read-only snapshot is not a working number-receiving system.
         return web.json_response({
-            "ok": _static_inventory() is not None,
-            "role": "independent-ivasper-inventory",
-            "storage": "render_environment_read_only",
+            "ok": False, "role": "independent-ivasper-inventory",
+            "storage": "database_not_connected",
             "persistent_import_enabled": False,
-        }, status=200 if _static_inventory() is not None else 503)
+            "number_count": 0,
+        }, status=503)
     try:
         await asyncio.wait_for(asyncio.to_thread(init_storage), timeout=12)
-        return web.json_response({"ok": True, "role": "independent-ivasper-inventory"})
+        rows = await asyncio.wait_for(asyncio.to_thread(read_inventory), timeout=12)
+        return web.json_response({
+            "ok": True, "role": "independent-ivasper-inventory",
+            "storage": "postgres", "persistent_import_enabled": True,
+            "number_count": len(rows),
+        })
     except Exception:
         return web.json_response(
             {"ok": False, "error": "storage_unavailable"}, status=503)
@@ -107,15 +113,13 @@ async def get_numbers(request):
     if not _authorized(request, "IVASPER_READER_TOKEN"):
         return web.json_response({"error": "forbidden"}, status=403)
     if not DATABASE_URL:
-        rows = _static_inventory()
-        if rows is None:
-            return web.json_response({"error": "invalid_inventory_config"}, status=503)
-    else:
-        try:
-            rows = await asyncio.wait_for(asyncio.to_thread(read_inventory), timeout=12)
-        except Exception:
-            return web.json_response(
-                {"error": "storage_unavailable"}, status=503)
+        return web.json_response(
+            {"error": "persistent_storage_not_connected"}, status=503)
+    try:
+        rows = await asyncio.wait_for(asyncio.to_thread(read_inventory), timeout=12)
+    except Exception:
+        return web.json_response(
+            {"error": "storage_unavailable"}, status=503)
     return web.json_response(
         {"numbers": rows},
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
