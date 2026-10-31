@@ -6,13 +6,14 @@ const tg = window.Telegram?.WebApp || { initData: "", expand() {} };
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "api-sales", "leaderboard", "profile", "guide", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "api-sales", "leaderboard", "profile", "guide", "sms-lab", "admin"];
 const state = {
     activeTab: "services",
     services: {},
     azCatalog: [],
     azApproved: false,
     isAdmin: false,
+    smsDiagnosticsAvailable: false,
     countries: [],
     countryFilter: "",
     countryPage: 0,
@@ -128,6 +129,7 @@ function setStatus(message) {
 function switchTab(tab) {
     if (!TABS.includes(tab) || (tab === "admin" && !state.isAdmin)) return;
     if (tab === "api-sales" && !state.isAdmin && !state.apiSales.visible && !state.apiSales.owned.length) return;
+    if (tab === "sms-lab" && !state.smsDiagnosticsAvailable && !state.isAdmin) return;
     state.activeTab = tab;
     document.querySelectorAll(".tab-content").forEach(content => {
         content.classList.toggle("active", content.id === "tab-" + tab);
@@ -149,6 +151,8 @@ function switchTab(tab) {
         fetchOrders();
     } else if (tab === "history") {
         fetchIncomingSms();
+    } else if (tab === "sms-lab") {
+        window.refreshSmsDiagnostics?.();
     } else if (tab === "api-sales") {
         fetchApiSales();
     } else if (tab === "leaderboard") {
@@ -162,6 +166,7 @@ function switchTab(tab) {
         fetchApiSales();
         fetchBotHourlyPromos();
         window.loadAdminProviderFeeds?.();
+        window.refreshSmsDiagnostics?.();
     }
 }
 
@@ -263,6 +268,7 @@ async function fetchDashboard() {
         void updateTelegramAvatar(user);
         state.isAdmin = !!user.is_admin;
         state.azApproved = !!user.az_approved;
+        window.loadSmsDiagnosticsAvailability?.();
         renderWhatsappReferrals(data.whatsapp_referrals);
         const adminButton = document.getElementById("admin-tab-button");
         adminButton.hidden = !state.isAdmin;

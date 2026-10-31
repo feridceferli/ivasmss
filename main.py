@@ -4,6 +4,7 @@ from admin_provider_feeds import (
     ProviderFeedError, configured_status, feed_snapshot, run_ivasmsper_websocket,
 )
 from admin_provider_numbers import AdminNumberStock, NumberStockError, PROVIDERS
+from sms_test_diagnostics import SmsDiagnosticStore, SmsDiagnosticError
 from number_archive import NumberArchive, txt_chunks
 from otp_leaderboard import otp_leaderboards, leaderboard_page
 from user_backup import UserProfileBackup
@@ -125,6 +126,8 @@ API_SALES_FILE = data_path("api_sales_private.json")
 BOT_PROMO_FILE = data_path("bot_user_promos.json")
 ADMIN_PROVIDER_NUMBERS_FILE = data_path("admin_provider_numbers.json")
 admin_provider_numbers = AdminNumberStock(ADMIN_PROVIDER_NUMBERS_FILE)
+SMS_TEST_DIAGNOSTICS_FILE = data_path("sms_test_diagnostics_private.json")
+sms_diagnostic_store = SmsDiagnosticStore(SMS_TEST_DIAGNOSTICS_FILE)
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
@@ -146,6 +149,7 @@ user_backup = UserProfileBackup(
         "api_sales": API_SALES_FILE,
         "bot_user_promos": BOT_PROMO_FILE,
         "admin_provider_numbers": ADMIN_PROVIDER_NUMBERS_FILE,
+        "sms_test_diagnostics": SMS_TEST_DIAGNOSTICS_FILE,
     },
 )
 
@@ -7075,6 +7079,75 @@ async def miniapp_admin_tools_api(request):
     return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
 
 
+async def _sync_sms_diagnostics():
+    """Ensure settings and phone-test history survive ephemeral Render redeploys."""
+    user_backup.changed()
+    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
+        await user_backup.sync_once(client)
+
+
+async def miniapp_sms_diagnostics_api(request):
+    """Dry-run only. Never invokes any third-party SMS/OTP endpoint."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    user, reason = _miniapp_auth(request)
+    if not user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": reason}, status=401))
+    uid = int(user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    admin = bool(is_admin(uid))
+    if request.method == "GET":
+        try:
+            payload = sms_diagnostic_store.snapshot(uid, admin)
+        except SmsDiagnosticError as exc:
+            return _miniapp_cors(web.json_response({"error": exc.code}, status=503))
+        payload["backup_ready"] = bool(user_backup.ready) if admin else None
+        result = _miniapp_cors(web.json_response(payload))
+        result.headers["Cache-Control"] = "no-store"
+        return result
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    if request.content_length is not None and request.content_length > 2000:
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=413))
+    if not user_backup.ready:
+        return _miniapp_cors(web.json_response({"error": "storage_not_ready"}, status=503))
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
+    if not isinstance(body, dict):
+        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
+    action = body.get("action")
+    try:
+        if action == "visibility":
+            if not admin:
+                return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+            payload = await sms_diagnostic_store.set_visibility(body.get("enabled"))
+        elif action == "simulate":
+            payload = await sms_diagnostic_store.simulate(
+                uid, body.get("number"), body.get("consent"), is_admin=admin)
+        else:
+            return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
+    except SmsDiagnosticError as exc:
+        response_status = 503 if exc.code == "storage_unavailable" else (
+            403 if exc.code == "feature_disabled" else
+            429 if exc.code in ("rate_limited", "daily_limit") else 400)
+        return _miniapp_cors(web.json_response({"error": exc.code}, status=response_status))
+    try:
+        await _sync_sms_diagnostics()
+    except (OSError, RuntimeError, ValueError, httpx.HTTPError) as exc:
+        print("[sms-diagnostics] private sync pending: " + type(exc).__name__, flush=True)
+        return _miniapp_cors(web.json_response(
+            {"error": "backup_failed", "saved_locally": True}, status=503))
+    result = _miniapp_cors(web.json_response({
+        "ok": True, "result": payload, "mode": "dry_run_no_sms_sent",
+    }))
+    result.headers["Cache-Control"] = "no-store"
+    return result
+
+
 async def miniapp_admin_provider_feeds_api(request):
     """Private provider feeds; the admin check is enforced on every request."""
     if request.method == "OPTIONS":
@@ -7390,6 +7463,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
     server.router.add_route("*", "/api/admin-provider-feeds", miniapp_admin_provider_feeds_api)
     server.router.add_route("*", "/api/admin-provider-numbers", miniapp_admin_provider_numbers_api)
+    server.router.add_route("*", "/api/sms-diagnostics", miniapp_sms_diagnostics_api)
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)

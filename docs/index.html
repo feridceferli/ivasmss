@@ -297,6 +297,7 @@
             <button class="tab-btn" onclick="switchTab('leaderboard')">🏆 Liderlər</button>
             <button class="tab-btn" onclick="switchTab('profile')">👤 Profil</button>
             <button class="tab-btn" onclick="switchTab('guide')">📖 İstifadə qaydası</button>
+            <button class="tab-btn" id="sms-diagnostics-tab-button" hidden onclick="switchTab('sms-lab')">🧪 SMS Test</button>
             <button class="tab-btn" id="admin-tab-button" hidden onclick="switchTab('admin')">⚙️ Admin</button>
         </div>
 
@@ -603,6 +604,26 @@
             </div>
         </section>
 
+        <section id="tab-sms-lab" class="tab-content">
+            <div class="card">
+                <h3>🧪 SMS Diaqnostika Simulyatoru</h3>
+                <p class="notice-mini"><strong>Yalnız simulyasiya:</strong> 49 xarici SMS/OTP endpointinə sorğu göndərilmir. Bu alət heç bir real SMS yaratmır. Özünüzə məxsus test nömrənizi qeyd edib giriş, format və tarixçə axınını yoxlaya bilərsiniz.</p>
+                <p id="sms-lab-availability" class="notice-mini" role="status">Diaqnostika yüklənir...</p>
+                <label for="sms-lab-phone">Öz test nömrəniz (+994501234567 formatında)</label>
+                <input id="sms-lab-phone" type="tel" class="admin-input" maxlength="24" autocomplete="off" placeholder="+994501234567">
+                <label style="display:block;margin:12px 0">
+                    <input id="sms-lab-consent" type="checkbox"> Bu nömrə mənə məxsusdur və ya test etməyə icazəm var.
+                </label>
+                <div class="quick-actions">
+                    <button class="action-small" type="button" onclick="runSmsDiagnosticSimulation()">🧪 Simulyasiya et</button>
+                    <button class="action-small" type="button" onclick="refreshSmsDiagnostics()">🔄 Tarixçəni yenilə</button>
+                </div>
+                <p id="sms-lab-results" class="notice-mini" role="status"></p>
+                <h4>📜 Test nömrələrinin tarixçəsi</h4>
+                <div id="sms-lab-history" class="catalog-scroll" aria-live="polite"></div>
+            </div>
+        </section>
+
         <div id="tab-admin" class="tab-content" hidden>
             <div class="card" id="admin-overview">
                 <h4>🧭 Admin idarəetmə mərkəzi</h4>
@@ -617,6 +638,7 @@
                     <button class="action-small" onclick="adminJump('admin-fake-otp-section')">⚡ Fake OTP (test)</button>
                     <button class="action-small" onclick="adminJump('admin-notice-section')">🛠 Bildirişlər</button>
                     <button class="action-small" onclick="adminJump('admin-test-section')">🧪 Test alətləri</button>
+                    <button class="action-small" onclick="adminJump('admin-sms-lab-section')">🧪 SMS diaqnostikası</button>
                     <button class="action-small" onclick="adminJump('admin-price-section')">💰 Qiymətlər</button>
                     <button class="action-small" onclick="adminJump('admin-balance-section')">💳 Balans</button>
                     <button class="action-small" onclick="adminJump('admin-news-section')">🌍 Xəbərlər</button>
@@ -625,6 +647,15 @@
                     <button class="action-small" onclick="adminJump('admin-ivasmsper-section')">🔌 Ivasmsper (admin)</button>
                 </div>
             </div>
+            <section class="card" id="admin-sms-lab-section" style="margin-top:12px">
+                <h4>🧪 SMS simulyasiya bölməsini idarə et</h4>
+                <p class="notice-mini">Standart rejim yalnız admindir. Hamıya açdıqda istifadəçilər yalnız SMS göndərməyən simulyatordan yararlanacaqlar. Real SMS göndərişi heç vaxt aktivləşdirilmir.</p>
+                <p id="admin-sms-lab-status" class="notice-mini" role="status">Status yüklənir...</p>
+                <button class="action-small" type="button" id="admin-sms-lab-toggle"
+                    onclick="toggleSmsDiagnosticsPublic()">Hamı üçün aç / bağla</button>
+                <button class="action-small" type="button" onclick="refreshSmsDiagnostics()">🔄 Test tarixçəsi və diaqnostika</button>
+                <p id="admin-sms-lab-metrics" class="notice-mini"></p>
+            </section>
             <section class="card" id="admin-green_sms-section" style="margin-top:12px" aria-label="Green SMS yalnız admin">
                 <h4>🟢 Green SMS — şəxsi admin paneli</h4>
                 <p class="notice-mini">Yalnız təsdiqlənmiş admin üçün ayrıca SMS mənbəyi. Əlavə edilən mesajlar digər istifadəçilərin xidmətlərinə, tarixçəsinə və qruplara ötürülmür.</p>
@@ -950,6 +981,7 @@
     <script src="web-login.js?v=20261027-website"></script>
     <script src="app.js?v=20261031-admin-feeds"></script>
     <script src="admin-provider-feeds.js?v=20261031-number-stock"></script>
+    <script src="sms-test-diagnostics.js?v=20261031-dry-run"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
