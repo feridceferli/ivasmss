@@ -15,7 +15,7 @@ class IvasperExternalTests(unittest.TestCase):
                 {"number": "+994501234567", "country": "Azərbaycan",
                  "service": "Telegram", "message": "SMS secret"},
                 {"number": "+994501234567", "country": "Azərbaycan", "service": "Telegram"},
-                {"number": "+447701112222", "service": "WhatsApp", "otp": "123456"},
+                {"number": "+447701112222", "service": "WhatsApp", "otp": "746829"},
                 {"num": "+994551111111", "message": "This is an SMS receipt"},
                 {"number": "<script>alert(1)</script>"},
             ]
@@ -23,7 +23,7 @@ class IvasperExternalTests(unittest.TestCase):
         self.assertEqual(len(output), 2)
         text = str(output)
         self.assertIn("+994501234567", text)
-        for private in ("SMS secret", "123456", "script", "+994551111111"):
+        for private in ("SMS secret", "746829", "script", "+994551111111"):
             self.assertNotIn(private, text)
 
     def test_ivasmsper_nested_stock(self):
