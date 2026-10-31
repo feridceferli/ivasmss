@@ -6,6 +6,7 @@ Uses a separate Render Postgres database so redeploys do not erase stock.
 """
 import asyncio
 import hmac
+import json
 import os
 import re
 
@@ -24,6 +25,17 @@ def _authorized(request, env_key):
     if len(configured) < 32 or not value.startswith("Bearer "):
         return False
     return hmac.compare_digest(value[7:], configured)
+
+
+def _static_inventory():
+    """Optional Render Environment JSON snapshot when DB credentials are unavailable."""
+    try:
+        payload = json.loads(os.environ.get("IVASPER_STOCK_JSON", '{"numbers":[]}'))
+        if not _stock_payload_only(payload):
+            return None
+        return normalize_inventory(payload)
+    except (ValueError, TypeError):
+        return None
 
 
 def _connection():
@@ -73,6 +85,13 @@ def replace_inventory(rows):
 
 
 async def health(request):
+    if not DATABASE_URL:
+        return web.json_response({
+            "ok": _static_inventory() is not None,
+            "role": "independent-ivasper-inventory",
+            "storage": "render_environment_read_only",
+            "persistent_import_enabled": False,
+        }, status=200 if _static_inventory() is not None else 503)
     try:
         await asyncio.wait_for(asyncio.to_thread(init_storage), timeout=12)
         return web.json_response({"ok": True, "role": "independent-ivasper-inventory"})
@@ -84,11 +103,16 @@ async def health(request):
 async def get_numbers(request):
     if not _authorized(request, "IVASPER_READER_TOKEN"):
         return web.json_response({"error": "forbidden"}, status=403)
-    try:
-        rows = await asyncio.wait_for(asyncio.to_thread(read_inventory), timeout=12)
-    except Exception:
-        return web.json_response(
-            {"error": "storage_unavailable"}, status=503)
+    if not DATABASE_URL:
+        rows = _static_inventory()
+        if rows is None:
+            return web.json_response({"error": "invalid_inventory_config"}, status=503)
+    else:
+        try:
+            rows = await asyncio.wait_for(asyncio.to_thread(read_inventory), timeout=12)
+        except Exception:
+            return web.json_response(
+                {"error": "storage_unavailable"}, status=503)
     return web.json_response(
         {"numbers": rows},
         headers={"Cache-Control": "private, no-store", "X-Content-Type-Options": "nosniff"},
@@ -114,6 +138,8 @@ def _stock_payload_only(payload):
 async def import_inventory(request):
     if not _authorized(request, "IVASPER_WRITER_TOKEN"):
         return web.json_response({"error": "forbidden"}, status=403)
+    if not DATABASE_URL:
+        return web.json_response({"error": "persistent_storage_not_connected"}, status=503)
     if "application/json" not in request.headers.get("Content-Type", ""):
         return web.json_response({"error": "invalid_content_type"}, status=415)
     try:
