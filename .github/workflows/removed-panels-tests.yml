@@ -1,0 +1,25 @@
+name: Removed legacy SMS panels
+on:
+  push:
+    paths:
+      - main.py
+      - docs/index.html
+      - docs/app.js
+      - tests/test_removed_panels.py
+  pull_request:
+    paths:
+      - main.py
+      - docs/index.html
+      - docs/app.js
+      - tests/test_removed_panels.py
+jobs:
+  retired-panels:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: python -m py_compile main.py
+      - run: node --check docs/app.js
+      - run: python -m unittest -v tests/test_removed_panels.py

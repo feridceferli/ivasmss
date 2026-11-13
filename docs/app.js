@@ -6,7 +6,7 @@ const tg = window.Telegram?.WebApp || { initData: "", expand() {} };
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "api-sales", "leaderboard", "profile", "guide", "sms-lab", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "api-sales", "leaderboard", "profile", "guide", "admin"];
 const state = {
     activeTab: "services",
     services: {},
@@ -129,7 +129,6 @@ function setStatus(message) {
 function switchTab(tab) {
     if (!TABS.includes(tab) || (tab === "admin" && !state.isAdmin)) return;
     if (tab === "api-sales" && !state.isAdmin && !state.apiSales.visible && !state.apiSales.owned.length) return;
-    if (tab === "sms-lab" && !state.smsDiagnosticsAvailable && !state.isAdmin) return;
     state.activeTab = tab;
     document.querySelectorAll(".tab-content").forEach(content => {
         content.classList.toggle("active", content.id === "tab-" + tab);
@@ -151,8 +150,6 @@ function switchTab(tab) {
         fetchOrders();
     } else if (tab === "history") {
         fetchIncomingSms();
-    } else if (tab === "sms-lab") {
-        window.refreshSmsDiagnostics?.();
     } else if (tab === "api-sales") {
         fetchApiSales();
     } else if (tab === "leaderboard") {
@@ -1481,11 +1478,6 @@ async function loadAdminTools() {
                 /yeniləndi|yenidir/i.test(detail) ? "✅ " + detail :
                 "ℹ️ " + detail;
         }
-        const demo = adminTools.demo || {};
-        const demoStatus = document.getElementById("admin-demo-status");
-        if (demoStatus) demoStatus.textContent =
-            (demo.running ? "🟢 Aktiv" : "⏸️ Dayandırılıb") +
-            " · Test mesajları: " + String(demo.sent_count ?? 0);
         const userBackup = adminTools.user_backup || {};
         const userBackupStatus = document.getElementById("admin-user-backup-status");
         if (userBackupStatus) {
