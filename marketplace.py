@@ -10,6 +10,10 @@ from data_storage import atomic_save
 import json
 
 
+def _rid(value):
+    return re.sub(r"[^0-9]", "", str(value))
+
+
 def _read(path, default):
     try:
         value = json.loads(Path(path).read_text(encoding="utf-8"))
@@ -28,26 +32,26 @@ class MarketCatalog:
     def _published(self):
         payload = _read(self.filename, {})
         return {
-            service: set(ranges)
+            service.lower(): {_rid(r) for r in ranges}
             for service, ranges in payload.items()
             if isinstance(service, str) and isinstance(ranges, list)
         }
 
     def allowed(self, service, rid):
-        return str(rid) in self._published().get(str(service).lower(), set())
+        return _rid(rid) in self._published().get(str(service).lower(), set())
 
     def public(self, upstream):
         approved = self._published()
         return {
-            name: [rid for rid in ranges if str(rid) in approved.get(str(name).lower(), set())]
+            name: [rid for rid in ranges if _rid(rid) in approved.get(str(name).lower(), set())]
             for name, ranges in upstream.items()
-            if any(str(rid) in approved.get(str(name).lower(), set()) for rid in ranges)
+            if any(_rid(rid) in approved.get(str(name).lower(), set()) for rid in ranges)
         }
 
     def toggle(self, service, rid, upstream):
         service = str(service).lower()
-        rid = str(rid)
-        if (service not in upstream or rid not in [str(r) for r in upstream[service]]
+        rid = _rid(rid)
+        if (service not in upstream or rid not in [_rid(r) for r in upstream[service]]
                 or not re.fullmatch(r"\d{1,10}", rid)):
             raise ValueError("Range is not advertised by the provider")
         config = _read(self.filename, {})
