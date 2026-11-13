@@ -1116,6 +1116,10 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
             raise PricingError(
                 "price_changed",
                 "Qiymət dəyişib. Sifarişi yenidən təsdiqləyin.")
+        if not is_admin(int(uid)) and quote["cents"] <= 0:
+            raise PricingError(
+                "price_not_configured",
+                "Bu nömrə üçün pullu qiymət təyin edilməyib. Admin qiyməti aktivləşdirməlidir.")
         charge = 0 if is_admin(int(uid)) else quote["cents"]
         lease_id = _reserve_number_lease(uid, charge)
         allocated = False
@@ -1228,6 +1232,9 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
     async with lock:
         ensure_whatsapp_referral_access(uid, service)
         quote = quote_range(rid, load_number_prices(), country_iso or None)
+        if not is_admin(uid) and quote["cents"] <= 0:
+            raise PricingError("price_not_configured",
+                               "Admin bu diapazon üçün pullu qiymət təyin etməyib.")
         if (not is_admin(uid) and expected_price_cents is not None
                 and (type(expected_price_cents) is not int
                      or quote["cents"] != expected_price_cents)):
@@ -1285,6 +1292,9 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
         quote = quote_range(rid, load_number_prices(), option["iso"] or None)
+        if not is_admin(uid) and quote["cents"] <= 0:
+            raise PricingError("price_not_configured",
+                               "Admin bu diapazon üçün pullu qiymət təyin etməyib.")
         if (not is_admin(uid) and expected_price_cents is not None
                 and (type(expected_price_cents) is not int
                      or quote["cents"] != expected_price_cents)):
@@ -8278,6 +8288,11 @@ async def miniapp_get_number_api(request):
 
     try:
         quote = quote_range(rid, load_number_prices(), country_iso)
+        if not is_admin(uid) and quote["cents"] <= 0:
+            return _miniapp_cors(web.json_response({
+                "error": "price_not_configured",
+                "message": "Bu xidmət üçün admin hələ pullu qiymət təyin etməyib."
+            }, status=409))
         expected_cents = body.get("expected_price_cents")
         if not is_admin(uid) and (type(expected_cents) is not int or expected_cents != quote["cents"]):
             return _miniapp_cors(web.json_response({
