@@ -6,6 +6,7 @@ import ast
 import asyncio
 import copy
 import re
+import time
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
@@ -15,6 +16,8 @@ from number_pricing import (
     PricingError, initial_prices, price_rule, quote_range,
     valid_country, valid_range,
 )
+from rental_ledger import RentalError, reserve as reserve_rental, set_number as set_rental_number, refund as refund_rental
+from service_policy import is_visible as service_is_visible
 
 
 class PriceRuleTests(unittest.TestCase):
@@ -92,6 +95,36 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
             return copy.deepcopy(self.users)
         def save(data, file):
             self.users = copy.deepcopy(data)
+
+        self.active = {}
+        self.lease_serial = 0
+
+        def reserve_lease(uid, cents):
+            self.lease_serial += 1
+            oid = f"{self.lease_serial:016x}"
+            data = load("users.json")
+            try:
+                reserve_rental(data, uid, oid, cents, now=time.time())
+            except RentalError as exc:
+                raise PricingError(exc.code, str(exc)) from exc
+            save(data, "users.json")
+            return oid
+
+        def bind_number(uid, oid, number):
+            data = load("users.json")
+            set_rental_number(data, uid, oid, re.sub(r"\D", "", str(number)))
+            save(data, "users.json")
+
+        def refund_lease(uid, oid):
+            data = load("users.json")
+            if refund_rental(data, uid, oid, status="failed"):
+                save(data, "users.json")
+
+        def assign(uid, number, rid, lease_id):
+            self.active[re.sub(r"\D", "", str(number))] = {
+                "uid": int(uid), "lease_id": lease_id}
+            return lease_id
+
         ns = {
             "re": re, "asyncio": asyncio,
             "PricingError": PricingError, "quote_range": quote_range,
@@ -102,11 +135,20 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
             "_number_purchase_locks": {},
             "ensure_whatsapp_referral_access": lambda uid, service: None,
             "get_user": lambda uid: self.users[str(uid)],
+            "load_system_config": lambda: {},
+            "service_is_visible": service_is_visible,
             "load_data": load, "save_data": save,
             "USER_DATA_FILE": "users.json",
             "client_async": SimpleNamespace(post=self.post),
             "BASE_URL": "https://example.invalid",
             "number_archive": SimpleNamespace(record=lambda number: self.archive.append(number)),
+            "normalize_number": lambda value: re.sub(r"\D", "", str(value or "")),
+            "active_numbers": self.active,
+            "active_number_remaining": lambda info: 180,
+            "_reserve_number_lease": reserve_lease,
+            "_set_number_lease": bind_number,
+            "_refund_number_lease": refund_lease,
+            "assign_active_number": assign,
         }
         self.allocate = extract_allocator(ns)
 
@@ -157,14 +199,17 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.users["77"]["balance"], 0.0)
         self.assertEqual(self.post.await_count, 1)
 
-    async def test_free_country_does_not_debit(self):
+    async def test_unpriced_country_is_not_allocated(self):
+        # The provider is never contacted until the admin sets a positive price.
         self.post.return_value = SimpleNamespace(json=lambda: {
             "meta": {"code": 200},
             "data": {"full_number": "+447700123456", "country": "UK"},
         })
-        number, _ = await self.allocate("447700", requester_id=77, country_iso="GB")
-        self.assertEqual(number, "+447700123456")
+        with self.assertRaises(PricingError) as ctx:
+            await self.allocate("447700", requester_id=77, country_iso="GB")
+        self.assertEqual(ctx.exception.code, "price_not_configured")
         self.assertEqual(self.users["77"]["balance"], 20.0)
+        self.post.assert_not_awaited()
 
 
 if __name__ == "__main__":

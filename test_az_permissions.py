@@ -9,6 +9,8 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from service_policy import is_visible as service_is_visible
+from number_pricing import PricingError
 
 
 SOURCE = Path(__file__).with_name("main.py").read_text(encoding="utf-8")
@@ -166,10 +168,22 @@ class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
             "_number_purchase_locks": {},
             "ensure_whatsapp_referral_access": lambda uid, service: None,
             "load_number_prices": lambda: {},
-            "quote_range": lambda rid, settings, iso=None: {"cents": 0, "price": "0.00"},
+            "quote_range": lambda rid, settings, iso=None: {"cents": 1000, "price": "10.00"},
+            "PricingError": PricingError,
             "USER_DATA_FILE": "users.json",
             "save_data": lambda *_: None,
             "get_user": lambda uid: {"balance": 0.0},
+            "load_system_config": lambda: {},
+            "service_is_visible": service_is_visible,
+            # This suite isolates access control from accounting. The journal
+            # itself is independently exercised in test_rental_ledger.py.
+            "_reserve_number_lease": lambda uid, charge: "a" * 16,
+            "_set_number_lease": lambda uid, oid, num: None,
+            "_refund_number_lease": lambda uid, oid: None,
+            "normalize_number": lambda value: re.sub(r"\D", "", str(value or "")),
+            "active_numbers": {},
+            "active_number_remaining": lambda info: 180,
+            "assign_active_number": lambda uid, num, rid, lease_id: lease_id,
         }
         for name in ("is_admin", "is_az_range", "az_range_allowed"):
             self.ns[name] = extract(name, self.ns)
@@ -193,6 +207,14 @@ class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(num, "+994502111234")
         self.assertEqual(country, "Azerbaijan")
         self.assertEqual(self.archive_calls, [num])
+
+    async def test_unpriced_range_never_calls_provider(self):
+        self.approved["200"] = True
+        self.ns["quote_range"] = lambda rid, settings, iso=None: {"cents": 0, "price": "0.00"}
+        with self.assertRaises(PricingError) as err:
+            await self.get_number("99450211", requester_id=200)
+        self.assertEqual(err.exception.code, "price_not_configured")
+        self.post.assert_not_awaited()
 
     async def test_wrong_country_is_rejected(self):
         self.post.return_value = SimpleNamespace(json=lambda: {

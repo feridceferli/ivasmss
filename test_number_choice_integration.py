@@ -13,6 +13,8 @@ import httpx
 
 from number_choices import NumberChoiceStore
 from number_pricing import PricingError
+from rental_ledger import reserve as reserve_rental, set_number as set_rental_number, refund as refund_rental
+from service_policy import is_visible as service_is_visible
 from whatsapp_referrals import requires_invites
 
 
@@ -37,6 +39,24 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
         self.stats = []
         self.active = {}
         self.saved_ranges = []
+        self.order_count = 0
+
+        def reserve_lease(uid, cents, number=""):
+            self.order_count += 1
+            oid = f"{self.order_count:016x}"
+            reserve_rental(self.users, uid, oid, cents, now=time.time())
+            if number:
+                set_rental_number(self.users, uid, oid, re.sub(r"\D", "", str(number)))
+            return oid
+
+        def refund_lease(uid, oid):
+            refund_rental(self.users, uid, oid, status="failed")
+
+        def assign(uid, number, rid, lease_id=None):
+            clean = re.sub(r"\D", "", str(number))
+            self.active[clean] = {"uid": uid, "range": rid, "lease_id": lease_id}
+            return lease_id
+
         replies = iter([
             SimpleNamespace(
                 raise_for_status=lambda: None,
@@ -69,6 +89,8 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
             "load_number_prices": lambda: {},
             "quote_range": lambda rid, *args: {"cents": 100, "price": 1.0},
             "get_user": lambda uid: self.users[str(uid)],
+            "load_system_config": lambda: {},
+            "service_is_visible": service_is_visible,
             "load_data": lambda path: self.users,
             "save_data": lambda data, path: None,
             "normalize_number": lambda n: re.sub(r"\D", "", str(n)),
@@ -76,8 +98,9 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
             "active_number_remaining": lambda info: 180,
             "add_number_taken": lambda uid, n: self.stats.append((uid, n)),
             "last_range": {},
-            "assign_active_number": lambda uid, number, rid: self.active.setdefault(
-                number, {"uid": uid, "range": rid, "lease_id": "abc"})["lease_id"],
+            "assign_active_number": assign,
+            "_reserve_number_lease": reserve_lease,
+            "_refund_number_lease": refund_lease,
             "save_number_range_info": lambda *args: self.saved_ranges.append(args),
             "mask_number": lambda x: "****" + x[-4:],
             "miniapp_orders": {},

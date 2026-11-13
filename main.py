@@ -30,7 +30,20 @@ from world_news_feed import (
 )
 from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
                             valid_country, valid_range)
+from rental_ledger import (RentalError, reserve as reserve_rental,
+                           set_number as set_rental_number,
+                           record_sms as rental_sms_received,
+                           refund as refund_rental,
+                           refund_expired as refund_expired_rentals)
 from api_sales import ApiSalesStore, ApiSalesError
+from topup_web import parse_amount_cents, decode_receipt
+from topup_ledger import (TopupError, create_request as topup_create_request,
+                          resolve_request as topup_resolve_request,
+                          pending_requests as topup_pending_requests)
+from service_policy import (visible_services as public_service_catalog,
+                            is_visible as service_is_visible,
+                            set_visible as set_service_visibility)
+from decimal import Decimal, InvalidOperation
 from api_sales_promotions import (
     build_group_digest, promotion_due, safe_promotion_state,
 )
@@ -69,6 +82,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     CopyTextButton,
+    InputFile,
     WebAppInfo,
     MenuButtonWebApp,
 )
@@ -174,7 +188,7 @@ WELCOME_MESSAGE = """🇦🇿💎 AZE SMS PANEL 💎🇦🇿
 🇦🇿 Aze Sms Panel ilə yararlanın!"""
 
 # ==================== OTP RATE CONFIGURATION ====================
-DEFAULT_OTP_RATE = 0.20
+DEFAULT_OTP_RATE = 0.0
 
 # ==================== WITHDRAW CONFIGURATION ====================
 DEFAULT_MIN_WITHDRAW = 50
@@ -289,9 +303,15 @@ def _restore_active_leases():
     return restored
 
 
-def assign_active_number(uid, number, range_display):
-    lease_id = secrets.token_hex(8)
-    active_numbers[normalize_number(number)] = {
+def assign_active_number(uid, number, range_display, lease_id=None):
+    clean = normalize_number(number)
+    existing = active_numbers.get(clean)
+    if existing and active_number_remaining(existing) > 0:
+        if int(existing.get("uid", 0)) == int(uid):
+            return existing["lease_id"]
+        raise PricingError("already_active", "Nömrə artıq başqa istifadəçidədir.")
+    lease_id = lease_id or secrets.token_hex(8)
+    active_numbers[clean] = {
         "uid": int(uid), "range": str(range_display),
         "timestamp": datetime.now(), "lease_id": lease_id,
     }
@@ -300,26 +320,12 @@ def assign_active_number(uid, number, range_display):
 
 
 def cancel_active_number(uid, lease_id):
-    """Only the assigned user can cancel this particular unexpired order."""
-    if not isinstance(lease_id, str) or not re.fullmatch(r"[0-9a-f]{16}", lease_id):
-        return False
-    for number, info in list(active_numbers.items()):
-        if (info.get("lease_id") != lease_id or
-                int(info.get("uid", 0)) != int(uid) or
-                active_number_remaining(info) <= 0):
-            continue
-        del active_numbers[number]
-        _persist_active_leases()
-        for order in miniapp_orders.get(int(uid), []):
-            if order.get("id") == lease_id and order.get("status") == "Aktiv":
-                order["status"] = "Ləğv edildi"
-                miniapp_history.setdefault(int(uid), []).append(_safe_order(uid, order))
-        return True
+    """Customers cannot cancel a paid rental before its automatic expiry."""
     return False
 
 
 # ==================== SERVICE CACHE ====================
-_services_cache = {"services": {}, "timestamp": 0}
+_services_cache = {"services": {}, "timestamp": 0, "last_error": "not_checked", "last_checked": None}
 CACHE_TTL = 30
 
 # ==================== COUNTRY HOTNESS TRACKING ====================
@@ -578,8 +584,9 @@ def load_system_config():
     try:
         with open(SYSTEM_CONFIG_FILE, "r") as f:
             config = json.load(f)
-            if "otp_rate" not in config:
-                config["otp_rate"] = DEFAULT_OTP_RATE
+            # Historical OTP bonuses are disabled for every user.
+            if config.get("otp_rate") != 0.0:
+                config["otp_rate"] = 0.0
                 save_system_config(config)
             return config
     except:
@@ -595,6 +602,53 @@ def save_system_config(config):
     _save_persistent_json(config, SYSTEM_CONFIG_FILE)
 
 
+def _visible_services_for_user(uid, services):
+    return public_service_catalog(
+        services, load_system_config(), admin=is_admin(int(uid)))
+
+
+async def service_visibility_command(update, context):
+    """Admin-only toggles for upstream-active services."""
+    if not is_admin(update.effective_user.id) or update.effective_chat.type != "private":
+        await update.effective_message.reply_text("🔒 Yalnız admin üçün.")
+        return
+    services = await fetch_services_cached()
+    config = load_system_config()
+    buttons = []
+    for sid in sorted(services)[:75]:
+        enabled = service_is_visible(config, sid)
+        buttons.append([InlineKeyboardButton(
+            ("✅ " if enabled else "❌ ") + sid.upper(),
+            callback_data=f"admin_svc_toggle:{sid}")])
+    if not buttons:
+        await update.effective_message.reply_text("Aktiv API xidməti tapılmadı.")
+        return
+    await update.effective_message.reply_text(
+        "⚙️ XİDMƏTLƏR\n✅ İstifadəçiyə görünür · ❌ Gizlədilib\n"
+        "İstədiyiniz xidmətə basaraq görünməsini dəyişin.",
+        reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def service_visibility_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    if not is_admin(query.from_user.id):
+        await query.message.reply_text("🔒 Yalnız admin üçün.")
+        return
+    sid = query.data.removeprefix("admin_svc_toggle:")
+    live = await fetch_services_cached()
+    if sid not in live:
+        await query.message.reply_text("⚠️ Xidmət artıq aktiv siyahıda deyil.")
+        return
+    config = load_system_config()
+    enabled = not service_is_visible(config, sid)
+    set_service_visibility(config, sid, enabled)
+    save_system_config(config)
+    await query.message.reply_text(
+        f"{'✅ Aktiv' if enabled else '❌ Gizli'}: {sid.upper()}. "
+        "Bu seçim bot yenidən başlayanda saxlanacaq.")
+
+
 def update_min_withdraw(new_min):
     config = load_system_config()
     config["min_withdraw"] = new_min
@@ -602,14 +656,14 @@ def update_min_withdraw(new_min):
 
 
 def update_otp_rate(new_rate):
+    # No SMS/OTP balance rewards under the three-minute rental policy.
     config = load_system_config()
-    config["otp_rate"] = new_rate
+    config["otp_rate"] = 0.0
     save_system_config(config)
 
 
 def get_otp_rate():
-    config = load_system_config()
-    return config.get("otp_rate", DEFAULT_OTP_RATE)
+    return 0.0
 
 
 def toggle_payment_method(method_name):
@@ -646,16 +700,8 @@ def save_user_otp_rates(data):
 
 
 def get_user_otp_rate(user_id):
-    rates = load_user_otp_rates()
-    uid_str = str(user_id)
-    if uid_str in rates:
-        try:
-            rate = float(rates[uid_str])
-            if rate > 0:
-                return rate
-        except:
-            pass
-    return get_otp_rate()
+    # Even an old saved per-user rate cannot reactivate paid OTP bonuses.
+    return 0.0
 
 
 def set_user_otp_rate(user_id, rate):
@@ -890,6 +936,7 @@ async def fetch_services_cached():
         return _services_cache["services"]
     try:
         r = await client_async.get(f"{BASE_URL}/liveaccess")
+        r.raise_for_status()
         data = r.json()
         if data.get("meta", {}).get("code") == 200:
             services_data = data.get("data", {}).get("services", [])
@@ -906,14 +953,21 @@ async def fetch_services_cached():
                     continue
                 sid = str(svc.get("sid", "")).strip().lower()
                 ranges = svc.get("ranges", [])
-                if sid and isinstance(ranges, list) and ranges:
+                if re.fullmatch(r"[a-z0-9_.-]{1,40}", sid) and isinstance(ranges, list) and ranges:
                     services[sid] = ranges
             _services_cache["services"] = services
             _services_cache["timestamp"] = now
+            _services_cache["last_checked"] = now
+            _services_cache["last_error"] = None if services else "empty_catalog"
             print(f"[services] cache updated — {len(services)} service(s)")
             return services
-    except Exception as e:
-        print(f"[services] fetch error: {e}")
+        _services_cache["last_error"] = "upstream_rejected"
+    except Exception as exc:
+        _services_cache["last_error"] = type(exc).__name__
+        print(f"[services] fetch error: {type(exc).__name__}")
+    _services_cache["last_checked"] = now
+    if not API_KEY:
+        _services_cache["last_error"] = "api_key_missing"
     return _services_cache["services"]
 
 
@@ -968,50 +1022,106 @@ async def country_availability_loop(app):
 _number_purchase_locks = {}
 
 
+def _reserve_number_lease(uid, charge_cents, number=""):
+    """Charge and journal atomically in users.json, with no intervening await."""
+    lease_id = secrets.token_hex(8)
+    users = load_data(USER_DATA_FILE)
+    if str(uid) not in users:
+        get_user(uid)
+        users = load_data(USER_DATA_FILE)
+    try:
+        reserve_rental(users, uid, lease_id, charge_cents)
+        if number:
+            set_rental_number(users, uid, lease_id, normalize_number(number))
+    except RentalError as exc:
+        raise PricingError(exc.code, str(exc)) from exc
+    save_data(users, USER_DATA_FILE)
+    return lease_id
+
+
+def _set_number_lease(uid, lease_id, number):
+    users = load_data(USER_DATA_FILE)
+    try:
+        set_rental_number(users, uid, lease_id, normalize_number(number))
+    except RentalError as exc:
+        raise PricingError(exc.code, str(exc)) from exc
+    save_data(users, USER_DATA_FILE)
+
+
+def _refund_number_lease(uid, lease_id):
+    users = load_data(USER_DATA_FILE)
+    if str(uid) in users and refund_rental(users, uid, lease_id, status="failed"):
+        save_data(users, USER_DATA_FILE)
+
+
+def _complete_number_lease(uid, number):
+    """Settle SMS for its owner, without any balance bonus."""
+    normalized = normalize_number(number)
+    info = active_numbers.get(normalized)
+    if not info or int(info.get("uid", 0)) != int(uid):
+        return False
+    users = load_data(USER_DATA_FILE)
+    if str(uid) not in users:
+        return False
+    try:
+        success = rental_sms_received(users, uid, info["lease_id"], normalized)
+    except RentalError:
+        return False
+    if success:
+        save_data(users, USER_DATA_FILE)
+    return success
+
+
+def _reconcile_expired_rentals():
+    """Restart-safe refunds even when the SMS provider is unavailable."""
+    users = load_data(USER_DATA_FILE)
+    refunded = refund_expired_rentals(users)
+    if refunded:
+        save_data(users, USER_DATA_FILE)
+    expired_ids = {oid for _, oid in refunded}
+    removed = False
+    for number, info in list(active_numbers.items()):
+        if active_number_remaining(info) <= 0 or info.get("lease_id") in expired_ids:
+            del active_numbers[number]
+            removed = True
+    if removed:
+        _persist_active_leases()
+    for uid, oid in refunded:
+        for order in miniapp_orders.get(int(uid), []):
+            if order.get("id") == oid and order.get("status") == "Aktiv":
+                order["status"] = "SMS gəlmədi — geri qaytarıldı"
+                miniapp_history.setdefault(int(uid), []).append(_safe_order(uid, order))
+    return len(refunded)
+
+
 async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
                               expected_price_cents=None, service=""):
-    """Allocate with a server-controlled AZN price and refund failed requests.
-
-    This shared entry point covers bot and Mini App allocations. Region prices
-    for ambiguous shared calling codes require a per-range override.
-    """
+    """Purchase a three-minute rental with an idempotent refund journal."""
     digits = re.sub(r"[^0-9]", "", str(rid or ""))
     if not digits or (is_az_range(digits) and not az_range_allowed(requester_id)):
         return None, None
     if requester_id is None:
         raise PricingError("unauthorized", "Nömrə almaq üçün hesab tələb olunur.")
     uid = str(requester_id)
+    if not service_is_visible(load_system_config(), service or "CUSTOM", is_admin(int(uid))):
+        raise PricingError("service_hidden", "Bu xidmət admin tərəfindən gizlədilib.")
     ensure_whatsapp_referral_access(requester_id, service)
     lock = _number_purchase_locks.setdefault(uid, asyncio.Lock())
     async with lock:
         ensure_whatsapp_referral_access(requester_id, service)
         quote = quote_range(digits, load_number_prices(), country_iso)
-        # A paid purchase must never change price after the user's approval.
-        # Check again while holding the user purchase lock, not just in the API.
         if not is_admin(int(uid)) and expected_price_cents is not None and (
                 type(expected_price_cents) is not int
                 or expected_price_cents != quote["cents"]):
             raise PricingError(
                 "price_changed",
-                "Qiymət dəyişib. Sifarişi yeni qiymətlə yenidən təsdiqləyin.",
-            )
-        # Admin accounts are exempt from number purchase charges.
+                "Qiymət dəyişib. Sifarişi yenidən təsdiqləyin.")
+        if not is_admin(int(uid)) and quote["cents"] <= 0:
+            raise PricingError(
+                "price_not_configured",
+                "Bu nömrə üçün pullu qiymət təyin edilməyib. Admin qiyməti aktivləşdirməlidir.")
         charge = 0 if is_admin(int(uid)) else quote["cents"]
-        if charge:
-            users = load_data(USER_DATA_FILE)
-            user = users.get(uid) or get_user(uid)
-            if uid not in users:
-                users = load_data(USER_DATA_FILE)
-            balance_cents = round(float(user.get("balance", 0.0)) * 100)
-            if balance_cents < charge:
-                raise PricingError(
-                    "insufficient_balance",
-                    f"Balans kifayət etmir. Nömrə qiyməti: {quote['price']} AZN. "
-                    f"Balansınızı artırmaq üçün adminlə əlaqə saxlayın.",
-                )
-            users[uid]["balance"] = round((balance_cents - charge) / 100, 2)
-            save_data(users, USER_DATA_FILE)
-
+        lease_id = _reserve_number_lease(uid, charge)
         allocated = False
         try:
             r = await client_async.post(f"{BASE_URL}/getnum", json={"rid": digits})
@@ -1020,26 +1130,25 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
                 return None, None
             data = result.get("data") or {}
             number = data.get("full_number")
-            normalized = re.sub(r"[^0-9]", "", str(number or ""))
+            normalized = normalize_number(number)
             if (not normalized.startswith(digits)
                     or (is_az_range(normalized) and not az_range_allowed(requester_id))):
-                print("[number-api] Unexpected or restricted provider range")
+                print("[number-api] Unexpected or restricted range")
+                return None, None
+            if (normalized in active_numbers
+                    and active_number_remaining(active_numbers[normalized]) > 0):
                 return None, None
             await asyncio.to_thread(number_archive.record, number)
+            _set_number_lease(uid, lease_id, normalized)
+            assign_active_number(uid, normalized, digits + "XXX", lease_id=lease_id)
             allocated = True
             return number, data.get("country")
         except Exception as exc:
             print(f"get_number error: {type(exc).__name__}")
             return None, None
         finally:
-            if charge and not allocated:
-                # Refund reserved balance if provider fails or sends invalid data.
-                users = load_data(USER_DATA_FILE)
-                if uid in users:
-                    old = round(float(users[uid].get("balance", 0.0)) * 100)
-                    users[uid]["balance"] = round((old + charge) / 100, 2)
-                    save_data(users, USER_DATA_FILE)
-
+            if not allocated:
+                _refund_number_lease(uid, lease_id)
 
 
 # ==================== WHATSAPP-ONLY FIVE-REFERRAL ACCESS ====================
@@ -1117,10 +1226,15 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
         raise PricingError("invalid_range", "Bu diapazon üçün icazə yoxdur.")
     if is_user_banned(uid):
         raise PricingError("banned", "Hesabınız məhdudlaşdırılıb.")
+    if not service_is_visible(load_system_config(), service, is_admin(uid)):
+        raise PricingError("service_hidden", "Bu xidmət admin tərəfindən gizlədilib.")
     lock = _number_purchase_locks.setdefault(str(uid), asyncio.Lock())
     async with lock:
         ensure_whatsapp_referral_access(uid, service)
         quote = quote_range(rid, load_number_prices(), country_iso or None)
+        if not is_admin(uid) and quote["cents"] <= 0:
+            raise PricingError("price_not_configured",
+                               "Admin bu diapazon üçün pullu qiymət təyin etməyib.")
         if (not is_admin(uid) and expected_price_cents is not None
                 and (type(expected_price_cents) is not int
                      or quote["cents"] != expected_price_cents)):
@@ -1172,10 +1286,15 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
             raise PricingError("choice_expired",
                                "Seçimin vaxtı bitib. Yenidən 5 nömrə istəyin.")
         rid = option["rid"]
+        if not service_is_visible(load_system_config(), option["service"], is_admin(uid)):
+            raise PricingError("service_hidden", "Bu xidmət admin tərəfindən gizlədilib.")
         ensure_whatsapp_referral_access(uid, option["service"])
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
         quote = quote_range(rid, load_number_prices(), option["iso"] or None)
+        if not is_admin(uid) and quote["cents"] <= 0:
+            raise PricingError("price_not_configured",
+                               "Admin bu diapazon üçün pullu qiymət təyin etməyib.")
         if (not is_admin(uid) and expected_price_cents is not None
                 and (type(expected_price_cents) is not int
                      or quote["cents"] != expected_price_cents)):
@@ -1193,21 +1312,18 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
             await asyncio.to_thread(number_archive.record, selected)
         except Exception:
             raise PricingError("archive_unavailable", "Arxiv hazır deyil. Yenidən yoxlayın.")
+        lease_id = _reserve_number_lease(uid, charge, normalized)
         if number_choices.consume(uid, token, index) is None:
+            _refund_number_lease(uid, lease_id)
             raise PricingError("choice_expired", "Seçim artıq istifadə olunub.")
-        if charge:
-            data = load_data(USER_DATA_FILE)
-            record = data.get(str(uid), user)
-            cents = round(float(record.get("balance", 0)) * 100)
-            if cents < charge:
-                raise PricingError("insufficient_balance", "Balans kifayət etmir.")
-            record["balance"] = round((cents - charge) / 100, 2)
-            data[str(uid)] = record
-            save_data(data, USER_DATA_FILE)
+        range_display = rid + "XXX"
+        try:
+            assign_active_number(uid, normalized, range_display, lease_id=lease_id)
+        except Exception:
+            _refund_number_lease(uid, lease_id)
+            raise
         add_number_taken(uid, 1)
         last_range[uid] = rid
-        range_display = rid + "XXX"
-        lease_id = assign_active_number(uid, normalized, range_display)
         save_number_range_info(uid, normalized, range_display)
         order = {
             "id": lease_id, "label": option["service"].upper(),
@@ -1818,6 +1934,164 @@ def get_user(uid):
     return data[uid]
 
 
+async def set_topup_card_command(update, context):
+    """Admin-only persisted recipient/card instructions; no CVV or expiry data."""
+    uid = update.effective_user.id
+    if not is_admin(uid) or update.effective_chat.type != "private":
+        await update.effective_message.reply_text("🔒 Bu əmr yalnız admin üçündür.")
+        return
+    details = " ".join(context.args or []).strip()
+    if not details:
+        await update.effective_message.reply_text(
+            "Kart məlumatını belə əlavə et:\n"
+            "/set_topup_card 4169 XXXX XXXX XXXX | Alıcı adı\n"
+            "Yalnız köçürmə üçün lazımlı məlumatı yaz; CVV, PIN və bitmə tarixi daxil etmə.")
+        return
+    if details.upper() == "OFF":
+        details = ""
+    if len(details) > 180:
+        await update.effective_message.reply_text("❌ Məlumat 180 simvoldan qısa olmalıdır.")
+        return
+    cfg = load_system_config()
+    cfg["topup_card"] = details
+    save_system_config(cfg)
+    await update.effective_message.reply_text(
+        "✅ Balans artırma kartı yadda saxlanıldı." if details
+        else "✅ Kart köçürməsi deaktiv edildi.")
+
+
+async def topup_command(update, context):
+    if update.effective_chat.type != "private":
+        return
+    uid = update.effective_user.id
+    if is_user_banned(uid):
+        await update.effective_message.reply_text("🚫 Girişiniz məhdudlaşdırılıb.")
+        return
+    card = str(load_system_config().get("topup_card") or "").strip()
+    if not card:
+        await update.effective_message.reply_text(
+            "💳 Kartla balans artırma hazırda bağlıdır. Adminlə əlaqə: " + SUPPORT_LINK)
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "💳 Balansı artırmaq üçün məbləği yazın, məsələn: /topup 5")
+        return
+    try:
+        amount = Decimal(str(context.args[0]).replace(",", "."))
+        cents_decimal = amount * 100
+        if (not amount.is_finite() or cents_decimal != cents_decimal.to_integral_value()):
+            raise ValueError()
+        cents = int(cents_decimal)
+        if not 100 <= cents <= 1000000:
+            raise ValueError()
+    except (ValueError, TypeError, InvalidOperation):
+        await update.effective_message.reply_text(
+            "❌ Məbləğ 1.00–10000.00 AZN arasında olmalıdır.")
+        return
+    get_user(uid)
+    context.user_data["topup_amount_cents"] = cents
+    await update.effective_message.reply_text(
+        f"💳 <b>BALANS ARTIRMA</b>\n\n"
+        f"Məbləğ: <b>{cents / 100:.2f} AZN</b>\n"
+        f"Köçürmə məlumatı: <code>{html.escape(card)}</code>\n\n"
+        "Köçürməni etdikdən sonra ödəniş çekinin şəklini bu çata göndərin. "
+        "Çek admin tərəfindən təsdiqlənəndə balansınıza əlavə ediləcək.\n"
+        f"📩 Admin: {html.escape(SUPPORT_LINK)}",
+        parse_mode="HTML")
+
+
+async def topup_receipt_photo(update, context):
+    if not update.effective_chat or update.effective_chat.type != "private":
+        return
+    cents = context.user_data.get("topup_amount_cents")
+    if cents and not user_backup.ready:
+        await update.effective_message.reply_text(
+            "⚠️ Balans arxivi hələ hazır deyil. Çek qəbul edilmir; adminlə əlaqə saxlayın.")
+        return
+    if type(cents) is not int or not update.message or not update.message.photo:
+        return
+    uid = update.effective_user.id
+    if is_user_banned(uid):
+        return
+    photo_id = update.message.photo[-1].file_id
+    request_id = secrets.token_hex(8)
+    users = load_data(USER_DATA_FILE)
+    try:
+        topup_create_request(users, uid, request_id, cents, photo_id)
+    except TopupError as exc:
+        await update.message.reply_text("❌ " + str(exc))
+        return
+    save_data(users, USER_DATA_FILE)
+    context.user_data.pop("topup_amount_cents", None)
+    await update.message.reply_text(
+        f"✅ Çek göndərildi. Sorğu: <code>{request_id}</code>. "
+        "Balans yalnız admin təsdiqlədikdən sonra artırılacaq.",
+        parse_mode="HTML")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Təsdiqlə", callback_data=f"topup:approve:{uid}:{request_id}"),
+        InlineKeyboardButton("❌ Rədd et", callback_data=f"topup:reject:{uid}:{request_id}"),
+    ]])
+    for admin_id in ADMINS:
+        try:
+            await context.bot.send_photo(
+                chat_id=admin_id, photo=photo_id,
+                caption=f"💳 Yeni balans sorğusu\nİstifadəçi: {uid}\n"
+                        f"Məbləğ: {cents / 100:.2f} AZN\nSorğu: {request_id}",
+                reply_markup=kb)
+        except TelegramError:
+            pass
+
+
+async def topup_pending_command(update, context):
+    if not is_admin(update.effective_user.id) or update.effective_chat.type != "private":
+        return
+    pending = topup_pending_requests(load_data(USER_DATA_FILE), limit=10)
+    if not pending:
+        await update.message.reply_text("✅ Gözləyən çek yoxdur.")
+        return
+    for uid, request_id, row in pending:
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Təsdiqlə", callback_data=f"topup:approve:{uid}:{request_id}"),
+            InlineKeyboardButton("❌ Rədd et", callback_data=f"topup:reject:{uid}:{request_id}"),
+        ]])
+        try:
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id, photo=row["file_id"],
+                caption=f"İstifadəçi: {uid}\nMəbləğ: {int(row['amount_cents']) / 100:.2f} AZN\nSorğu: {request_id}",
+                reply_markup=kb)
+        except TelegramError:
+            await update.message.reply_text(f"Çeki açmaq alınmadı: {request_id}")
+
+
+async def topup_review_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    if not user_backup.ready:
+        await query.message.reply_text("⚠️ Şəxsi balans arxivi hazır deyil; təsdiqləmə dayandırılıb.")
+        return
+    if not is_admin(query.from_user.id):
+        await query.message.reply_text("🔒 Təsdiqləməyə icazəniz yoxdur.")
+        return
+    _, decision, target, request_id = query.data.split(":")
+    users = load_data(USER_DATA_FILE)
+    try:
+        row = topup_resolve_request(
+            users, target, request_id, decision == "approve", query.from_user.id)
+    except TopupError as exc:
+        await query.message.reply_text("⚠️ " + str(exc))
+        return
+    save_data(users, USER_DATA_FILE)
+    status = "✅ Təsdiqləndi" if decision == "approve" else "❌ Rədd edildi"
+    await query.message.reply_text(
+        f"{status} · İstifadəçi: {target} · Məbləğ: {row['amount_cents'] / 100:.2f} AZN")
+    try:
+        await context.bot.send_message(
+            chat_id=int(target),
+            text=f"{status}: {row['amount_cents'] / 100:.2f} AZN balans sorğunuz.")
+    except TelegramError:
+        pass
+
+
 async def update_db_balance(uid, amount):
     uid = str(uid)
     data = load_data()
@@ -2354,6 +2628,7 @@ async def show_all_countries(update, context, page=0, refresh=True):
     lang = get_user_language(uid)
     if refresh or "all_country_rows" not in context.user_data:
         services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, services)
         context.user_data["all_country_rows"] = build_all_country_rows(services)
     countries = context.user_data["all_country_rows"]
     page_size = 25
@@ -2412,9 +2687,8 @@ async def show_app_selection(update, context):
             reply_markup=main_keyboard(uid),
         )
         return
-    # Show every service currently returned by the upstream API.
-    # New services (for example Bolt) appear automatically without a code update.
-    filtered_services = dict(sorted(services.items()))
+    # Operator returns the available list; admins control visibility.
+    filtered_services = dict(sorted(_visible_services_for_user(uid, services).items()))
     if not filtered_services:
         await update.effective_message.reply_text(
             '⚠️ <b>Heç bir xidmət mövcud deyil</b>\n⏳ Bir azdan yenidən cəhd edin.',
@@ -2476,6 +2750,7 @@ async def monitor_loop(app):
     sent_otps = set()
     while True:
         try:
+            _reconcile_expired_rentals()
             monitor_diagnostics["state"] = "checking"
             monitor_diagnostics["last_check"] = _monitor_diag_time()
             r = await client_async.get(f"{BASE_URL}/success-otp")
@@ -2518,9 +2793,8 @@ async def monitor_loop(app):
                         uid = details["uid"]
                         service_name = detect_service(full_sms)
                         is_free_service = service_name in ("TELEGRAM", "WHATSAPP")
+                        _complete_number_lease(uid, num)
                         if not is_free_service:
-                            user_rate = get_user_otp_rate(uid)
-                            await update_db_balance(uid, user_rate)
                             add_otp_received(uid)
                             log_global_activity(
                                 uid,
@@ -2557,12 +2831,9 @@ async def monitor_loop(app):
                         safe_full_sms = html.escape(str(full_sms))
                         safe_otp_code = html.escape(str(otp_code))
                         if is_free_service:
-                            balance_msg = (
-                                "xoş sözdər eşidəsən ay qa)"
-                            )
+                            balance_msg = "✅ SMS alındı · balans bonusu yoxdur"
                         else:
-                            user_rate = get_user_otp_rate(uid)
-                            balance_msg = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            balance_msg = "✅ SMS alındı · əlavə balans bonusu yoxdur"
                         # One cheerful, non-sensitive caption shared in both notifications.
                         congratulations = random.choice(OTP_SUCCESS_CHEERS)
                         user_msg = (
@@ -2643,6 +2914,7 @@ async def monitor_loop(app):
                         entry["timestamp"] = current_time
                     elif active_number_remaining(entry, current_time) == 0:
                         del active_numbers[num_key]
+                        _persist_active_leases()
             else:
                 monitor_diagnostics["state"] = "upstream_error"
                 monitor_diagnostics["last_error"] = f"API code: {upstream_code}"
@@ -2785,11 +3057,7 @@ async def show_active_numbers(update, context):
             f"🟢 Status: AKTİV\n"
             f"⏳ Qalan vaxt: {mins:02d}:{secs:02d}</blockquote>"
         )
-        if lease_id:
-            buttons.append([InlineKeyboardButton(
-                f"❌ Ləğv et · …{normalize_number(number)[-4:]}",
-                callback_data=f"cancel_number_{lease_id}", style="danger")])
-    lines.append("\nℹ️ Gözləmə limiti 3 dəqiqədir. Ləğv provayder ödənişini geri qaytarmır.")
+    lines.append("\nℹ️ 3 dəqiqə ərzində ləğv bağlıdır. SMS gəlməsə, ödəniş geri qaytarılır.")
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(buttons) if buttons else main_keyboard(uid))
@@ -2880,9 +3148,6 @@ async def number_choice_callback(update, context):
                 "🔄 Yenə 5 nömrə göstər",
                 callback_data=f"same_range_{rid}_{service}")],
             [InlineKeyboardButton(
-                "❌ Ləğv et",
-                callback_data=f"cancel_number_{selected['lease_id']}")],
-            [InlineKeyboardButton(
                 "📋 Aktiv nömrələr", callback_data="menu_active_numbers")],
         ]),
     )
@@ -2958,18 +3223,17 @@ async def perform_otp_search(update, context, target_num):
             "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(int(uid))
         )
         return
-    if is_az_range(target_num):
-        if not az_range_allowed(uid):
-            await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+    if is_az_range(target_num) and not az_range_allowed(uid):
+        await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+        return
+    # A user may see OTPs only for their own unexpired allocation.
+    if not is_admin(int(uid)):
+        assigned = active_numbers.get(normalize_number(target_num))
+        if (not assigned or str(assigned.get("uid")) != uid
+                or active_number_remaining(assigned) <= 0):
+            await update.effective_message.reply_text(
+                "🔒 Yalnız sizə ayrılmış aktiv nömrənin SMS-ni görə bilərsiniz.")
             return
-        # Approval to obtain an AZ number must not expose other users' codes.
-        if not is_admin(int(uid)):
-            assigned = active_numbers.get(normalize_number(target_num))
-            if not assigned or str(assigned.get("uid")) != uid:
-                await update.effective_message.reply_text(
-                    "🔒 Yalnız sizə ayrılmış Azərbaycan nömrəsinin mesajlarını yoxlaya bilərsiniz."
-                )
-                return
     status_msg = await update.effective_message.reply_text("🔍 SEARCHING IN SERVER...")
     try:
         r = await client_async.get(f"{BASE_URL}/success-otp")
@@ -3009,11 +3273,10 @@ async def perform_otp_search(update, context, target_num):
                     else:
                         service_name = detect_service(full_sms)
                         is_free = service_name in ("TELEGRAM", "WHATSAPP")
+                        _complete_number_lease(int(uid), target_num)
                         if not is_free:
-                            user_rate = get_user_otp_rate(int(uid))
-                            await update_db_balance(uid, user_rate)
                             add_otp_received(uid)
-                            payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            payment_status = "✅ SMS alındı · balans bonusu yoxdur"
                         else:
                             add_otp_received(uid)
                             payment_status = (
@@ -3558,12 +3821,10 @@ async def admin_change_min_withdraw_amount(update, context):
 
 
 async def admin_change_otp_rate_start(update, context):
-    context.user_data["admin_otp_rate_mode"] = True
-    current_rate = get_otp_rate()
+    context.user_data["admin_otp_rate_mode"] = False
     await update.effective_message.reply_text(
-        f"💲 Cari OTP tarifi: `{current_rate:.2f} AZN`\n\nYeni tarifi göndərin (yalnız rəqəm, məsələn: `0.25`):\n\n<blockquote>Diqqət: bu tarif bütün yeni OTP-lərə tətbiq ediləcək.</blockquote>",
-        parse_mode="HTML",
-        reply_markup=cancel_keyboard(),
+        "✅ SMS/OTP balans bonusu ləğv edilib. Yeni tarif təyin etmək mümkün deyil.",
+        reply_markup=system_config_keyboard(),
     )
 
 
@@ -3590,11 +3851,10 @@ async def admin_change_otp_rate_amount(update, context):
 
 # ==================== ADMIN PANEL - PER-USER OTP RATE ====================
 async def admin_set_user_otp_rate_start(update, context):
-    context.user_data["admin_set_otp_rate_mode"] = "user"
+    context.user_data["admin_set_otp_rate_mode"] = None
     await update.effective_message.reply_text(
-        '🔧 **İSTİFADƏÇİ OTP DƏRƏCƏSİNİ TƏYİN ET**\n\nZəhmət olmasa istifadəçi ID-sini daxil edin (yalnız rəqəm):',
-        parse_mode="Markdown",
-        reply_markup=cancel_keyboard(),
+        "✅ Fərdi SMS/OTP balans bonusları da ləğv edilib. Yeni tarif təyin edilmir.",
+        reply_markup=system_config_keyboard(),
     )
 
 
@@ -5109,7 +5369,8 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     balance = get_user(uid)["balance"]
     await update.effective_message.reply_text(
-        f"💰 BALANCE: `{format_balance(balance)} AZN`",
+        f"💰 BALANCE: `{format_balance(balance)} AZN`\n\n"
+        "💳 Balans artırmaq: /topup 5",
         parse_mode="Markdown",
         reply_markup=main_keyboard(uid),
     )
@@ -5602,15 +5863,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("cancel_number_"):
         lease_id = data.removeprefix("cancel_number_")
-        if cancel_active_number(uid, lease_id):
-            await query.edit_message_text(
-                "❌ <b>SİFARİŞ LƏĞV EDİLDİ</b>\n\n"
-                "Nömrə üçün OTP gözlənilməsi dayandırıldı. "
-                "Bu əməliyyat provayder ödənişini geri qaytarmır.",
-                parse_mode="HTML")
-        else:
-            await query.message.reply_text(
-                "⚠️ Sifariş artıq aktiv deyil, sizə aid deyil və ya 3 dəqiqəsi bitib.")
+        await query.message.reply_text(
+            "⏳ Nömrə 3 dəqiqə tamamlanana qədər ləğv edilə bilməz. "
+            "SMS gəlməsə, balans avtomatik geri qaytarılır.")
         return
 
     # USER INLINE MENU
@@ -5778,9 +6033,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except (ValueError, IndexError):
             await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
             return
-        services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, await fetch_services_cached())
         if service not in services:
-            await query.answer('Bu xidmət hazırda mövcud deyil.', show_alert=True)
+            await query.answer('Bu xidmət hazırda mövcud deyil və ya admin tərəfindən gizlədilib.', show_alert=True)
             return
         ranges = services[service]
         if not ranges:
@@ -5835,7 +6090,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # BACK TO SERVICES
     if data == "back_services":
-        services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, await fetch_services_cached())
         if not services:
             await query.message.edit_text('❌ Heç bir xidmət mövcud deyil.')
             return
@@ -5906,7 +6161,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "back_to_services":
-        services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, await fetch_services_cached())
         if not services:
             await query.edit_message_text('❌ Heç bir xidmət mövcud deyil.')
             return
@@ -6594,8 +6849,12 @@ async def miniapp_orders_api(request):
     if action=="cancel":
         oid=str(body.get("id",""))
         if cancel_active_number(uid, oid):
-            return _miniapp_cors(web.json_response({"ok":True,
-                "message":"Sifariş ləğv edildi. Provayder ödənişi geri qaytarılmır."}))
+            return _miniapp_cors(web.json_response({"ok":True}))
+        if re.fullmatch(r"[0-9a-f]{16}", oid):
+            return _miniapp_cors(web.json_response({
+                "error": "cancel_locked",
+                "message": "3 dəqiqə ərzində ləğv bağlıdır. SMS gəlməsə balans qaytarılacaq."
+            }, status=409))
         # Sandbox orders are synthetic and may be cancelled independently.
         for o in miniapp_orders.get(uid,[]):
             if (o.get("id")==oid and oid.startswith("T") and
@@ -7383,14 +7642,23 @@ def register_handlers(app):
     app.add_handler(CommandHandler("get1number", get1number_command))
     app.add_handler(CommandHandler("searchotp", searchotp_command))
     app.add_handler(CommandHandler("balance", balance_command))
+    app.add_handler(CommandHandler("topup", topup_command))
+    app.add_handler(CommandHandler("set_topup_card", set_topup_card_command))
+    app.add_handler(CommandHandler("topup_pending", topup_pending_command))
+    app.add_handler(CommandHandler("services_admin", service_visibility_command))
     app.add_handler(CommandHandler("apis", api_sales_command))
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(website_login_callback, pattern=r"^website:[A-Za-z0-9_-]{32}$"))
     app.add_handler(CallbackQueryHandler(otp_leaderboard_callback, pattern=r"^otp_leaders_(?:today|all:[0-9]+)$"))
     app.add_handler(CallbackQueryHandler(number_choice_callback, pattern=r"^num_choose_[A-Za-z0-9_-]{16}_[0-4]$"))
+    app.add_handler(CallbackQueryHandler(
+        topup_review_callback, pattern=r"^topup:(?:approve|reject):[0-9]+:[0-9a-f]{16}$"))
+    app.add_handler(CallbackQueryHandler(
+        service_visibility_callback, pattern=r"^admin_svc_toggle:[a-z0-9_.-]{1,40}$"))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, topup_receipt_photo))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
 
@@ -7467,6 +7735,9 @@ async def run_combined_server():
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
+    server.router.add_route("*", "/api/admin-services", miniapp_admin_services_api)
+    server.router.add_route("*", "/api/topup", miniapp_topup_api)
+    server.router.add_route("*", "/api/admin-topups", miniapp_admin_topups_api)
     server.router.add_route("*", "/api/prices", miniapp_prices_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
     server.router.add_route("*", "/api/withdrawals", miniapp_withdrawals_api)
@@ -7562,6 +7833,229 @@ def main():
 # ==================== MİNİ APP GƏLƏN SMS VƏ XİDMƏTLƏR API ====================
 miniapp_incoming_sms = {}  # { uid: [ {service, number, otp, message, time}, ... ] }
 
+
+async def miniapp_admin_services_api(request):
+    """All provider service visibility controls, scoped to authenticated admins."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if not is_admin(uid) or is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    live = await fetch_services_cached()
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except (ValueError, TypeError):
+            body = None
+        if not isinstance(body, dict) or type(body.get("visible")) is not bool:
+            return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+        sid = str(body.get("service", "")).strip().lower()
+        if sid not in live:
+            return _miniapp_cors(web.json_response({
+                "error": "unknown_service",
+                "message": "Bu xidmət hal-hazırda provayder kataloqunda yoxdur."
+            }, status=404))
+        config = load_system_config()
+        set_service_visibility(config, sid, body["visible"])
+        save_system_config(config)
+    elif request.method != "GET":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    config = load_system_config()
+    return _miniapp_cors(web.json_response({
+        "ok": True,
+        "services": [
+            {"id": sid, "range_count": len(ranges),
+             "visible": service_is_visible(config, sid)}
+            for sid, ranges in sorted(live.items())
+        ],
+        "provider_available": bool(live),
+        "backup_ready": bool(user_backup.ready),
+        "provider": {
+            "api_key_configured": bool(API_KEY),
+            "last_checked": _services_cache.get("last_checked"),
+            "last_error": _services_cache.get("last_error"),
+        },
+    }, headers={"Cache-Control": "no-store"}))
+
+
+async def miniapp_topup_api(request):
+    """Show bank-transfer details and accept authenticated receipt photos.
+
+    Sending a receipt never credits funds; only an administrator approves it.
+    """
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    card = str(load_system_config().get("topup_card") or "").strip()
+    if request.method == "GET":
+        user = get_user(uid)
+        pending = sum(1 for item in user.get("topup_requests", {}).values()
+                      if isinstance(item, dict) and item.get("status") == "pending")
+        return _miniapp_cors(web.json_response({
+            "enabled": bool(card), "card": card,
+            "balance": format_balance(user.get("balance", 0)),
+            "pending_count": pending, "backup_ready": bool(user_backup.ready),
+        }, headers={"Cache-Control": "no-store"}))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    if not card:
+        return _miniapp_cors(web.json_response({
+            "error": "card_not_configured", "message": "Admin hələ ödəniş kartını əlavə etməyib."
+        }, status=409))
+    if not user_backup.ready:
+        return _miniapp_cors(web.json_response({
+            "error": "backup_unavailable",
+            "message": "Balans arxivi hazır deyil. Pul köçürməzdən əvvəl adminlə əlaqə saxlayın."
+        }, status=503))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise TopupError("invalid_request", "Yanlış sorğu.")
+        cents = parse_amount_cents(body.get("amount"))
+        image_bytes, filename = decode_receipt(body.get("receipt"))
+    except (TopupError, ValueError, TypeError) as exc:
+        return _miniapp_cors(web.json_response({
+            "error": getattr(exc, "code", "invalid_request"),
+            "message": str(exc)[:180],
+        }, status=400))
+    users = load_data(USER_DATA_FILE)
+    if str(uid) not in users:
+        get_user(uid)
+        users = load_data(USER_DATA_FILE)
+    pending = users[str(uid)].get("topup_requests", {})
+    if isinstance(pending, dict) and sum(
+            1 for item in pending.values()
+            if isinstance(item, dict) and item.get("status") == "pending") >= 3:
+        return _miniapp_cors(web.json_response({
+            "error": "pending_limit", "message": "Əvvəlki üç çekin təsdiqini gözləyin."
+        }, status=429))
+    request_id = secrets.token_hex(8)
+    bot = request.app["telegram_bot"]
+    recipient = None
+    uploaded = None
+    for admin_id in ADMINS:
+        try:
+            uploaded = await bot.send_photo(
+                chat_id=admin_id,
+                photo=InputFile(io.BytesIO(image_bytes), filename=filename),
+                caption=f"💳 Balans çeki — yoxlanılır\nİstifadəçi: {uid}\nMəbləğ: {cents / 100:.2f} AZN\nSorğu: {request_id}",
+            )
+            recipient = admin_id
+            break
+        except TelegramError:
+            continue
+    if not uploaded or not uploaded.photo:
+        return _miniapp_cors(web.json_response({
+            "error": "admin_delivery_failed",
+            "message": "Çek adminə göndərilmədi. Balans sorğusu yaradılmadı."
+        }, status=503))
+    file_id = uploaded.photo[-1].file_id
+    users = load_data(USER_DATA_FILE)
+    try:
+        topup_create_request(users, uid, request_id, cents, file_id)
+    except TopupError as exc:
+        return _miniapp_cors(web.json_response({"error": exc.code, "message": str(exc)}, status=409))
+    save_data(users, USER_DATA_FILE)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Təsdiqlə", callback_data=f"topup:approve:{uid}:{request_id}"),
+        InlineKeyboardButton("❌ Rədd et", callback_data=f"topup:reject:{uid}:{request_id}"),
+    ]])
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=recipient, message_id=uploaded.message_id, reply_markup=kb)
+    except TelegramError:
+        pass  # /topup_pending can recover the saved request.
+    for admin_id in ADMINS:
+        if admin_id == recipient:
+            continue
+        try:
+            await bot.send_photo(
+                chat_id=admin_id, photo=file_id,
+                caption=f"💳 Balans çeki\nİstifadəçi: {uid}\nMəbləğ: {cents / 100:.2f} AZN\nSorğu: {request_id}",
+                reply_markup=kb)
+        except TelegramError:
+            continue
+    return _miniapp_cors(web.json_response({
+        "ok": True, "request_id": request_id,
+        "message": "Çek adminə göndərildi. Balans yalnız admin təsdiqləyəndə artacaq."
+    }))
+
+
+async def miniapp_admin_topups_api(request):
+    """Review receipt requests and configure transfer instructions in the Mini App."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    admin_id = int(tg_user["id"])
+    if not is_admin(admin_id) or is_user_banned(admin_id):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    if request.method == "GET":
+        rows = topup_pending_requests(load_data(USER_DATA_FILE), limit=30)
+        return _miniapp_cors(web.json_response({
+            "card": str(load_system_config().get("topup_card") or ""),
+            "backup_ready": bool(user_backup.ready),
+            "pending": [{"user_id": uid, "request_id": oid,
+                         "amount": f"{int(row['amount_cents']) / 100:.2f}"}
+                        for uid, oid, row in rows],
+        }, headers={"Cache-Control": "no-store"}))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+    action = body.get("action")
+    if action == "card":
+        details = body.get("card")
+        if not isinstance(details, str) or len(details) > 180:
+            return _miniapp_cors(web.json_response({"error": "invalid_card"}, status=400))
+        if re.search(r"\b(?:cvv|cvc|pin)\b", details, re.I):
+            return _miniapp_cors(web.json_response({
+                "error": "unsafe_card_details", "message": "CVV/PIN məlumatı daxil etməyin."
+            }, status=400))
+        cfg = load_system_config()
+        cfg["topup_card"] = details.strip()
+        save_system_config(cfg)
+        return _miniapp_cors(web.json_response({"ok": True}))
+    if action not in ("approve", "reject"):
+        return _miniapp_cors(web.json_response({"error": "unknown_action"}, status=400))
+    if not user_backup.ready:
+        return _miniapp_cors(web.json_response({
+            "error": "backup_unavailable",
+            "message": "Balans arxivi hazır deyil. Təsdiqləmə dayandırılıb."
+        }, status=503))
+    target = str(body.get("user_id") or "").strip()
+    request_id = str(body.get("request_id") or "").strip()
+    if not re.fullmatch(r"[0-9]{1,20}", target) or not re.fullmatch(r"[0-9a-f]{16}", request_id):
+        return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+    users = load_data(USER_DATA_FILE)
+    try:
+        row = topup_resolve_request(
+            users, target, request_id, action == "approve", admin_id)
+    except TopupError as exc:
+        return _miniapp_cors(web.json_response({"error": exc.code, "message": str(exc)}, status=409))
+    save_data(users, USER_DATA_FILE)
+    try:
+        await request.app["telegram_bot"].send_message(
+            chat_id=int(target),
+            text=f"{'✅ Təsdiqləndi' if action == 'approve' else '❌ Rədd edildi'}: {row['amount_cents'] / 100:.2f} AZN balans sorğunuz.")
+    except TelegramError:
+        pass
+    return _miniapp_cors(web.json_response({"ok": True}))
+
+
 async def miniapp_services_api(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
@@ -7572,9 +8066,11 @@ async def miniapp_services_api(request):
     uid = int(tg_user["id"])
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    services = await fetch_services_cached()
+    provider_services = await fetch_services_cached()
+    services = _visible_services_for_user(uid, provider_services)
     return _miniapp_cors(web.json_response({
         "services": services,
+        "provider_available": bool(provider_services),
         "az_available": any(
             is_az_range(item)
             for ranges in services.values() for item in ranges
@@ -7595,7 +8091,7 @@ async def miniapp_countries_api(request):
     uid = int(tg_user["id"])
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    services = await fetch_services_cached()
+    services = _visible_services_for_user(uid, await fetch_services_cached())
     countries = build_all_country_rows(services)
     iso = str(request.query.get("iso", "")).upper().strip()
     if iso:
@@ -7792,6 +8288,11 @@ async def miniapp_get_number_api(request):
 
     try:
         quote = quote_range(rid, load_number_prices(), country_iso)
+        if not is_admin(uid) and quote["cents"] <= 0:
+            return _miniapp_cors(web.json_response({
+                "error": "price_not_configured",
+                "message": "Bu xidmət üçün admin hələ pullu qiymət təyin etməyib."
+            }, status=409))
         expected_cents = body.get("expected_price_cents")
         if not is_admin(uid) and (type(expected_cents) is not int or expected_cents != quote["cents"]):
             return _miniapp_cors(web.json_response({
@@ -7831,8 +8332,22 @@ async def miniapp_get_number_api(request):
     add_number_taken(uid, 1)
     range_display = rid + "XXX"
     
-    # Aktif numaralara ekliyoruz
-    lease_id = assign_active_number(uid, clean_num, range_display)
+    # /getnum already reserved, charged and assigned this exact rental.
+    # Reassigning with a fresh lease id could disconnect order/SMS/refund state.
+    active = active_numbers.get(clean_num)
+    if not active or int(active.get("uid", 0)) != uid:
+        return _miniapp_cors(web.json_response({
+            "error": "rental_state_missing",
+            "message": "Nömrə aktivləşdirilməsi təsdiqlənmədi. Adminə bildirin."
+        }, status=503))
+    lease_id = active.get("lease_id")
+    journal = load_data(USER_DATA_FILE).get(str(uid), {}).get("rental_orders", {})
+    record = journal.get(lease_id) if isinstance(journal, dict) else None
+    if not record or record.get("status") != "pending" or record.get("number") != clean_num:
+        return _miniapp_cors(web.json_response({
+            "error": "rental_journal_mismatch",
+            "message": "Sifariş uçotu təsdiqlənmədi. Adminə bildirin."
+        }, status=503))
     save_number_range_info(uid, clean_num, range_display)
     
     # Mini App sipariş listesine ekliyoruz
