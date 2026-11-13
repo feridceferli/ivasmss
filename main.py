@@ -1039,11 +1039,7 @@ def _reconcile_expired_rentals():
 
 async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
                               expected_price_cents=None, service=""):
-    """Allocate with a server-controlled AZN price and refund failed requests.
-
-    This shared entry point covers bot and Mini App allocations. Region prices
-    for ambiguous shared calling codes require a per-range override.
-    """
+    """Purchase a three-minute rental with an idempotent refund journal."""
     digits = re.sub(r"[^0-9]", "", str(rid or ""))
     if not digits or (is_az_range(digits) and not az_range_allowed(requester_id)):
         return None, None
@@ -1055,32 +1051,14 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
     async with lock:
         ensure_whatsapp_referral_access(requester_id, service)
         quote = quote_range(digits, load_number_prices(), country_iso)
-        # A paid purchase must never change price after the user's approval.
-        # Check again while holding the user purchase lock, not just in the API.
         if not is_admin(int(uid)) and expected_price_cents is not None and (
                 type(expected_price_cents) is not int
                 or expected_price_cents != quote["cents"]):
             raise PricingError(
                 "price_changed",
-                "Qiymət dəyişib. Sifarişi yeni qiymətlə yenidən təsdiqləyin.",
-            )
-        # Admin accounts are exempt from number purchase charges.
+                "Qiymət dəyişib. Sifarişi yenidən təsdiqləyin.")
         charge = 0 if is_admin(int(uid)) else quote["cents"]
-        if charge:
-            users = load_data(USER_DATA_FILE)
-            user = users.get(uid) or get_user(uid)
-            if uid not in users:
-                users = load_data(USER_DATA_FILE)
-            balance_cents = round(float(user.get("balance", 0.0)) * 100)
-            if balance_cents < charge:
-                raise PricingError(
-                    "insufficient_balance",
-                    f"Balans kifayət etmir. Nömrə qiyməti: {quote['price']} AZN. "
-                    f"Balansınızı artırmaq üçün adminlə əlaqə saxlayın.",
-                )
-            users[uid]["balance"] = round((balance_cents - charge) / 100, 2)
-            save_data(users, USER_DATA_FILE)
-
+        lease_id = _reserve_number_lease(uid, charge)
         allocated = False
         try:
             r = await client_async.post(f"{BASE_URL}/getnum", json={"rid": digits})
@@ -1089,26 +1067,25 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
                 return None, None
             data = result.get("data") or {}
             number = data.get("full_number")
-            normalized = re.sub(r"[^0-9]", "", str(number or ""))
+            normalized = normalize_number(number)
             if (not normalized.startswith(digits)
                     or (is_az_range(normalized) and not az_range_allowed(requester_id))):
-                print("[number-api] Unexpected or restricted provider range")
+                print("[number-api] Unexpected or restricted range")
+                return None, None
+            if (normalized in active_numbers
+                    and active_number_remaining(active_numbers[normalized]) > 0):
                 return None, None
             await asyncio.to_thread(number_archive.record, number)
+            _set_number_lease(uid, lease_id, normalized)
+            assign_active_number(uid, normalized, digits + "XXX", lease_id=lease_id)
             allocated = True
             return number, data.get("country")
         except Exception as exc:
             print(f"get_number error: {type(exc).__name__}")
             return None, None
         finally:
-            if charge and not allocated:
-                # Refund reserved balance if provider fails or sends invalid data.
-                users = load_data(USER_DATA_FILE)
-                if uid in users:
-                    old = round(float(users[uid].get("balance", 0.0)) * 100)
-                    users[uid]["balance"] = round((old + charge) / 100, 2)
-                    save_data(users, USER_DATA_FILE)
-
+            if not allocated:
+                _refund_number_lease(uid, lease_id)
 
 
 # ==================== WHATSAPP-ONLY FIVE-REFERRAL ACCESS ====================
@@ -1262,21 +1239,18 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
             await asyncio.to_thread(number_archive.record, selected)
         except Exception:
             raise PricingError("archive_unavailable", "Arxiv hazır deyil. Yenidən yoxlayın.")
+        lease_id = _reserve_number_lease(uid, charge, normalized)
         if number_choices.consume(uid, token, index) is None:
+            _refund_number_lease(uid, lease_id)
             raise PricingError("choice_expired", "Seçim artıq istifadə olunub.")
-        if charge:
-            data = load_data(USER_DATA_FILE)
-            record = data.get(str(uid), user)
-            cents = round(float(record.get("balance", 0)) * 100)
-            if cents < charge:
-                raise PricingError("insufficient_balance", "Balans kifayət etmir.")
-            record["balance"] = round((cents - charge) / 100, 2)
-            data[str(uid)] = record
-            save_data(data, USER_DATA_FILE)
+        range_display = rid + "XXX"
+        try:
+            assign_active_number(uid, normalized, range_display, lease_id=lease_id)
+        except Exception:
+            _refund_number_lease(uid, lease_id)
+            raise
         add_number_taken(uid, 1)
         last_range[uid] = rid
-        range_display = rid + "XXX"
-        lease_id = assign_active_number(uid, normalized, range_display)
         save_number_range_info(uid, normalized, range_display)
         order = {
             "id": lease_id, "label": option["service"].upper(),
