@@ -209,6 +209,12 @@ active_numbers = {}
 last_range = {}
 # Local OTP waiting window; does not cancel the external provider's allocation.
 NUMBER_WAIT_SECONDS = 180
+
+def rental_wait_seconds():
+    return int(load_system_config().get("rental_minutes", 3)) * 60
+
+def rental_max_active():
+    return int(load_system_config().get("max_active_numbers", 3))
 CHECK_INTERVAL = 2
 
 
@@ -217,7 +223,7 @@ def active_number_remaining(info, now=None):
     if not isinstance(timestamp, datetime):
         return 0
     age = max(0, int(((now or datetime.now()) - timestamp).total_seconds()))
-    return max(0, NUMBER_WAIT_SECONDS - age)
+    return max(0, rental_wait_seconds() - age)
 
 
 def _persist_active_leases():
@@ -289,7 +295,7 @@ def _restore_active_leases():
 
 
 def assign_active_number(uid, number, range_display, charge_cents=0):
-    if _active_count(uid) >= 3:
+    if _active_count(uid) >= rental_max_active():
         raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
     normalized = normalize_number(number)
     if normalized in active_numbers and active_number_remaining(active_numbers[normalized]) > 0:
@@ -588,6 +594,9 @@ def load_system_config():
             "max_withdraw": DEFAULT_MAX_WITHDRAW,
             "payment_methods": DEFAULT_PAYMENT_METHODS.copy(),
             "otp_rate": DEFAULT_OTP_RATE,
+            "rental_minutes": 3,
+            "max_active_numbers": 3,
+            "service_order": [],
         }
         save_system_config(default_config)
         return default_config
@@ -604,6 +613,9 @@ def load_system_config():
             "max_withdraw": DEFAULT_MAX_WITHDRAW,
             "payment_methods": DEFAULT_PAYMENT_METHODS.copy(),
             "otp_rate": DEFAULT_OTP_RATE,
+            "rental_minutes": 3,
+            "max_active_numbers": 3,
+            "service_order": [],
         }
 
 
@@ -960,7 +972,7 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
     async with lock:
         ensure_whatsapp_referral_access(requester_id, service)
         _require_market_permission(requester_id, service, digits)
-        if _active_count(requester_id) >= 3:
+        if _active_count(requester_id) >= rental_max_active():
             raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(digits, load_number_prices(), country_iso)
         # A paid purchase must never change price after the user's approval.
@@ -1099,7 +1111,7 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
     async with lock:
         ensure_whatsapp_referral_access(uid, service)
         _require_market_permission(uid, service, rid)
-        if _active_count(uid) >= 3:
+        if _active_count(uid) >= rental_max_active():
             raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(rid, load_number_prices(), country_iso or None)
         if (not is_admin(uid) and expected_price_cents is not None
@@ -1155,7 +1167,7 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
         rid = option["rid"]
         ensure_whatsapp_referral_access(uid, option["service"])
         _require_market_permission(uid, option["service"], rid)
-        if _active_count(uid) >= 3:
+        if _active_count(uid) >= rental_max_active():
             raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
@@ -1206,7 +1218,7 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
             "number_masked": "+" + mask_number(normalized),
             "full_number": selected, "range": range_display,
             "status": "Aktiv", "created_at": time.time(),
-            "remaining_seconds": NUMBER_WAIT_SECONDS,
+            "remaining_seconds": rental_wait_seconds(),
         }
         miniapp_orders.setdefault(uid, []).append(order)
         return {
@@ -6409,11 +6421,11 @@ def _safe_order(uid, order):
     result = {
         "id": order["id"], "label": order["label"],
         "number_masked": order["number_masked"], "range": order["range"],
-        "status": order["status"], "remaining_seconds": max(0, NUMBER_WAIT_SECONDS - age),
+        "status": order["status"], "remaining_seconds": max(0, rental_wait_seconds() - age),
         "created_at": order["created_at"],
     }
     digits = normalize_number(order.get("full_number") or "")
-    if digits and order.get("status") == "Aktiv" and age < NUMBER_WAIT_SECONDS:
+    if digits and order.get("status") == "Aktiv" and age < rental_wait_seconds():
         assigned = active_numbers.get(digits)
         if (assigned and int(assigned.get("uid", 0)) == int(uid)
                 and assigned.get("lease_id") == order.get("id")
@@ -6430,7 +6442,7 @@ async def miniapp_orders_api(request):
     if request.method == "GET":
         active=[_safe_order(uid,o) for o in miniapp_orders.get(uid,[])
                 if o["status"]=="Aktiv"
-                and time.time() - o["created_at"] < NUMBER_WAIT_SECONDS
+                and time.time() - o["created_at"] < rental_wait_seconds()
                 and (not o.get("full_number") or (
                     active_numbers.get(normalize_number(o["full_number"]), {}).get("lease_id") == o["id"]
                     and active_numbers.get(normalize_number(o["full_number"]), {}).get("uid") == uid))]
@@ -6454,7 +6466,7 @@ async def miniapp_orders_api(request):
         for o in miniapp_orders.get(uid,[]):
             if (o.get("id")==oid and oid.startswith("T") and
                     o["status"]=="Aktiv" and
-                    time.time() - o["created_at"] < NUMBER_WAIT_SECONDS):
+                    time.time() - o["created_at"] < rental_wait_seconds()):
                 o["status"]="Ləğv edildi"
                 miniapp_history.setdefault(uid,[]).append(_safe_order(uid,o))
                 return _miniapp_cors(web.json_response({"ok":True}))
@@ -6585,7 +6597,10 @@ async def miniapp_admin_api(request):
             "user_count": len(users), "users": rows,
             "config": {"min_withdraw": cfg.get("min_withdraw"),
                        "max_withdraw": cfg.get("max_withdraw"),
-                       "payment_methods": cfg.get("payment_methods", {})},
+                       "payment_methods": cfg.get("payment_methods", {}),
+                       "rental_minutes": cfg.get("rental_minutes", 3),
+                       "max_active_numbers": cfg.get("max_active_numbers", 3),
+                       "service_order": cfg.get("service_order", [])},
             "monitor": {key: monitor_diagnostics.get(key) for key in
                         ("state", "last_check", "last_success", "http_status", "upstream_code", "items_seen", "last_error")},
         }))
@@ -6596,6 +6611,24 @@ async def miniapp_admin_api(request):
     except (ValueError, TypeError):
         return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
     action = body.get("action")
+    if action == "rental_settings":
+        try:
+            minutes = int(body.get("rental_minutes"))
+            maximum = int(body.get("max_active_numbers"))
+            order = body.get("service_order", [])
+            if not (1 <= minutes <= 60 and 1 <= maximum <= 10):
+                raise ValueError()
+            if not isinstance(order, list) or len(order) > 100 or any(
+                not isinstance(item, str) or len(item) > 80 for item in order
+            ):
+                raise ValueError()
+        except (TypeError, ValueError):
+            return _miniapp_cors(web.json_response({"error": "invalid_settings"}, status=400))
+        config = load_system_config()
+        config.update({"rental_minutes": minutes, "max_active_numbers": maximum,
+                       "service_order": list(dict.fromkeys(x.strip().lower() for x in order if x.strip()))})
+        save_system_config(config)
+        return _miniapp_cors(web.json_response({"ok": True}))
     target = str(body.get("user_id", "")).strip()
     if action in ("az_approve", "az_revoke"):
         if not target.isdecimal() or len(target) > 20 or int(target) <= 0:
@@ -7157,6 +7190,7 @@ async def miniapp_services_api(request):
     services = await fetch_services_cached()
     return _miniapp_cors(web.json_response({
         "services": services,
+        "service_order": load_system_config().get("service_order", []),
         "az_available": any(
             is_az_range(item)
             for ranges in services.values() for item in ranges
@@ -7428,7 +7462,7 @@ async def miniapp_get_number_api(request):
         "range": range_display,
         "status": "Aktiv",
         "created_at": time.time(),
-        "remaining_seconds": NUMBER_WAIT_SECONDS
+        "remaining_seconds": rental_wait_seconds()
     }
     miniapp_orders.setdefault(uid, []).append(order)
 
