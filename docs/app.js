@@ -1396,10 +1396,16 @@ async function fetchAdminServices() {
     try {
         const data = await api("/api/admin-services");
         list.replaceChildren();
-        status.textContent = data.provider_available
-            ? "📡 " + data.services.length + " xidmət · " +
-              (data.backup_ready ? "Arxiv aktiv" : "⚠️ Arxiv hazır deyil")
-            : "⚠️ Provayder aktiv xidmət siyahısı qaytarmadı. Arxivdəki köhnə nömrələr satış üçün göstərilmir.";
+        const provider = data.provider || {};
+        const diagnostic = !provider.api_key_configured
+            ? "⚠️ SMS provayder API açarı konfiqurasiya edilməyib."
+            : !data.provider_available
+                ? "⚠️ Aktiv xidmət siyahısı gəlmədi (səbəb: " +
+                  String(provider.last_error || "naməlum") + ")."
+                : "📡 " + data.services.length + " xidmət";
+        status.textContent = diagnostic + " · " +
+            (data.backup_ready ? "Şəxsi arxiv hazır" : "⚠️ Arxiv hazır deyil") +
+            (data.provider_available ? "" : " · Tarixi nömrələr satışa çıxarılmır.");
         for (const entry of data.services || []) {
             const row = node("div", null, "admin-user-line");
             row.appendChild(node("span", entry.id.toUpperCase() +
