@@ -199,14 +199,17 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.users["77"]["balance"], 0.0)
         self.assertEqual(self.post.await_count, 1)
 
-    async def test_free_country_does_not_debit(self):
+    async def test_unpriced_country_is_not_allocated(self):
+        # The provider is never contacted until the admin sets a positive price.
         self.post.return_value = SimpleNamespace(json=lambda: {
             "meta": {"code": 200},
             "data": {"full_number": "+447700123456", "country": "UK"},
         })
-        number, _ = await self.allocate("447700", requester_id=77, country_iso="GB")
-        self.assertEqual(number, "+447700123456")
+        with self.assertRaises(PricingError) as ctx:
+            await self.allocate("447700", requester_id=77, country_iso="GB")
+        self.assertEqual(ctx.exception.code, "price_not_configured")
         self.assertEqual(self.users["77"]["balance"], 20.0)
+        self.post.assert_not_awaited()
 
 
 if __name__ == "__main__":
