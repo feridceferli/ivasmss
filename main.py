@@ -7048,7 +7048,6 @@ async def run_combined_server():
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
-    server.router.add_route("*", "/api/admin/publish-services", miniapp_publish_services_api)
     server.router.add_route("*", "/api/prices", miniapp_prices_api)
     server.router.add_route("*", "/api/topup-details", miniapp_topup_details_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
@@ -7144,29 +7143,6 @@ def main():
 
 # ==================== MİNİ APP GƏLƏN SMS VƏ XİDMƏTLƏR API ====================
 miniapp_incoming_sms = {}  # { uid: [ {service, number, otp, message, time}, ... ] }
-
-async def miniapp_publish_services_api(request):
-    """Authenticated admin-only bulk publishing; never expose upstream ranges implicitly."""
-    if request.method == "OPTIONS":
-        return _miniapp_cors(web.Response(status=204))
-    tg_user, err = _miniapp_auth(request)
-    if not tg_user:
-        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
-    if not is_admin(int(tg_user["id"])):
-        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-    if request.method != "POST":
-        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
-    if not user_backup.ready:
-        return _miniapp_cors(web.json_response({"error": "backup_unavailable",
-            "message": "Yaddaş ehtiyat nüsxəsi hazır deyil."}, status=503))
-    upstream = await fetch_services_cached()
-    if not upstream:
-        return _miniapp_cors(web.json_response({"error": "provider_unavailable",
-            "message": "Provayder xidmət siyahısı boşdur."}, status=503))
-    count = market_catalog.publish_all(upstream)
-    return _miniapp_cors(web.json_response({"success": True,
-        "services": len(upstream), "ranges": count}))
-
 
 async def miniapp_services_api(request):
     if request.method == "OPTIONS":
