@@ -6,16 +6,20 @@ on:
       - main.py
       - rental_ledger.py
       - topup_ledger.py
+      - service_policy.py
       - test_rental_ledger.py
       - test_topup_ledger.py
+      - test_service_policy.py
       - .github/workflows/persistent-rentals-tests.yml
   pull_request:
     paths:
       - main.py
       - rental_ledger.py
       - topup_ledger.py
+      - service_policy.py
       - test_rental_ledger.py
       - test_topup_ledger.py
+      - test_service_policy.py
       - .github/workflows/persistent-rentals-tests.yml
   workflow_dispatch:
 
@@ -28,6 +32,6 @@ jobs:
         with:
           python-version: '3.12'
       - name: Check bot and module syntax
-        run: python -m py_compile main.py rental_ledger.py topup_ledger.py
+        run: python -m py_compile main.py rental_ledger.py topup_ledger.py service_policy.py
       - name: Verify idempotent settlement and persistence
-        run: python -m unittest -v test_rental_ledger test_topup_ledger test_active_leases_persistence
+        run: python -m unittest -v test_rental_ledger test_topup_ledger test_service_policy test_active_leases_persistence
