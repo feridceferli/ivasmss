@@ -571,7 +571,7 @@ async function showServiceRanges(service) {
         const q = search.value.replace(/\D/g, "");
         const ranges = selected.items.filter(rid => rid.includes(q));
         for (const rid of ranges) {
-            addRangeButton(listing, "📞 +" + rid + " — Al" +
+            addRangeButton(listing, "📞 +" + rid + " — Nömrə al" +
                 (rid.startsWith("994") && !state.azApproved ? " 🔒" : ""),
                 {service, rid, country: selected.code, iso: selected.iso, isAz: rid.startsWith("994")});
         }
