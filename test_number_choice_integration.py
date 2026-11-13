@@ -57,6 +57,8 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
             "number_choices": NumberChoiceStore(),
             "_number_purchase_locks": {},
             "ensure_whatsapp_referral_access": lambda uid, service: None,
+            "_active_count": lambda uid: len(self.active),
+            "_require_market_permission": lambda uid, service, rid: None,
             "USER_DATA_FILE": "users.json",
             "NUMBER_WAIT_SECONDS": 180,
             "number_archive": SimpleNamespace(record=self.record),
@@ -76,7 +78,7 @@ class NumberChoiceIntegrationTests(unittest.IsolatedAsyncioTestCase):
             "active_number_remaining": lambda info: 180,
             "add_number_taken": lambda uid, n: self.stats.append((uid, n)),
             "last_range": {},
-            "assign_active_number": lambda uid, number, rid: self.active.setdefault(
+            "assign_active_number": lambda uid, number, rid, charge_cents=0: self.active.setdefault(
                 number, {"uid": uid, "range": rid, "lease_id": "abc"})["lease_id"],
             "save_number_range_info": lambda *args: self.saved_ranges.append(args),
             "mask_number": lambda x: "****" + x[-4:],
