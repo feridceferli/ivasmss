@@ -46,17 +46,22 @@ class MiniAppParityTests(unittest.TestCase):
             self.assertIn("switchTab('" + name + "')", parser.tabs)
         for name in ("country-search", "countries-list", "country-range-list",
                      "az-operators-list", "request-az-access", "admin-users-list",
-                     "admin-target-id"):
+                     "admin-target-id", "profile-language", "topup-amount",
+                     "topup-receipt", "topup-submit", "admin-services-list",
+                     "admin-topups-list"):
             self.assertIn(name, parser.ids)
 
     def test_api_paths_have_matching_server_handlers(self):
         funcs = {n.name for n in MODULE.body if isinstance(n, ast.AsyncFunctionDef)}
         self.assertTrue({
             "miniapp_countries_api", "miniapp_az_access_api",
-            "miniapp_services_api", "miniapp_admin_api", "miniapp_get_number_api"
+            "miniapp_services_api", "miniapp_admin_api", "miniapp_get_number_api",
+            "miniapp_topup_api", "miniapp_admin_topups_api",
+            "miniapp_admin_services_api"
         } <= funcs)
         for path in ("/api/countries", "/api/az-access", "/api/services",
-                     "/api/admin", "/api/get-number", "/api/dashboard"):
+                     "/api/admin", "/api/get-number", "/api/dashboard",
+                     "/api/topup", "/api/admin-topups", "/api/admin-services"):
             self.assertIn(path, PY)
             self.assertIn(path, JS)
 
@@ -96,7 +101,17 @@ class MiniAppCountryIsoRegressionTests(unittest.IsolatedAsyncioTestCase):
     """Reproduce +994 Mini App requests without contacting the number provider."""
 
     async def asyncSetUp(self):
-        self.allocate = AsyncMock(return_value=("+994702101234", "Azerbaijan"))
+        self.active = {}
+        self.users = {"77": {"rental_orders": {}}}
+        async def allocate(*args, **kwargs):
+            number = "994702101234"
+            lease_id = "a" * 16
+            self.active[number] = {"uid": 77, "lease_id": lease_id}
+            self.users["77"]["rental_orders"][lease_id] = {
+                "number": number, "status": "pending"
+            }
+            return "+" + number, "Azerbaijan"
+        self.allocate = AsyncMock(side_effect=allocate)
         self.orders = {}
         target = next(node for node in MODULE.body if isinstance(node, ast.AsyncFunctionDef)
                       and node.name == "miniapp_get_number_api")
@@ -119,11 +134,12 @@ class MiniAppCountryIsoRegressionTests(unittest.IsolatedAsyncioTestCase):
             "quote_range": quote_range,
             "PricingError": PricingError,
             "get_number_from_api": self.allocate,
-            "assign_active_number": lambda uid, number, rng: "a" * 16,
+            "load_data": lambda filename: self.users,
+            "USER_DATA_FILE": "users.json",
             "NUMBER_WAIT_SECONDS": 180,
             "normalize_number": lambda number: re.sub(r"\D", "", str(number)),
             "add_number_taken": lambda uid, count: None,
-            "active_numbers": {},
+            "active_numbers": self.active,
             "datetime": datetime,
             "save_number_range_info": lambda uid, number, rid: None,
             "mask_number": lambda number: "****" + number[-4:],
@@ -149,6 +165,8 @@ class MiniAppCountryIsoRegressionTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(response["body"]["success"])
         self.assertEqual(self.allocate.await_args.kwargs["country_iso"], "")
         self.assertEqual(self.allocate.await_args.kwargs["expected_price_cents"], 1000)
+        self.assertEqual(self.orders[77][0]["id"], "a" * 16,
+                         "Mini App must reuse the charged rental's lease id")
 
     async def test_missing_country_iso_is_accepted(self):
         response = await self.request_number()
