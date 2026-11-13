@@ -1584,6 +1584,9 @@ def main_keyboard(user_id):
         ])
     if api_sales_store._read().get("visible"):
         rows.append([InlineKeyboardButton("🛒 API SATIŞI", callback_data="menu_api_sales")])
+    rows.append([InlineKeyboardButton("💳 BALANSI ARTIR", callback_data="menu_topup")])
+    if is_admin(user_id):
+        rows.append([InlineKeyboardButton("🔐 iVASMS XİDMƏTLƏRİ (ADMIN)", callback_data="market_admin_open")])
     rows.append([InlineKeyboardButton("📥 NÖMRƏLƏRİM — TXT", callback_data="menu_numbers_txt")])
     return InlineKeyboardMarkup(rows)
 
@@ -1620,6 +1623,8 @@ def admin_main_keyboard():
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
         [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
         [KeyboardButton("🛒 API SATIŞI (ADMIN)")],
+        [KeyboardButton("🔐 iVASMS XİDMƏTLƏRİ")],
+        [KeyboardButton("💳 GÖZLƏYƏN ÇEKLƏR")],
         [KeyboardButton("📣 SAATLIQ NÖMRƏ ELANLARI")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
     ]
@@ -2197,7 +2202,7 @@ def get_flag_by_prefix(range_str):
     return None
 
 
-def _build_services_keyboard(services):
+def _build_services_keyboard(services, *, allow_custom=False):
     buttons = []
     emoji_map = {
         "whatsapp": "💚",
@@ -2242,12 +2247,9 @@ def _build_services_keyboard(services):
             InlineKeyboardButton(display, callback_data=f"svcidx_{i}", style=color)
         )
     rows = [buttons[j : j + 2] for j in range(0, len(buttons), 2)]
-    rows.append(
-        [
-            InlineKeyboardButton("⚙️ CUSTOM RANGE", callback_data="custom_range", style="danger"),
-            InlineKeyboardButton("🔙 BACK TO MAIN", callback_data="back_to_main"),
-        ]
-    )
+    if allow_custom:
+        rows.append([InlineKeyboardButton("⚙️ CUSTOM RANGE", callback_data="custom_range", style="danger")])
+    rows.append([InlineKeyboardButton("🔙 BACK TO MAIN", callback_data="back_to_main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -2407,6 +2409,8 @@ async def show_all_countries(update, context, page=0, refresh=True):
     lang = get_user_language(uid)
     if refresh or "all_country_rows" not in context.user_data:
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
         context.user_data["all_country_rows"] = build_all_country_rows(services)
     countries = context.user_data["all_country_rows"]
     page_size = 25
@@ -2465,7 +2469,9 @@ async def show_app_selection(update, context):
             reply_markup=main_keyboard(uid),
         )
         return
-    # Show every service currently returned by the upstream API.
+    if not is_admin(uid):
+        services = market_catalog.public(services)
+    # Show only admin-published provider services to ordinary users.
     # New services (for example Bolt) appear automatically without a code update.
     filtered_services = dict(sorted(services.items()))
     if not filtered_services:
@@ -2476,7 +2482,7 @@ async def show_app_selection(update, context):
         )
         return
     context.user_data["la_services"] = filtered_services
-    keyboard = _build_services_keyboard(filtered_services)
+    keyboard = _build_services_keyboard(filtered_services, allow_custom=is_admin(uid))
     await update.effective_message.reply_text(
         "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
         "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
@@ -2843,11 +2849,8 @@ async def show_active_numbers(update, context):
             f"🟢 Status: AKTİV\n"
             f"⏳ Qalan vaxt: {mins:02d}:{secs:02d}</blockquote>"
         )
-        if lease_id:
-            buttons.append([InlineKeyboardButton(
-                f"❌ Ləğv et · …{normalize_number(number)[-4:]}",
-                callback_data=f"cancel_number_{lease_id}", style="danger")])
-    lines.append("\nℹ️ Gözləmə limiti 3 dəqiqədir. Ləğv provayder ödənişini geri qaytarmır.")
+        # Active rentals cannot be cancelled.
+    lines.append("\nℹ️ 3 dəqiqə ərzində ləğv yoxdur. SMS gəlməsə ödəniş geri qaytarılır.")
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(buttons) if buttons else main_keyboard(uid))
@@ -2937,9 +2940,7 @@ async def number_choice_callback(update, context):
             [InlineKeyboardButton(
                 "🔄 Yenə 5 nömrə göstər",
                 callback_data=f"same_range_{rid}_{service}")],
-            [InlineKeyboardButton(
-                "❌ Ləğv et",
-                callback_data=f"cancel_number_{selected['lease_id']}")],
+            [InlineKeyboardButton("⏳ 3 dəqiqə limit", callback_data="menu_active_numbers")],
             [InlineKeyboardButton(
                 "📋 Aktiv nömrələr", callback_data="menu_active_numbers")],
         ]),
@@ -4333,6 +4334,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     uid = update.effective_user.id
     text = normalize_button_input(update.message.text.strip())
 
+    if text == "🔐 iVASMS XİDMƏTLƏRİ" and is_admin(uid):
+        await market_bot_ui.admin_services(update, context)
+        return
+    if text == "💳 GÖZLƏYƏN ÇEKLƏR" and is_admin(uid):
+        await market_bot_ui.topups_command(update, context)
+        return
+
     if text == "📣 SAATLIQ NÖMRƏ ELANLARI" and is_admin(uid):
         await bot_promo_admin_menu(update.effective_message)
         return
@@ -5664,12 +5672,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if cancel_active_number(uid, lease_id):
             await query.edit_message_text(
                 "❌ <b>SİFARİŞ LƏĞV EDİLDİ</b>\n\n"
-                "Nömrə üçün OTP gözlənilməsi dayandırıldı. "
-                "Bu əməliyyat provayder ödənişini geri qaytarmır.",
+                "Bu nömrə üçün əməliyyat tamamlandı.",
                 parse_mode="HTML")
         else:
             await query.message.reply_text(
-                "⚠️ Sifariş artıq aktiv deyil, sizə aid deyil və ya 3 dəqiqəsi bitib.")
+                "⏳ Nömrə 3 dəqiqə ərzində ləğv edilmir. SMS gəlməsə məbləğ qaytarılır.")
         return
 
     # USER INLINE MENU
@@ -5687,6 +5694,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if data == "menu_get_number":
         await show_app_selection(update, context)
+        return
+    if data == "menu_topup":
+        await market_bot_ui.topup_command(update, context)
+        return
+    if data == "market_admin_open" and is_admin(uid):
+        await market_bot_ui.admin_services(update, context)
         return
     if data == "menu_active_numbers":
         await show_active_numbers(update, context)
@@ -5838,6 +5851,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
             return
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
         if service not in services:
             await query.answer('Bu xidmət hazırda mövcud deyil.', show_alert=True)
             return
@@ -5870,6 +5885,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # CUSTOM RANGE
     if data in ("custom_range", "custom_range_single"):
+        if not is_admin(uid):
+            await query.message.reply_text("🔒 Fərdi diapazon yalnız admin üçündür.")
+            return
         context.user_data["mode"] = ("custom_range" if data == "custom_range_single" else "custom_range_collect")
         await query.message.edit_text(
             ("⚙️ <b>CUSTOM RANGE — TƏK NÖMRƏ</b>\n\n" if data == "custom_range_single" else
@@ -5895,12 +5913,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # BACK TO SERVICES
     if data == "back_services":
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
         if not services:
             await query.message.edit_text('❌ Heç bir xidmət mövcud deyil.')
             return
         displayed_services = dict(sorted(services.items()))
         context.user_data["la_services"] = displayed_services
-        keyboard = _build_services_keyboard(displayed_services)
+        keyboard = _build_services_keyboard(displayed_services, allow_custom=is_admin(uid))
         await query.message.edit_text(
             "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
             "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
@@ -5966,10 +5986,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "back_to_services":
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
+        context.user_data["la_services"] = services
         if not services:
             await query.edit_message_text('❌ Heç bir xidmət mövcud deyil.')
             return
-        keyboard = _build_services_keyboard(services)
+        keyboard = _build_services_keyboard(services, allow_custom=is_admin(uid))
         await query.edit_message_text(
             "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
             "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
@@ -6066,6 +6089,8 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if action == "get_number":
         await show_app_selection(update, context)
+    elif action == "topup":
+        await market_bot_ui.topup_command(update, context)
     elif action == "active_numbers":
         await show_active_numbers(update, context)
     elif action == "search_otp":
@@ -6663,8 +6688,8 @@ async def miniapp_orders_api(request):
                 o["status"]="Ləğv edildi"
                 miniapp_history.setdefault(uid,[]).append(_safe_order(uid,o))
                 return _miniapp_cors(web.json_response({"ok":True}))
-        return _miniapp_cors(web.json_response({"error":"not_found",
-            "message":"Sifariş tapılmadı və ya vaxtı bitib."},status=404))
+        return _miniapp_cors(web.json_response({"error":"cancellation_locked",
+            "message":"3 dəqiqə ərzində ləğv mümkün deyil. SMS gəlməsə balans geri qaytarılır."},status=409))
     return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
 
 async def miniapp_test_sms(request):
@@ -7425,6 +7450,7 @@ async def post_init(application):
 
 
 def register_handlers(app):
+    market_bot_ui.register(app)
     register_whatsapp_handlers(app, is_admin)
     register_admin_test_tools(app, is_admin, admin_main_keyboard)
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
@@ -7635,6 +7661,8 @@ async def miniapp_services_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
+    if not is_admin(uid):
+        services = market_catalog.public(services)
     return _miniapp_cors(web.json_response({
         "services": services,
         "az_available": any(
@@ -7658,6 +7686,8 @@ async def miniapp_countries_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
+    if not is_admin(uid):
+        services = market_catalog.public(services)
     countries = build_all_country_rows(services)
     iso = str(request.query.get("iso", "")).upper().strip()
     if iso:
@@ -7921,6 +7951,16 @@ async def miniapp_get_number_api(request):
     }))
 
 
+
+market_bot_ui = MarketBotUI(
+    catalog=market_catalog, topups=manual_topups, backup=user_backup,
+    is_admin=is_admin, is_banned=is_user_banned,
+    services=fetch_services_cached, user=get_user,
+    load_users=lambda: load_data(USER_DATA_FILE),
+    save_users=lambda rows: save_data(rows, USER_DATA_FILE),
+    quote=lambda rid: quote_range(rid, load_number_prices()),
+    admins=ADMINS,
+)
 
 if __name__ == "__main__":
     main()
