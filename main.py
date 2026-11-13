@@ -935,8 +935,8 @@ def _active_count(uid):
 
 
 def _require_market_permission(uid, service, rid):
-    if not is_admin(int(uid)) and not market_catalog.allowed(str(service).lower(), str(rid)):
-        raise PricingError("service_unavailable", "Xidmət və diapazon admin tərəfindən aktiv edilməyib.")
+    """Pre-November service visibility: upstream availability governs access."""
+    return None
 
 
 _number_purchase_locks = {}
@@ -2335,8 +2335,6 @@ async def show_all_countries(update, context, page=0, refresh=True):
     lang = get_user_language(uid)
     if refresh or "all_country_rows" not in context.user_data:
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         context.user_data["all_country_rows"] = build_all_country_rows(services)
     countries = context.user_data["all_country_rows"]
     page_size = 25
@@ -2395,9 +2393,7 @@ async def show_app_selection(update, context):
             reply_markup=main_keyboard(uid),
         )
         return
-    if not is_admin(uid):
-        services = market_catalog.public(services)
-    # Show only admin-published provider services to ordinary users.
+    # Show provider-advertised services to ordinary users.
     # New services (for example Bolt) appear automatically without a code update.
     filtered_services = dict(sorted(services.items()))
     if not filtered_services:
@@ -5570,8 +5566,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
             return
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         if service not in services:
             await query.answer('Bu xidmət hazırda mövcud deyil.', show_alert=True)
             return
@@ -5632,8 +5626,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # BACK TO SERVICES
     if data == "back_services":
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         if not services:
             await query.message.edit_text('❌ Heç bir xidmət mövcud deyil.')
             return
@@ -5705,8 +5697,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "back_to_services":
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         context.user_data["la_services"] = services
         if not services:
             await query.edit_message_text('❌ Heç bir xidmət mövcud deyil.')
@@ -7189,8 +7179,6 @@ async def miniapp_services_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
-    if not is_admin(uid):
-        services = market_catalog.public(services)
     return _miniapp_cors(web.json_response({
         "services": services,
         "az_available": any(
@@ -7214,8 +7202,6 @@ async def miniapp_countries_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
-    if not is_admin(uid):
-        services = market_catalog.public(services)
     countries = build_all_country_rows(services)
     iso = str(request.query.get("iso", "")).upper().strip()
     if iso:
