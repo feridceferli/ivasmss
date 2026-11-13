@@ -48,6 +48,18 @@ class MarketCatalog:
             if any(_rid(rid) in approved.get(str(name).lower(), set()) for rid in ranges)
         }
 
+    def publish_all(self, upstream):
+        """Admin explicitly publishes currently advertised provider ranges."""
+        approved = {
+            str(service).lower(): sorted({_rid(r) for r in ranges
+                if re.fullmatch(r"\\d{1,10}", _rid(r))})
+            for service, ranges in upstream.items() if isinstance(ranges, list)
+        }
+        approved = {key: ranges for key, ranges in approved.items() if ranges}
+        atomic_save(approved, self.filename)
+        self.on_change()
+        return sum(map(len, approved.values()))
+
     def toggle(self, service, rid, upstream):
         service = str(service).lower()
         rid = _rid(rid)
