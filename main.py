@@ -5026,6 +5026,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if confirm_referral(db, uid):
         save_data(db, USER_DATA_FILE)
     args = context.args
+    if args and args[0] == "topup":
+        await market_bot_ui.topup_command(update, context)
+        return
     if args and str(args[0]).startswith("connect_"):
         # A browser can link an account only after its Telegram owner approves here.
         token = str(args[0])[len("connect_"):]
