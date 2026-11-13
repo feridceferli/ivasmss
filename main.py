@@ -30,6 +30,11 @@ from world_news_feed import (
 )
 from number_pricing import (PricingError, initial_prices, price_rule, quote_range,
                             valid_country, valid_range)
+from rental_ledger import (RentalError, reserve as reserve_rental,
+                           set_number as set_rental_number,
+                           record_sms as rental_sms_received,
+                           refund as refund_rental,
+                           refund_expired as refund_expired_rentals)
 from api_sales import ApiSalesStore, ApiSalesError
 from api_sales_promotions import (
     build_group_digest, promotion_due, safe_promotion_state,
@@ -289,9 +294,15 @@ def _restore_active_leases():
     return restored
 
 
-def assign_active_number(uid, number, range_display):
-    lease_id = secrets.token_hex(8)
-    active_numbers[normalize_number(number)] = {
+def assign_active_number(uid, number, range_display, lease_id=None):
+    clean = normalize_number(number)
+    existing = active_numbers.get(clean)
+    if existing and active_number_remaining(existing) > 0:
+        if int(existing.get("uid", 0)) == int(uid):
+            return existing["lease_id"]
+        raise PricingError("already_active", "Nömrə artıq başqa istifadəçidədir.")
+    lease_id = lease_id or secrets.token_hex(8)
+    active_numbers[clean] = {
         "uid": int(uid), "range": str(range_display),
         "timestamp": datetime.now(), "lease_id": lease_id,
     }
@@ -300,21 +311,7 @@ def assign_active_number(uid, number, range_display):
 
 
 def cancel_active_number(uid, lease_id):
-    """Only the assigned user can cancel this particular unexpired order."""
-    if not isinstance(lease_id, str) or not re.fullmatch(r"[0-9a-f]{16}", lease_id):
-        return False
-    for number, info in list(active_numbers.items()):
-        if (info.get("lease_id") != lease_id or
-                int(info.get("uid", 0)) != int(uid) or
-                active_number_remaining(info) <= 0):
-            continue
-        del active_numbers[number]
-        _persist_active_leases()
-        for order in miniapp_orders.get(int(uid), []):
-            if order.get("id") == lease_id and order.get("status") == "Aktiv":
-                order["status"] = "Ləğv edildi"
-                miniapp_history.setdefault(int(uid), []).append(_safe_order(uid, order))
-        return True
+    """Customers cannot cancel a paid rental before its automatic expiry."""
     return False
 
 
@@ -966,6 +963,78 @@ async def country_availability_loop(app):
 
 # User-scoped locks serialize purchases; do not let parallel requests double-spend.
 _number_purchase_locks = {}
+
+
+def _reserve_number_lease(uid, charge_cents, number=""):
+    """Charge and journal atomically in users.json, with no intervening await."""
+    lease_id = secrets.token_hex(8)
+    users = load_data(USER_DATA_FILE)
+    if str(uid) not in users:
+        get_user(uid)
+        users = load_data(USER_DATA_FILE)
+    try:
+        reserve_rental(users, uid, lease_id, charge_cents)
+        if number:
+            set_rental_number(users, uid, lease_id, normalize_number(number))
+    except RentalError as exc:
+        raise PricingError(exc.code, str(exc)) from exc
+    save_data(users, USER_DATA_FILE)
+    return lease_id
+
+
+def _set_number_lease(uid, lease_id, number):
+    users = load_data(USER_DATA_FILE)
+    try:
+        set_rental_number(users, uid, lease_id, normalize_number(number))
+    except RentalError as exc:
+        raise PricingError(exc.code, str(exc)) from exc
+    save_data(users, USER_DATA_FILE)
+
+
+def _refund_number_lease(uid, lease_id):
+    users = load_data(USER_DATA_FILE)
+    if str(uid) in users and refund_rental(users, uid, lease_id, status="failed"):
+        save_data(users, USER_DATA_FILE)
+
+
+def _complete_number_lease(uid, number):
+    """Settle SMS for its owner, without any balance bonus."""
+    normalized = normalize_number(number)
+    info = active_numbers.get(normalized)
+    if not info or int(info.get("uid", 0)) != int(uid):
+        return False
+    users = load_data(USER_DATA_FILE)
+    if str(uid) not in users:
+        return False
+    try:
+        success = rental_sms_received(users, uid, info["lease_id"], normalized)
+    except RentalError:
+        return False
+    if success:
+        save_data(users, USER_DATA_FILE)
+    return success
+
+
+def _reconcile_expired_rentals():
+    """Restart-safe refunds even when the SMS provider is unavailable."""
+    users = load_data(USER_DATA_FILE)
+    refunded = refund_expired_rentals(users)
+    if refunded:
+        save_data(users, USER_DATA_FILE)
+    expired_ids = {oid for _, oid in refunded}
+    removed = False
+    for number, info in list(active_numbers.items()):
+        if active_number_remaining(info) <= 0 or info.get("lease_id") in expired_ids:
+            del active_numbers[number]
+            removed = True
+    if removed:
+        _persist_active_leases()
+    for uid, oid in refunded:
+        for order in miniapp_orders.get(int(uid), []):
+            if order.get("id") == oid and order.get("status") == "Aktiv":
+                order["status"] = "SMS gəlmədi — geri qaytarıldı"
+                miniapp_history.setdefault(int(uid), []).append(_safe_order(uid, order))
+    return len(refunded)
 
 
 async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
