@@ -635,6 +635,7 @@
                     <button class="action-small" onclick="adminJump('admin-wa-referral-section')">🎁 WhatsApp dəvətləri</button>
                     <button class="action-small" onclick="adminJump('admin-api-sales-section')">🛒 API Satışı</button>
                     <button class="action-small" onclick="adminJump('admin-hourly-promos-section')">📣 Saatlıq bot elanları</button>
+                    <button class="action-small" onclick="adminJump('admin-rental-section')">⏱ Nömrə və xidmət ayarları</button>
                     <button class="action-small" onclick="adminJump('admin-system-section')">⚙️ Sistem</button>
                     <button class="action-small" onclick="adminJump('admin-channels-section')">🔗 Kanallar</button>
                     <button class="action-small" onclick="adminJump('admin-notice-section')">🛠 Bildirişlər</button>
@@ -646,6 +647,19 @@
                     <button class="action-small" onclick="adminJump('admin-archive-section')">📦 Arxiv</button>
                 </div>
             </div>
+            <section class="card" id="admin-rental-section">
+                <h4>⏱ Nömrə və xidmət idarəetməsi</h4>
+                <p class="notice-mini">Dəyişikliklər bütün istifadəçilərə tətbiq edilir. Mövcud aktiv nömrələrin vaxtı da yeni limitə uyğun hesablanır.</p>
+                <label for="admin-rental-minutes">Nömrənin aktiv qalma müddəti (1–60 dəqiqə)</label>
+                <input class="admin-input" type="number" min="1" max="60" step="1" id="admin-rental-minutes" value="3">
+                <label for="admin-rental-maximum">Eyni anda maksimum nömrə (1–10)</label>
+                <input class="admin-input" type="number" min="1" max="10" step="1" id="admin-rental-maximum" value="3">
+                <label for="admin-service-order">Xidmət sırası — hər sətirdə bir xidmət kodu (məsələn wa, tg)</label>
+                <textarea class="admin-input" id="admin-service-order" rows="5" maxlength="8000"></textarea>
+                <p class="notice-mini">Siyahıda olmayan xidmətlər avtomatik olaraq axırda görünür. Provayderin qaytarmadığı nömrələr əlavə edilmir.</p>
+                <button class="action-small" type="button" onclick="saveRentalSettings()">💾 Nömrə və xidmət ayarlarını saxla</button>
+                <p class="notice-mini" id="admin-rental-status" role="status"></p>
+            </section>
             <section class="card api-sales-admin" id="admin-hourly-promos-section">
                 <h4>📣 Bot istifadəçilərinə saatlıq nömrə elanları</h4>
                 <p class="notice-mini">Qısa elanlar qeydiyyatlı bot istifadəçilərinin şəxsi çatlarına göndərilir, qrupa yox. Mesajlar növbə ilə dəyişir. Heç bir OTP, API açarı və ya şəxsi nömrə paylaşılmır.</p>
@@ -932,7 +946,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261113-manual-buy-topup"></script>
-    <script src="app.js?v=20261113-restore-legacy"></script>
+    <script src="app.js?v=20261113-admin-controls"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
