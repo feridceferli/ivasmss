@@ -325,7 +325,7 @@ def cancel_active_number(uid, lease_id):
 
 
 # ==================== SERVICE CACHE ====================
-_services_cache = {"services": {}, "timestamp": 0}
+_services_cache = {"services": {}, "timestamp": 0, "last_error": "not_checked", "last_checked": None}
 CACHE_TTL = 30
 
 # ==================== COUNTRY HOTNESS TRACKING ====================
@@ -936,6 +936,7 @@ async def fetch_services_cached():
         return _services_cache["services"]
     try:
         r = await client_async.get(f"{BASE_URL}/liveaccess")
+        r.raise_for_status()
         data = r.json()
         if data.get("meta", {}).get("code") == 200:
             services_data = data.get("data", {}).get("services", [])
@@ -952,14 +953,21 @@ async def fetch_services_cached():
                     continue
                 sid = str(svc.get("sid", "")).strip().lower()
                 ranges = svc.get("ranges", [])
-                if sid and isinstance(ranges, list) and ranges:
+                if re.fullmatch(r"[a-z0-9_.-]{1,40}", sid) and isinstance(ranges, list) and ranges:
                     services[sid] = ranges
             _services_cache["services"] = services
             _services_cache["timestamp"] = now
+            _services_cache["last_checked"] = now
+            _services_cache["last_error"] = None if services else "empty_catalog"
             print(f"[services] cache updated — {len(services)} service(s)")
             return services
-    except Exception as e:
-        print(f"[services] fetch error: {e}")
+        _services_cache["last_error"] = "upstream_rejected"
+    except Exception as exc:
+        _services_cache["last_error"] = type(exc).__name__
+        print(f"[services] fetch error: {type(exc).__name__}")
+    _services_cache["last_checked"] = now
+    if not API_KEY:
+        _services_cache["last_error"] = "api_key_missing"
     return _services_cache["services"]
 
 
@@ -7855,6 +7863,11 @@ async def miniapp_admin_services_api(request):
         ],
         "provider_available": bool(live),
         "backup_ready": bool(user_backup.ready),
+        "provider": {
+            "api_key_configured": bool(API_KEY),
+            "last_checked": _services_cache.get("last_checked"),
+            "last_error": _services_cache.get("last_error"),
+        },
     }, headers={"Cache-Control": "no-store"}))
 
 
