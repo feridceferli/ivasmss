@@ -123,7 +123,7 @@ class MiniAppCountryIsoRegressionTests(unittest.IsolatedAsyncioTestCase):
             "NUMBER_WAIT_SECONDS": 180,
             "normalize_number": lambda number: re.sub(r"\D", "", str(number)),
             "add_number_taken": lambda uid, count: None,
-            "active_numbers": {},
+            "active_numbers": {"994702101234": {"uid": 77, "lease_id": "a" * 16}},
             "datetime": datetime,
             "save_number_range_info": lambda uid, number, rid: None,
             "mask_number": lambda number: "****" + number[-4:],
