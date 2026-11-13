@@ -39,6 +39,9 @@ from api_sales import ApiSalesStore, ApiSalesError
 from topup_ledger import (TopupError, create_request as topup_create_request,
                           resolve_request as topup_resolve_request,
                           pending_requests as topup_pending_requests)
+from service_policy import (visible_services as public_service_catalog,
+                            is_visible as service_is_visible,
+                            set_visible as set_service_visibility)
 from decimal import Decimal, InvalidOperation
 from api_sales_promotions import (
     build_group_digest, promotion_due, safe_promotion_state,
@@ -596,6 +599,53 @@ def save_system_config(config):
     _save_persistent_json(config, SYSTEM_CONFIG_FILE)
 
 
+def _visible_services_for_user(uid, services):
+    return public_service_catalog(
+        services, load_system_config(), admin=is_admin(int(uid)))
+
+
+async def service_visibility_command(update, context):
+    """Admin-only toggles for upstream-active services."""
+    if not is_admin(update.effective_user.id) or update.effective_chat.type != "private":
+        await update.effective_message.reply_text("🔒 Yalnız admin üçün.")
+        return
+    services = await fetch_services_cached()
+    config = load_system_config()
+    buttons = []
+    for sid in sorted(services)[:75]:
+        enabled = service_is_visible(config, sid)
+        buttons.append([InlineKeyboardButton(
+            ("✅ " if enabled else "❌ ") + sid.upper(),
+            callback_data=f"admin_svc_toggle:{sid}")])
+    if not buttons:
+        await update.effective_message.reply_text("Aktiv API xidməti tapılmadı.")
+        return
+    await update.effective_message.reply_text(
+        "⚙️ XİDMƏTLƏR\n✅ İstifadəçiyə görünür · ❌ Gizlədilib\n"
+        "İstədiyiniz xidmətə basaraq görünməsini dəyişin.",
+        reply_markup=InlineKeyboardMarkup(buttons))
+
+
+async def service_visibility_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    if not is_admin(query.from_user.id):
+        await query.message.reply_text("🔒 Yalnız admin üçün.")
+        return
+    sid = query.data.removeprefix("admin_svc_toggle:")
+    live = await fetch_services_cached()
+    if sid not in live:
+        await query.message.reply_text("⚠️ Xidmət artıq aktiv siyahıda deyil.")
+        return
+    config = load_system_config()
+    enabled = not service_is_visible(config, sid)
+    set_service_visibility(config, sid, enabled)
+    save_system_config(config)
+    await query.message.reply_text(
+        f"{'✅ Aktiv' if enabled else '❌ Gizli'}: {sid.upper()}. "
+        "Bu seçim bot yenidən başlayanda saxlanacaq.")
+
+
 def update_min_withdraw(new_min):
     config = load_system_config()
     config["min_withdraw"] = new_min
@@ -1050,6 +1100,8 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
     if requester_id is None:
         raise PricingError("unauthorized", "Nömrə almaq üçün hesab tələb olunur.")
     uid = str(requester_id)
+    if not service_is_visible(load_system_config(), service or "CUSTOM", is_admin(int(uid))):
+        raise PricingError("service_hidden", "Bu xidmət admin tərəfindən gizlədilib.")
     ensure_whatsapp_referral_access(requester_id, service)
     lock = _number_purchase_locks.setdefault(uid, asyncio.Lock())
     async with lock:
@@ -1167,6 +1219,8 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
         raise PricingError("invalid_range", "Bu diapazon üçün icazə yoxdur.")
     if is_user_banned(uid):
         raise PricingError("banned", "Hesabınız məhdudlaşdırılıb.")
+    if not service_is_visible(load_system_config(), service, is_admin(uid)):
+        raise PricingError("service_hidden", "Bu xidmət admin tərəfindən gizlədilib.")
     lock = _number_purchase_locks.setdefault(str(uid), asyncio.Lock())
     async with lock:
         ensure_whatsapp_referral_access(uid, service)
@@ -1222,6 +1276,8 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
             raise PricingError("choice_expired",
                                "Seçimin vaxtı bitib. Yenidən 5 nömrə istəyin.")
         rid = option["rid"]
+        if not service_is_visible(load_system_config(), option["service"], is_admin(uid)):
+            raise PricingError("service_hidden", "Bu xidmət admin tərəfindən gizlədilib.")
         ensure_whatsapp_referral_access(uid, option["service"])
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
@@ -2552,6 +2608,7 @@ async def show_all_countries(update, context, page=0, refresh=True):
     lang = get_user_language(uid)
     if refresh or "all_country_rows" not in context.user_data:
         services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, services)
         context.user_data["all_country_rows"] = build_all_country_rows(services)
     countries = context.user_data["all_country_rows"]
     page_size = 25
@@ -2610,9 +2667,8 @@ async def show_app_selection(update, context):
             reply_markup=main_keyboard(uid),
         )
         return
-    # Show every service currently returned by the upstream API.
-    # New services (for example Bolt) appear automatically without a code update.
-    filtered_services = dict(sorted(services.items()))
+    # Operator returns the available list; admins control visibility.
+    filtered_services = dict(sorted(_visible_services_for_user(uid, services).items()))
     if not filtered_services:
         await update.effective_message.reply_text(
             '⚠️ <b>Heç bir xidmət mövcud deyil</b>\n⏳ Bir azdan yenidən cəhd edin.',
@@ -7572,6 +7628,7 @@ def register_handlers(app):
     app.add_handler(CommandHandler("topup", topup_command))
     app.add_handler(CommandHandler("set_topup_card", set_topup_card_command))
     app.add_handler(CommandHandler("topup_pending", topup_pending_command))
+    app.add_handler(CommandHandler("services_admin", service_visibility_command))
     app.add_handler(CommandHandler("apis", api_sales_command))
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
@@ -7580,6 +7637,8 @@ def register_handlers(app):
     app.add_handler(CallbackQueryHandler(number_choice_callback, pattern=r"^num_choose_[A-Za-z0-9_-]{16}_[0-4]$"))
     app.add_handler(CallbackQueryHandler(
         topup_review_callback, pattern=r"^topup:(?:approve|reject):[0-9]+:[0-9a-f]{16}$"))
+    app.add_handler(CallbackQueryHandler(
+        service_visibility_callback, pattern=r"^admin_svc_toggle:[a-z0-9_.-]{1,40}$"))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
     app.add_handler(MessageHandler(filters.PHOTO, topup_receipt_photo))
@@ -7764,7 +7823,7 @@ async def miniapp_services_api(request):
     uid = int(tg_user["id"])
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    services = await fetch_services_cached()
+    services = _visible_services_for_user(uid, await fetch_services_cached())
     return _miniapp_cors(web.json_response({
         "services": services,
         "az_available": any(
@@ -7787,7 +7846,7 @@ async def miniapp_countries_api(request):
     uid = int(tg_user["id"])
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    services = await fetch_services_cached()
+    services = _visible_services_for_user(uid, await fetch_services_cached())
     countries = build_all_country_rows(services)
     iso = str(request.query.get("iso", "")).upper().strip()
     if iso:
