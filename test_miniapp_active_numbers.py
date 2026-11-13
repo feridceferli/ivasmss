@@ -77,14 +77,12 @@ class MiniAppActiveNumbersTests(unittest.TestCase):
         self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16, "remaining": 0}
         self.assertNotIn("number", self.safe_order(125, self.order))
 
-    def test_cancel_requires_correct_owner_and_current_lease(self):
+    def test_customer_cannot_cancel_during_three_minute_window(self):
         self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16}
         self.assertFalse(self.cancel_number(333, "a" * 16))
         self.assertFalse(self.cancel_number(125, "b" * 16))
-        self.assertIn("994502110012", self.active)
-        self.assertTrue(self.cancel_number(125, "a" * 16))
-        self.assertNotIn("994502110012", self.active)
         self.assertFalse(self.cancel_number(125, "a" * 16))
+        self.assertIn("994502110012", self.active)
 
     def test_cancel_rejects_expired_allocation(self):
         self.active["994502110012"] = {"uid": 125, "lease_id": "a" * 16, "remaining": 0}
