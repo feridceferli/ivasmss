@@ -31,6 +31,9 @@ on:
       - .github/workflows/persistent-rentals-tests.yml
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   rental-tests:
     runs-on: ubuntu-latest
