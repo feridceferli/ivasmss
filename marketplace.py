@@ -52,7 +52,7 @@ class MarketCatalog:
         """Admin explicitly publishes currently advertised provider ranges."""
         approved = {
             str(service).lower(): sorted({_rid(r) for r in ranges
-                if re.fullmatch(r"\\d{1,10}", _rid(r))})
+                if re.fullmatch(r"\d{1,10}", _rid(r))})
             for service, ranges in upstream.items() if isinstance(ranges, list)
         }
         approved = {key: ranges for key, ranges in approved.items() if ranges}
