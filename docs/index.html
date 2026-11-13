@@ -325,20 +325,6 @@
                     <button class="action-small" onclick="switchTab('guide')">📖 Necə istifadə etməli?</button>
                 </div>
             </div>
-            <div class="card" id="manual-buy-panel">
-                <div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
-                    <h3 style="margin:0">🛒 Manual Buy — Nömrə al</h3>
-                    <button type="button" class="action-small" onclick="switchTab('topup')">💳 Balans artır</button>
-                </div>
-                <p class="notice-mini">5SIM tipli manual seçim: xidməti seçin, ölkə və range-i müəyyən edin, qiyməti təsdiqləyib nömrə alın.</p>
-                <div class="dashboard-stats" aria-label="Manual alış mərhələləri">
-                    <div class="dashboard-stat"><strong>1</strong><span>Xidmət seçimi</span></div>
-                    <div class="dashboard-stat"><strong>2</strong><span>Ölkə / operator</span></div>
-                    <div class="dashboard-stat"><strong>3</strong><span>Qiymət və alış</span></div>
-                </div>
-                <div id="manual-publish-controls" hidden><button type="button" class="action-small" onclick="publishAllServices()">🔓 Admin: Bütün mövcud xidmətləri istifadəçilərə aç</button><p id="manual-publish-status" class="notice-mini" role="status"></p></div>
-                <p id="manual-buy-selection" class="notice-mini" role="status" aria-live="polite">1-ci addım: Aşağıdan xidmət seçin.</p>
-            </div>
             <div class="card">
                 <h4 style="margin: 0 0 10px 0;">🌍 Mövcud Xidmətlər və Ölkələr</h4>
                 <p class="notice-mini">Xidməti seçin → ölkə kodunu və range-i seçin → həmin range-dən nömrə almağa cəhd edin. Nömrə mövcudluğu API-dən asılıdır.</p>
@@ -946,7 +932,7 @@
         <span>© 2026 · Web Dashboard</span>
     </div>
     <script src="web-login.js?v=20261113-manual-buy-topup"></script>
-    <script src="app.js?v=20261113-publish-catalog"></script>
+    <script src="app.js?v=20261113-restore-legacy"></script>
     <script src="website-desktop.js?v=20261028-site-v1"></script>
     <script src="az-provider-diagnostics.js?v=20261023-operator-status"></script>
     <script src="world-provider-diagnostics.js?v=20261023-world-owner"></script>
