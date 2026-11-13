@@ -1993,6 +1993,10 @@ async def topup_receipt_photo(update, context):
     if not update.effective_chat or update.effective_chat.type != "private":
         return
     cents = context.user_data.get("topup_amount_cents")
+    if cents and not user_backup.ready:
+        await update.effective_message.reply_text(
+            "⚠️ Balans arxivi hələ hazır deyil. Çek qəbul edilmir; adminlə əlaqə saxlayın.")
+        return
     if type(cents) is not int or not update.message or not update.message.photo:
         return
     uid = update.effective_user.id
@@ -2051,6 +2055,9 @@ async def topup_pending_command(update, context):
 async def topup_review_callback(update, context):
     query = update.callback_query
     await query.answer()
+    if not user_backup.ready:
+        await query.message.reply_text("⚠️ Şəxsi balans arxivi hazır deyil; təsdiqləmə dayandırılıb.")
+        return
     if not is_admin(query.from_user.id):
         await query.message.reply_text("🔒 Təsdiqləməyə icazəniz yoxdur.")
         return
@@ -6018,9 +6025,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except (ValueError, IndexError):
             await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
             return
-        services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, await fetch_services_cached())
         if service not in services:
-            await query.answer('Bu xidmət hazırda mövcud deyil.', show_alert=True)
+            await query.answer('Bu xidmət hazırda mövcud deyil və ya admin tərəfindən gizlədilib.', show_alert=True)
             return
         ranges = services[service]
         if not ranges:
@@ -6075,7 +6082,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # BACK TO SERVICES
     if data == "back_services":
-        services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, await fetch_services_cached())
         if not services:
             await query.message.edit_text('❌ Heç bir xidmət mövcud deyil.')
             return
@@ -6146,7 +6153,7 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     if data == "back_to_services":
-        services = await fetch_services_cached()
+        services = _visible_services_for_user(uid, await fetch_services_cached())
         if not services:
             await query.edit_message_text('❌ Heç bir xidmət mövcud deyil.')
             return
