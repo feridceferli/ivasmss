@@ -309,13 +309,18 @@ def assign_active_number(uid, number, range_display, charge_cents=0):
     if normalized in active_numbers and active_number_remaining(active_numbers[normalized]) > 0:
         raise PricingError("already_active", "Bu nömrə artıq aktivdir.")
     lease_id = secrets.token_hex(8)
-    # The journal must be persisted before the assignment is visible.
+    # The journal is written before the lease becomes visible.
     rental_ledger.record(lease_id, uid, normalized, charge_cents)
     active_numbers[normalized] = {
         "uid": int(uid), "range": str(range_display),
         "timestamp": datetime.now(), "lease_id": lease_id,
     }
-    _persist_active_leases()
+    try:
+        _persist_active_leases()
+    except Exception:
+        active_numbers.pop(normalized, None)
+        rental_ledger.abort(lease_id)
+        raise
     return lease_id
 
 
