@@ -159,6 +159,7 @@ function switchTab(tab) {
     } else if (tab === "topup") {
         loadTopupDetails();
     } else if (tab === "admin") {
+        loadTopupDetails();
         fetchAdminUsers();
         loadAdminTools();
         fetchPrices();
