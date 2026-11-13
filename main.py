@@ -188,7 +188,7 @@ WELCOME_MESSAGE = """🇦🇿💎 AZE SMS PANEL 💎🇦🇿
 🇦🇿 Aze Sms Panel ilə yararlanın!"""
 
 # ==================== OTP RATE CONFIGURATION ====================
-DEFAULT_OTP_RATE = 0.20
+DEFAULT_OTP_RATE = 0.0
 
 # ==================== WITHDRAW CONFIGURATION ====================
 DEFAULT_MIN_WITHDRAW = 50
@@ -584,8 +584,9 @@ def load_system_config():
     try:
         with open(SYSTEM_CONFIG_FILE, "r") as f:
             config = json.load(f)
-            if "otp_rate" not in config:
-                config["otp_rate"] = DEFAULT_OTP_RATE
+            # Historical OTP bonuses are disabled for every user.
+            if config.get("otp_rate") != 0.0:
+                config["otp_rate"] = 0.0
                 save_system_config(config)
             return config
     except:
@@ -655,14 +656,14 @@ def update_min_withdraw(new_min):
 
 
 def update_otp_rate(new_rate):
+    # No SMS/OTP balance rewards under the three-minute rental policy.
     config = load_system_config()
-    config["otp_rate"] = new_rate
+    config["otp_rate"] = 0.0
     save_system_config(config)
 
 
 def get_otp_rate():
-    config = load_system_config()
-    return config.get("otp_rate", DEFAULT_OTP_RATE)
+    return 0.0
 
 
 def toggle_payment_method(method_name):
@@ -699,16 +700,8 @@ def save_user_otp_rates(data):
 
 
 def get_user_otp_rate(user_id):
-    rates = load_user_otp_rates()
-    uid_str = str(user_id)
-    if uid_str in rates:
-        try:
-            rate = float(rates[uid_str])
-            if rate > 0:
-                return rate
-        except:
-            pass
-    return get_otp_rate()
+    # Even an old saved per-user rate cannot reactivate paid OTP bonuses.
+    return 0.0
 
 
 def set_user_otp_rate(user_id, rate):
@@ -3810,12 +3803,10 @@ async def admin_change_min_withdraw_amount(update, context):
 
 
 async def admin_change_otp_rate_start(update, context):
-    context.user_data["admin_otp_rate_mode"] = True
-    current_rate = get_otp_rate()
+    context.user_data["admin_otp_rate_mode"] = False
     await update.effective_message.reply_text(
-        f"💲 Cari OTP tarifi: `{current_rate:.2f} AZN`\n\nYeni tarifi göndərin (yalnız rəqəm, məsələn: `0.25`):\n\n<blockquote>Diqqət: bu tarif bütün yeni OTP-lərə tətbiq ediləcək.</blockquote>",
-        parse_mode="HTML",
-        reply_markup=cancel_keyboard(),
+        "✅ SMS/OTP balans bonusu ləğv edilib. Yeni tarif təyin etmək mümkün deyil.",
+        reply_markup=system_config_keyboard(),
     )
 
 
