@@ -438,11 +438,27 @@ function addRangeButton(container, label, options) {
     return button;
 }
 
+async function publishAllServices() {
+    if (!state.isAdmin) return;
+    if (!window.confirm("Provayderdə hazırda görünən bütün xidmət və range-lər istifadəçilərə açılsın?")) return;
+    const status = document.getElementById("manual-publish-status");
+    if (status) status.textContent = "Xidmətlər aktivləşdirilir...";
+    try {
+        const result = await api("/api/admin/publish-services", {method: "POST"});
+        if (status) status.textContent = result.services + " xidmət, " + result.ranges + " range aktiv edildi.";
+        await fetchServices();
+    } catch (error) {
+        if (status) status.textContent = "Xəta: " + error.message;
+    }
+}
+
 async function fetchServices() {
     const container = document.getElementById("services-grid-container");
     try {
         const data = await api("/api/services");
         state.services = data.services || {};
+        const publishControls = document.getElementById("manual-publish-controls");
+        if (publishControls) publishControls.hidden = !state.isAdmin;
         state.azCatalog = data.az_catalog || [];
         state.azApproved = !!data.az_approved;
         renderWhatsappReferrals(data.whatsapp_referrals);
