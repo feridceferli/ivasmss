@@ -7166,7 +7166,7 @@ async def miniapp_publish_services_api(request):
         return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
     if request.method != "POST":
         return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
-    if not user_backup.is_ready():
+    if not user_backup.ready:
         return _miniapp_cors(web.json_response({"error": "backup_unavailable",
             "message": "Yaddaş ehtiyat nüsxəsi hazır deyil."}, status=503))
     upstream = await fetch_services_cached()
