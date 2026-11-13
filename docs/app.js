@@ -161,6 +161,8 @@ function switchTab(tab) {
         fetchProfile();
     } else if (tab === "admin") {
         fetchAdminUsers();
+        fetchAdminServices();
+        fetchAdminTopups();
         loadAdminTools();
         fetchPrices();
         fetchApiSales();
@@ -443,6 +445,7 @@ async function fetchServices() {
     try {
         const data = await api("/api/services");
         state.services = data.services || {};
+        state.providerAvailable = !!data.provider_available;
         state.azCatalog = data.az_catalog || [];
         state.azApproved = !!data.az_approved;
         renderWhatsappReferrals(data.whatsapp_referrals);
@@ -462,7 +465,9 @@ function renderServices() {
         service.toLocaleLowerCase().includes(query)
     );
     if (!services.length) {
-        clearAndText(container, "API hazırda heç bir xidmət göstərmir.");
+        clearAndText(container, state.providerAvailable
+            ? "Admin hazırda heç bir xidməti istifadəyə açmayıb."
+            : "SMS provayderi aktiv xidmət siyahısı qaytarmadı. Daha sonra yenidən yoxlayın.");
         return;
     }
     services.forEach(service => {
@@ -991,12 +996,16 @@ async function fetchOrders() {
             } else {
                 card.appendChild(node("p", "Tam nömrə bu sifarişdə mövcud deyil.", "notice-mini"));
             }
-            if (order.id && remaining > 0) {
+            if (order.id && remaining > 0 && /^T[0-9]+$/.test(String(order.id))) {
                 const cancel = node("button", "❌ Ləğv et", "action-small");
                 cancel.type = "button";
                 cancel.setAttribute("aria-label", display + " sifarişini ləğv et");
                 cancel.addEventListener("click", () => cancelNumberOrder(order.id, cancel));
                 card.appendChild(cancel);
+            } else if (order.id && remaining > 0) {
+                card.appendChild(node("p",
+                    "🔒 Nömrə 3 dəqiqə ərzində ləğv edilmir. SMS gəlməsə ödəniş geri qaytarılacaq.",
+                    "notice-mini"));
             }
             container.appendChild(card);
         });
@@ -1105,6 +1114,62 @@ async function fetchIncomingSms() {
 }
 
 
+async function fetchTopup() {
+    const card = document.getElementById("topup-card-details");
+    const status = document.getElementById("topup-state");
+    const submit = document.getElementById("topup-submit");
+    if (!card || !status || !submit) return;
+    try {
+        const data = await api("/api/topup");
+        card.textContent = data.card || "Admin hələ köçürmə kartını əlavə etməyib.";
+        status.textContent = "💰 Balans: " + (data.balance || "0.00") + " AZN" +
+            " · Gözləyən çek: " + (data.pending_count || 0) +
+            (data.backup_ready ? "" : " · ⚠️ Şəxsi arxiv hazır deyil");
+        submit.disabled = !data.enabled || !data.backup_ready ||
+            Number(data.pending_count || 0) >= 3;
+    } catch (err) {
+        card.textContent = "Ödəniş məlumatlarını yükləmək alınmadı.";
+        status.textContent = "⚠️ " + err.message;
+        submit.disabled = true;
+    }
+}
+
+async function submitTopup() {
+    const amount = String(document.getElementById("topup-amount")?.value || "").trim();
+    const file = document.getElementById("topup-receipt")?.files?.[0];
+    const button = document.getElementById("topup-submit");
+    const status = document.getElementById("topup-result");
+    if (!/^(?:[1-9][0-9]{0,4})(?:\.[0-9]{1,2})?$/.test(amount) ||
+            Number(amount) > 10000) {
+        status.textContent = "⚠️ Məbləğ 1.00–10000.00 AZN olmalıdır.";
+        return;
+    }
+    if (!file || !["image/jpeg", "image/png"].includes(file.type) ||
+            file.size < 32 || file.size > 650000) {
+        status.textContent = "⚠️ 650 KB-dan kiçik JPG/PNG çek şəkli seçin.";
+        return;
+    }
+    if (!window.confirm(amount + " AZN üçün çek adminə göndərilsin? Bu avtomatik balans artırmır.")) return;
+    button.disabled = true;
+    status.textContent = "⏳ Çek göndərilir...";
+    try {
+        const receipt = await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = () => reject(new Error("Şəkil oxunmadı."));
+            reader.readAsDataURL(file);
+        });
+        const data = await api("/api/topup", {method: "POST", body: {amount, receipt}});
+        status.textContent = "✅ " + (data.message || "Çek yoxlamaya göndərildi.") +
+            " Sorğu: " + (data.request_id || "");
+        document.getElementById("topup-receipt").value = "";
+        await Promise.all([fetchTopup(), fetchDashboard()]);
+    } catch (err) {
+        status.textContent = "❌ " + err.message;
+        button.disabled = false;
+    }
+}
+
 async function fetchProfile() {
     const display = document.getElementById("profile-name");
     try {
@@ -1124,6 +1189,7 @@ async function fetchProfile() {
             " · Ümumi: " + (stats.total_numbers || 0) + " nömrə" +
             (data.az_approved ? " · 🇦🇿 +994 təsdiqlənib" : " · 🇦🇿 +994 icazəsi yoxdur");
         document.getElementById("profile-language").value = data.language || "az";
+        void fetchTopup();
         const support = document.getElementById("support-link");
         if (typeof data.support_url === "string" &&
             /^https:\/\/t\.me\/[A-Za-z0-9_+/-]+$/.test(data.support_url)) {
@@ -1320,6 +1386,107 @@ function filterAdminUsers() {
         row.appendChild(actions);
         container.appendChild(row);
     });
+}
+
+async function fetchAdminServices() {
+    if (!state.isAdmin) return;
+    const status = document.getElementById("admin-services-status");
+    const list = document.getElementById("admin-services-list");
+    if (!list || !status) return;
+    try {
+        const data = await api("/api/admin-services");
+        list.replaceChildren();
+        status.textContent = data.provider_available
+            ? "📡 " + data.services.length + " xidmət · " +
+              (data.backup_ready ? "Arxiv aktiv" : "⚠️ Arxiv hazır deyil")
+            : "⚠️ Provayder aktiv xidmət siyahısı qaytarmadı. Arxivdəki köhnə nömrələr satış üçün göstərilmir.";
+        for (const entry of data.services || []) {
+            const row = node("div", null, "admin-user-line");
+            row.appendChild(node("span", entry.id.toUpperCase() +
+                " · " + entry.range_count + " range"));
+            const toggle = node("button", entry.visible ? "✅ Aktiv" : "❌ Gizli", "action-small");
+            toggle.type = "button";
+            toggle.addEventListener("click", async () => {
+                toggle.disabled = true;
+                try {
+                    await api("/api/admin-services", {
+                        method: "POST", body: {service: entry.id, visible: !entry.visible}
+                    });
+                    await Promise.all([fetchAdminServices(), fetchServices()]);
+                } catch (err) {
+                    status.textContent = "❌ " + err.message;
+                    toggle.disabled = false;
+                }
+            });
+            row.appendChild(toggle);
+            list.appendChild(row);
+        }
+    } catch (err) {
+        status.textContent = "⚠️ Xidmətləri yükləmək mümkün olmadı: " + err.message;
+    }
+}
+
+async function fetchAdminTopups() {
+    if (!state.isAdmin) return;
+    const status = document.getElementById("admin-topups-status");
+    const list = document.getElementById("admin-topups-list");
+    if (!list || !status) return;
+    try {
+        const data = await api("/api/admin-topups");
+        document.getElementById("admin-topup-card").value = String(data.card || "");
+        list.replaceChildren();
+        const pending = Array.isArray(data.pending) ? data.pending : [];
+        status.textContent = "⏳ Gözləyən çek: " + pending.length +
+            (data.backup_ready ? "" : " · ⚠️ Arxiv hazır deyil, təsdiqləmə dayandırılıb");
+        if (!pending.length) {
+            list.appendChild(node("p", "Gözləyən çek yoxdur.", "notice-mini"));
+        }
+        for (const item of pending) {
+            const row = node("div", null, "admin-user-line");
+            row.appendChild(node("span", "İstifadəçi " + item.user_id +
+                " · " + item.amount + " AZN · Çek Telegram admin çatındadır"));
+            for (const [action, label] of [["approve", "✅ Təsdiqlə"], ["reject", "❌ Rədd et"]]) {
+                const btn = node("button", label, "action-small");
+                btn.type = "button";
+                btn.disabled = !data.backup_ready;
+                btn.addEventListener("click", async () => {
+                    if (!window.confirm(item.user_id + " istifadəçisinin " + item.amount +
+                          " AZN sorğusu " + (action === "approve" ? "təsdiqlənsin?" : "rədd edilsin?"))) return;
+                    btn.disabled = true;
+                    try {
+                        await api("/api/admin-topups", {method: "POST", body: {
+                            action, user_id: item.user_id, request_id: item.request_id
+                        }});
+                        await Promise.all([fetchAdminTopups(), fetchDashboard()]);
+                    } catch (err) {
+                        status.textContent = "❌ " + err.message;
+                        btn.disabled = false;
+                    }
+                });
+                row.appendChild(btn);
+            }
+            list.appendChild(row);
+        }
+    } catch (err) {
+        status.textContent = "⚠️ Çeklər yüklənmədi: " + err.message;
+    }
+}
+
+async function saveAdminTopupCard() {
+    if (!state.isAdmin) return;
+    const status = document.getElementById("admin-topups-status");
+    const card = String(document.getElementById("admin-topup-card")?.value || "").trim();
+    if (card.length > 180 || /\b(?:cvv|cvc|pin)\b/i.test(card)) {
+        status.textContent = "❌ Yalnız kart/IBAN və alıcı adı daxil edin; CVV/PIN olmaz.";
+        return;
+    }
+    try {
+        await api("/api/admin-topups", {method: "POST", body: {action: "card", card}});
+        status.textContent = "✅ Kart məlumatı yadda saxlanıldı.";
+        await fetchAdminTopups();
+    } catch (err) {
+        status.textContent = "❌ " + err.message;
+    }
 }
 
 async function fetchAdminUsers() {
