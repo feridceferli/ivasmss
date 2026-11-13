@@ -36,6 +36,10 @@ from rental_ledger import (RentalError, reserve as reserve_rental,
                            refund as refund_rental,
                            refund_expired as refund_expired_rentals)
 from api_sales import ApiSalesStore, ApiSalesError
+from topup_ledger import (TopupError, create_request as topup_create_request,
+                          resolve_request as topup_resolve_request,
+                          pending_requests as topup_pending_requests)
+from decimal import Decimal, InvalidOperation
 from api_sales_promotions import (
     build_group_digest, promotion_due, safe_promotion_state,
 )
@@ -1859,6 +1863,157 @@ def get_user(uid):
         }
         save_data(data)
     return data[uid]
+
+
+async def set_topup_card_command(update, context):
+    """Admin-only persisted recipient/card instructions; no CVV or expiry data."""
+    uid = update.effective_user.id
+    if not is_admin(uid) or update.effective_chat.type != "private":
+        await update.effective_message.reply_text("🔒 Bu əmr yalnız admin üçündür.")
+        return
+    details = " ".join(context.args or []).strip()
+    if not details:
+        await update.effective_message.reply_text(
+            "Kart məlumatını belə əlavə et:\n"
+            "/set_topup_card 4169 XXXX XXXX XXXX | Alıcı adı\n"
+            "Yalnız köçürmə üçün lazımlı məlumatı yaz; CVV, PIN və bitmə tarixi daxil etmə.")
+        return
+    if details.upper() == "OFF":
+        details = ""
+    if len(details) > 180:
+        await update.effective_message.reply_text("❌ Məlumat 180 simvoldan qısa olmalıdır.")
+        return
+    cfg = load_system_config()
+    cfg["topup_card"] = details
+    save_system_config(cfg)
+    await update.effective_message.reply_text(
+        "✅ Balans artırma kartı yadda saxlanıldı." if details
+        else "✅ Kart köçürməsi deaktiv edildi.")
+
+
+async def topup_command(update, context):
+    if update.effective_chat.type != "private":
+        return
+    uid = update.effective_user.id
+    if is_user_banned(uid):
+        await update.effective_message.reply_text("🚫 Girişiniz məhdudlaşdırılıb.")
+        return
+    card = str(load_system_config().get("topup_card") or "").strip()
+    if not card:
+        await update.effective_message.reply_text(
+            "💳 Kartla balans artırma hazırda bağlıdır. Adminlə əlaqə: " + SUPPORT_LINK)
+        return
+    if not context.args:
+        await update.effective_message.reply_text(
+            "💳 Balansı artırmaq üçün məbləği yazın, məsələn: /topup 5")
+        return
+    try:
+        amount = Decimal(str(context.args[0]).replace(",", "."))
+        cents_decimal = amount * 100
+        if (not amount.is_finite() or cents_decimal != cents_decimal.to_integral_value()):
+            raise ValueError()
+        cents = int(cents_decimal)
+        if not 100 <= cents <= 1000000:
+            raise ValueError()
+    except (ValueError, TypeError, InvalidOperation):
+        await update.effective_message.reply_text(
+            "❌ Məbləğ 1.00–10000.00 AZN arasında olmalıdır.")
+        return
+    get_user(uid)
+    context.user_data["topup_amount_cents"] = cents
+    await update.effective_message.reply_text(
+        f"💳 <b>BALANS ARTIRMA</b>\n\n"
+        f"Məbləğ: <b>{cents / 100:.2f} AZN</b>\n"
+        f"Köçürmə məlumatı: <code>{html.escape(card)}</code>\n\n"
+        "Köçürməni etdikdən sonra ödəniş çekinin şəklini bu çata göndərin. "
+        "Çek admin tərəfindən təsdiqlənəndə balansınıza əlavə ediləcək.\n"
+        f"📩 Admin: {html.escape(SUPPORT_LINK)}",
+        parse_mode="HTML")
+
+
+async def topup_receipt_photo(update, context):
+    if not update.effective_chat or update.effective_chat.type != "private":
+        return
+    cents = context.user_data.get("topup_amount_cents")
+    if type(cents) is not int or not update.message or not update.message.photo:
+        return
+    uid = update.effective_user.id
+    if is_user_banned(uid):
+        return
+    photo_id = update.message.photo[-1].file_id
+    request_id = secrets.token_hex(8)
+    users = load_data(USER_DATA_FILE)
+    try:
+        topup_create_request(users, uid, request_id, cents, photo_id)
+    except TopupError as exc:
+        await update.message.reply_text("❌ " + str(exc))
+        return
+    save_data(users, USER_DATA_FILE)
+    context.user_data.pop("topup_amount_cents", None)
+    await update.message.reply_text(
+        f"✅ Çek göndərildi. Sorğu: <code>{request_id}</code>. "
+        "Balans yalnız admin təsdiqlədikdən sonra artırılacaq.",
+        parse_mode="HTML")
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Təsdiqlə", callback_data=f"topup:approve:{uid}:{request_id}"),
+        InlineKeyboardButton("❌ Rədd et", callback_data=f"topup:reject:{uid}:{request_id}"),
+    ]])
+    for admin_id in ADMINS:
+        try:
+            await context.bot.send_photo(
+                chat_id=admin_id, photo=photo_id,
+                caption=f"💳 Yeni balans sorğusu\nİstifadəçi: {uid}\n"
+                        f"Məbləğ: {cents / 100:.2f} AZN\nSorğu: {request_id}",
+                reply_markup=kb)
+        except TelegramError:
+            pass
+
+
+async def topup_pending_command(update, context):
+    if not is_admin(update.effective_user.id) or update.effective_chat.type != "private":
+        return
+    pending = topup_pending_requests(load_data(USER_DATA_FILE), limit=10)
+    if not pending:
+        await update.message.reply_text("✅ Gözləyən çek yoxdur.")
+        return
+    for uid, request_id, row in pending:
+        kb = InlineKeyboardMarkup([[
+            InlineKeyboardButton("✅ Təsdiqlə", callback_data=f"topup:approve:{uid}:{request_id}"),
+            InlineKeyboardButton("❌ Rədd et", callback_data=f"topup:reject:{uid}:{request_id}"),
+        ]])
+        try:
+            await context.bot.send_photo(
+                chat_id=update.effective_chat.id, photo=row["file_id"],
+                caption=f"İstifadəçi: {uid}\nMəbləğ: {int(row['amount_cents']) / 100:.2f} AZN\nSorğu: {request_id}",
+                reply_markup=kb)
+        except TelegramError:
+            await update.message.reply_text(f"Çeki açmaq alınmadı: {request_id}")
+
+
+async def topup_review_callback(update, context):
+    query = update.callback_query
+    await query.answer()
+    if not is_admin(query.from_user.id):
+        await query.message.reply_text("🔒 Təsdiqləməyə icazəniz yoxdur.")
+        return
+    _, decision, target, request_id = query.data.split(":")
+    users = load_data(USER_DATA_FILE)
+    try:
+        row = topup_resolve_request(
+            users, target, request_id, decision == "approve", query.from_user.id)
+    except TopupError as exc:
+        await query.message.reply_text("⚠️ " + str(exc))
+        return
+    save_data(users, USER_DATA_FILE)
+    status = "✅ Təsdiqləndi" if decision == "approve" else "❌ Rədd edildi"
+    await query.message.reply_text(
+        f"{status} · İstifadəçi: {target} · Məbləğ: {row['amount_cents'] / 100:.2f} AZN")
+    try:
+        await context.bot.send_message(
+            chat_id=int(target),
+            text=f"{status}: {row['amount_cents'] / 100:.2f} AZN balans sorğunuz.")
+    except TelegramError:
+        pass
 
 
 async def update_db_balance(uid, amount):
@@ -5141,7 +5296,8 @@ async def balance_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     balance = get_user(uid)["balance"]
     await update.effective_message.reply_text(
-        f"💰 BALANCE: `{format_balance(balance)} AZN`",
+        f"💰 BALANCE: `{format_balance(balance)} AZN`\n\n"
+        "💳 Balans artırmaq: /topup 5",
         parse_mode="Markdown",
         reply_markup=main_keyboard(uid),
     )
@@ -7413,14 +7569,20 @@ def register_handlers(app):
     app.add_handler(CommandHandler("get1number", get1number_command))
     app.add_handler(CommandHandler("searchotp", searchotp_command))
     app.add_handler(CommandHandler("balance", balance_command))
+    app.add_handler(CommandHandler("topup", topup_command))
+    app.add_handler(CommandHandler("set_topup_card", set_topup_card_command))
+    app.add_handler(CommandHandler("topup_pending", topup_pending_command))
     app.add_handler(CommandHandler("apis", api_sales_command))
     app.add_handler(CommandHandler("profile", profile_command))
     app.add_handler(CommandHandler("leaderboard", leaderboard_command_slash))
     app.add_handler(CallbackQueryHandler(website_login_callback, pattern=r"^website:[A-Za-z0-9_-]{32}$"))
     app.add_handler(CallbackQueryHandler(otp_leaderboard_callback, pattern=r"^otp_leaders_(?:today|all:[0-9]+)$"))
     app.add_handler(CallbackQueryHandler(number_choice_callback, pattern=r"^num_choose_[A-Za-z0-9_-]{16}_[0-4]$"))
+    app.add_handler(CallbackQueryHandler(
+        topup_review_callback, pattern=r"^topup:(?:approve|reject):[0-9]+:[0-9a-f]{16}$"))
     app.add_handler(CallbackQueryHandler(button_callback))
     app.add_handler(MessageHandler(filters.StatusUpdate.WEB_APP_DATA, webapp_data_handler))
+    app.add_handler(MessageHandler(filters.PHOTO, topup_receipt_photo))
     app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
 
 
