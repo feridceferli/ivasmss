@@ -462,7 +462,7 @@ function renderServices() {
         service.toLocaleLowerCase().includes(query)
     );
     if (!services.length) {
-        clearAndText(container, "API hazırda heç bir xidmət göstərmir.");
+        clearAndText(container, "Admin tərəfindən aktiv edilmiş xidmət yoxdur. Sonra yenidən yoxlayın.");
         return;
     }
     services.forEach(service => {
@@ -523,6 +523,8 @@ async function showServiceRanges(service) {
     const parent = document.getElementById("service-detail");
     if (!parent) return;
     parent.hidden = false;
+    const manualStatus = document.getElementById("manual-buy-selection");
+    if (manualStatus) manualStatus.textContent = "2-ci addım: " + service.toUpperCase() + " seçildi. Ölkə və range seçin.";
     if (!state.countries.length) await fetchCountries();
     parent.replaceChildren();
     parent.appendChild(node("h4", "📡 " + service.toUpperCase() + " — ölkə və range seçimi"));
@@ -733,6 +735,8 @@ async function selectService(service, country = null, range = null, countryIso =
         switchTab("azerbaijan");
         return;
     }
+    const manualStatus = document.getElementById("manual-buy-selection");
+    if (manualStatus) manualStatus.textContent = "3-cü addım: " + service.toUpperCase() + " / +" + range + " · " + quote.price + " — alışı təsdiqləyin.";
     if (!quote.free && !window.confirm(
         "Bir nömrənin qiyməti " + (quote.cents / 100).toFixed(2) +
         " AZN-dir. 5 variant göstəriləcək, yalnız seçdiyiniz 1 nömrə üçün " +
