@@ -48,6 +48,9 @@ from urllib.parse import parse_qsl
 from pathlib import Path
 from web_login import WebsiteLogin
 from number_choices import number_choices
+from marketplace import MarketCatalog, RentalLedger
+from manual_topups import ManualTopups
+from market_bot_ui import MarketBotUI
 from whatsapp_referrals import (
     SETTINGS_FILE as WA_REFERRAL_SETTINGS_FILE,
     load_settings as load_wa_referral_settings,
@@ -126,6 +129,9 @@ API_SALES_FILE = data_path("api_sales_private.json")
 BOT_PROMO_FILE = data_path("bot_user_promos.json")
 ADMIN_PROVIDER_NUMBERS_FILE = data_path("admin_provider_numbers.json")
 admin_provider_numbers = AdminNumberStock(ADMIN_PROVIDER_NUMBERS_FILE)
+MARKET_CATALOG_FILE = data_path("market_catalog.json")
+RENTAL_LEDGER_FILE = data_path("rental_ledger.json")
+MANUAL_TOPUPS_FILE = data_path("manual_topups.json")
 SMS_TEST_DIAGNOSTICS_FILE = data_path("sms_test_diagnostics_private.json")
 sms_diagnostic_store = SmsDiagnosticStore(SMS_TEST_DIAGNOSTICS_FILE)
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
@@ -150,8 +156,15 @@ user_backup = UserProfileBackup(
         "bot_user_promos": BOT_PROMO_FILE,
         "admin_provider_numbers": ADMIN_PROVIDER_NUMBERS_FILE,
         "sms_test_diagnostics": SMS_TEST_DIAGNOSTICS_FILE,
+        "market_catalog": MARKET_CATALOG_FILE,
+        "rental_ledger": RENTAL_LEDGER_FILE,
+        "manual_topups": MANUAL_TOPUPS_FILE,
     },
 )
+
+market_catalog = MarketCatalog(MARKET_CATALOG_FILE, user_backup.changed)
+rental_ledger = RentalLedger(RENTAL_LEDGER_FILE, user_backup.changed)
+manual_topups = ManualTopups(MANUAL_TOPUPS_FILE, user_backup.changed)
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397, 1667507073, 8431489105, 8727114055, 2130079556]
@@ -289,9 +302,16 @@ def _restore_active_leases():
     return restored
 
 
-def assign_active_number(uid, number, range_display):
+def assign_active_number(uid, number, range_display, charge_cents=0):
+    if _active_count(uid) >= 3:
+        raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
+    normalized = normalize_number(number)
+    if normalized in active_numbers and active_number_remaining(active_numbers[normalized]) > 0:
+        raise PricingError("already_active", "Bu nömrə artıq aktivdir.")
     lease_id = secrets.token_hex(8)
-    active_numbers[normalize_number(number)] = {
+    # The journal must be persisted before the assignment is visible.
+    rental_ledger.record(lease_id, uid, normalized, charge_cents)
+    active_numbers[normalized] = {
         "uid": int(uid), "range": str(range_display),
         "timestamp": datetime.now(), "lease_id": lease_id,
     }
@@ -300,7 +320,12 @@ def assign_active_number(uid, number, range_display):
 
 
 def cancel_active_number(uid, lease_id):
-    """Only the assigned user can cancel this particular unexpired order."""
+    """Paid leases cannot be cancelled during their 180-second lifetime."""
+    return False
+
+
+def _legacy_cancel_active_number(uid, lease_id):
+    """Retained only for backwards code reference; never invoked by an endpoint."""
     if not isinstance(lease_id, str) or not re.fullmatch(r"[0-9a-f]{16}", lease_id):
         return False
     for number, info in list(active_numbers.items()):
@@ -965,6 +990,16 @@ async def country_availability_loop(app):
         await asyncio.sleep(30)
 
 # User-scoped locks serialize purchases; do not let parallel requests double-spend.
+def _active_count(uid):
+    return sum(1 for entry in active_numbers.values()
+               if str(entry.get("uid")) == str(uid) and active_number_remaining(entry) > 0)
+
+
+def _require_market_permission(uid, service, rid):
+    if not is_admin(int(uid)) and not market_catalog.allowed(str(service).lower(), str(rid)):
+        raise PricingError("service_unavailable", "Xidmət və diapazon admin tərəfindən aktiv edilməyib.")
+
+
 _number_purchase_locks = {}
 
 
@@ -985,6 +1020,9 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
     lock = _number_purchase_locks.setdefault(uid, asyncio.Lock())
     async with lock:
         ensure_whatsapp_referral_access(requester_id, service)
+        _require_market_permission(requester_id, service, digits)
+        if _active_count(requester_id) >= 3:
+            raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(digits, load_number_prices(), country_iso)
         # A paid purchase must never change price after the user's approval.
         # Check again while holding the user purchase lock, not just in the API.
@@ -1026,6 +1064,7 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
                 print("[number-api] Unexpected or restricted provider range")
                 return None, None
             await asyncio.to_thread(number_archive.record, number)
+            assign_active_number(requester_id, normalized, digits + "XXX", charge_cents=charge)
             allocated = True
             return number, data.get("country")
         except Exception as exc:
@@ -1120,6 +1159,9 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
     lock = _number_purchase_locks.setdefault(str(uid), asyncio.Lock())
     async with lock:
         ensure_whatsapp_referral_access(uid, service)
+        _require_market_permission(uid, service, rid)
+        if _active_count(uid) >= 3:
+            raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(rid, load_number_prices(), country_iso or None)
         if (not is_admin(uid) and expected_price_cents is not None
                 and (type(expected_price_cents) is not int
@@ -1173,6 +1215,9 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
                                "Seçimin vaxtı bitib. Yenidən 5 nömrə istəyin.")
         rid = option["rid"]
         ensure_whatsapp_referral_access(uid, option["service"])
+        _require_market_permission(uid, option["service"], rid)
+        if _active_count(uid) >= 3:
+            raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
         quote = quote_range(rid, load_number_prices(), option["iso"] or None)
@@ -1207,7 +1252,15 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
         add_number_taken(uid, 1)
         last_range[uid] = rid
         range_display = rid + "XXX"
-        lease_id = assign_active_number(uid, normalized, range_display)
+        try:
+            lease_id = assign_active_number(uid, normalized, range_display, charge_cents=charge)
+        except Exception:
+            if charge:
+                balances = load_data(USER_DATA_FILE)
+                balances[str(uid)]["balance"] = round(
+                    (round(float(balances[str(uid)]["balance"]) * 100) + charge) / 100, 2)
+                save_data(balances, USER_DATA_FILE)
+            raise
         save_number_range_info(uid, normalized, range_display)
         order = {
             "id": lease_id, "label": option["service"].upper(),
@@ -2516,11 +2569,11 @@ async def monitor_loop(app):
                         sent_otps.add(key)
                         details = active_numbers[num]
                         uid = details["uid"]
+                        rental_ledger.received(details.get("lease_id"))
                         service_name = detect_service(full_sms)
                         is_free_service = service_name in ("TELEGRAM", "WHATSAPP")
                         if not is_free_service:
-                            user_rate = get_user_otp_rate(uid)
-                            await update_db_balance(uid, user_rate)
+                            # SMS is a successful purchased rental, never a wallet reward.
                             add_otp_received(uid)
                             log_global_activity(
                                 uid,
@@ -2561,8 +2614,7 @@ async def monitor_loop(app):
                                 "xoş sözdər eşidəsən ay qa)"
                             )
                         else:
-                            user_rate = get_user_otp_rate(uid)
-                            balance_msg = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            balance_msg = "✅ SMS qəbul edildi. Balansa əlavə bonus verilmir."
                         # One cheerful, non-sensitive caption shared in both notifications.
                         congratulations = random.choice(OTP_SUCCESS_CHEERS)
                         user_msg = (
@@ -2650,6 +2702,12 @@ async def monitor_loop(app):
             monitor_diagnostics["state"] = "error"
             monitor_diagnostics["last_error"] = type(e).__name__
             print(f"Monitor Error: {type(e).__name__}")
+        try:
+            if user_backup.ready:
+                rental_ledger.settle_due(lambda: load_data(USER_DATA_FILE),
+                                         lambda rows: save_data(rows, USER_DATA_FILE))
+        except (OSError, ValueError, RuntimeError) as exc:
+            print("[rental-refunds] retrying after " + type(exc).__name__, flush=True)
         await asyncio.sleep(CHECK_INTERVAL)
 
 
@@ -3010,10 +3068,11 @@ async def perform_otp_search(update, context, target_num):
                         service_name = detect_service(full_sms)
                         is_free = service_name in ("TELEGRAM", "WHATSAPP")
                         if not is_free:
-                            user_rate = get_user_otp_rate(int(uid))
-                            await update_db_balance(uid, user_rate)
+                            assigned = active_numbers.get(target_num)
+                            if assigned and str(assigned.get("uid")) == uid:
+                                rental_ledger.received(assigned.get("lease_id"))
                             add_otp_received(uid)
-                            payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            payment_status = "✅ SMS qəbul edildi, əlavə bonus yoxdur."
                         else:
                             add_otp_received(uid)
                             payment_status = (
@@ -7343,6 +7402,9 @@ async def post_init(application):
         print(f"[user-backup] Initial restore unavailable: {type(exc).__name__}", flush=True)
     # Recover an ongoing three-minute allocation if the instance was replaced.
     restored_count = _restore_active_leases()
+    if user_backup.ready:
+        rental_ledger.settle_due(lambda: load_data(USER_DATA_FILE),
+                                 lambda rows: save_data(rows, USER_DATA_FILE))
     print(f"[startup] Restored {restored_count} unexpired active leases", flush=True)
     application.bot_data["user_backup_task"] = asyncio.create_task(user_backup.run())
     await asyncio.to_thread(number_archive.import_legacy, load_range_db())
@@ -7832,7 +7894,9 @@ async def miniapp_get_number_api(request):
     range_display = rid + "XXX"
     
     # Aktif numaralara ekliyoruz
-    lease_id = assign_active_number(uid, clean_num, range_display)
+    lease_id = active_numbers.get(clean_num, {}).get("lease_id")
+    if not lease_id:
+        return _miniapp_cors(web.json_response({"error": "lease_unavailable"}, status=503))
     save_number_range_info(uid, clean_num, range_display)
     
     # Mini App sipariş listesine ekliyoruz
