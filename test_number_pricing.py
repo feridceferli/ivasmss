@@ -17,6 +17,7 @@ from number_pricing import (
     valid_country, valid_range,
 )
 from rental_ledger import RentalError, reserve as reserve_rental, set_number as set_rental_number, refund as refund_rental
+from service_policy import is_visible as service_is_visible
 
 
 class PriceRuleTests(unittest.TestCase):
@@ -134,6 +135,8 @@ class PurchaseTests(unittest.IsolatedAsyncioTestCase):
             "_number_purchase_locks": {},
             "ensure_whatsapp_referral_access": lambda uid, service: None,
             "get_user": lambda uid: self.users[str(uid)],
+            "load_system_config": lambda: {},
+            "service_is_visible": service_is_visible,
             "load_data": load, "save_data": save,
             "USER_DATA_FILE": "users.json",
             "client_async": SimpleNamespace(post=self.post),
