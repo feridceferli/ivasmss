@@ -48,6 +48,9 @@ from urllib.parse import parse_qsl
 from pathlib import Path
 from web_login import WebsiteLogin
 from number_choices import number_choices
+from marketplace import MarketCatalog, RentalLedger
+from manual_topups import ManualTopups
+from market_bot_ui import MarketBotUI
 from whatsapp_referrals import (
     SETTINGS_FILE as WA_REFERRAL_SETTINGS_FILE,
     load_settings as load_wa_referral_settings,
@@ -126,6 +129,9 @@ API_SALES_FILE = data_path("api_sales_private.json")
 BOT_PROMO_FILE = data_path("bot_user_promos.json")
 ADMIN_PROVIDER_NUMBERS_FILE = data_path("admin_provider_numbers.json")
 admin_provider_numbers = AdminNumberStock(ADMIN_PROVIDER_NUMBERS_FILE)
+MARKET_CATALOG_FILE = data_path("market_catalog.json")
+RENTAL_LEDGER_FILE = data_path("rental_ledger.json")
+MANUAL_TOPUPS_FILE = data_path("manual_topups.json")
 SMS_TEST_DIAGNOSTICS_FILE = data_path("sms_test_diagnostics_private.json")
 sms_diagnostic_store = SmsDiagnosticStore(SMS_TEST_DIAGNOSTICS_FILE)
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
@@ -150,8 +156,15 @@ user_backup = UserProfileBackup(
         "bot_user_promos": BOT_PROMO_FILE,
         "admin_provider_numbers": ADMIN_PROVIDER_NUMBERS_FILE,
         "sms_test_diagnostics": SMS_TEST_DIAGNOSTICS_FILE,
+        "market_catalog": MARKET_CATALOG_FILE,
+        "rental_ledger": RENTAL_LEDGER_FILE,
+        "manual_topups": MANUAL_TOPUPS_FILE,
     },
 )
+
+market_catalog = MarketCatalog(MARKET_CATALOG_FILE, user_backup.changed)
+rental_ledger = RentalLedger(RENTAL_LEDGER_FILE, user_backup.changed)
+manual_topups = ManualTopups(MANUAL_TOPUPS_FILE, user_backup.changed)
 
 # ==================== MULTIPLE ADMINS CONFIGURATION ====================
 ADMINS = [5152261397, 1667507073, 8431489105, 8727114055, 2130079556]
@@ -289,18 +302,35 @@ def _restore_active_leases():
     return restored
 
 
-def assign_active_number(uid, number, range_display):
+def assign_active_number(uid, number, range_display, charge_cents=0):
+    if _active_count(uid) >= 3:
+        raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
+    normalized = normalize_number(number)
+    if normalized in active_numbers and active_number_remaining(active_numbers[normalized]) > 0:
+        raise PricingError("already_active", "Bu nömrə artıq aktivdir.")
     lease_id = secrets.token_hex(8)
-    active_numbers[normalize_number(number)] = {
+    # The journal is written before the lease becomes visible.
+    rental_ledger.record(lease_id, uid, normalized, charge_cents)
+    active_numbers[normalized] = {
         "uid": int(uid), "range": str(range_display),
         "timestamp": datetime.now(), "lease_id": lease_id,
     }
-    _persist_active_leases()
+    try:
+        _persist_active_leases()
+    except Exception:
+        active_numbers.pop(normalized, None)
+        rental_ledger.abort(lease_id)
+        raise
     return lease_id
 
 
 def cancel_active_number(uid, lease_id):
-    """Only the assigned user can cancel this particular unexpired order."""
+    """Paid leases cannot be cancelled during their 180-second lifetime."""
+    return False
+
+
+def _legacy_cancel_active_number(uid, lease_id):
+    """Retained only for backwards code reference; never invoked by an endpoint."""
     if not isinstance(lease_id, str) or not re.fullmatch(r"[0-9a-f]{16}", lease_id):
         return False
     for number, info in list(active_numbers.items()):
@@ -965,6 +995,16 @@ async def country_availability_loop(app):
         await asyncio.sleep(30)
 
 # User-scoped locks serialize purchases; do not let parallel requests double-spend.
+def _active_count(uid):
+    return sum(1 for entry in active_numbers.values()
+               if str(entry.get("uid")) == str(uid) and active_number_remaining(entry) > 0)
+
+
+def _require_market_permission(uid, service, rid):
+    if not is_admin(int(uid)) and not market_catalog.allowed(str(service).lower(), str(rid)):
+        raise PricingError("service_unavailable", "Xidmət və diapazon admin tərəfindən aktiv edilməyib.")
+
+
 _number_purchase_locks = {}
 
 
@@ -985,6 +1025,9 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
     lock = _number_purchase_locks.setdefault(uid, asyncio.Lock())
     async with lock:
         ensure_whatsapp_referral_access(requester_id, service)
+        _require_market_permission(requester_id, service, digits)
+        if _active_count(requester_id) >= 3:
+            raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(digits, load_number_prices(), country_iso)
         # A paid purchase must never change price after the user's approval.
         # Check again while holding the user purchase lock, not just in the API.
@@ -1026,6 +1069,7 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
                 print("[number-api] Unexpected or restricted provider range")
                 return None, None
             await asyncio.to_thread(number_archive.record, number)
+            assign_active_number(requester_id, normalized, digits + "XXX", charge_cents=charge)
             allocated = True
             return number, data.get("country")
         except Exception as exc:
@@ -1120,6 +1164,9 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
     lock = _number_purchase_locks.setdefault(str(uid), asyncio.Lock())
     async with lock:
         ensure_whatsapp_referral_access(uid, service)
+        _require_market_permission(uid, service, rid)
+        if _active_count(uid) >= 3:
+            raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(rid, load_number_prices(), country_iso or None)
         if (not is_admin(uid) and expected_price_cents is not None
                 and (type(expected_price_cents) is not int
@@ -1173,6 +1220,9 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
                                "Seçimin vaxtı bitib. Yenidən 5 nömrə istəyin.")
         rid = option["rid"]
         ensure_whatsapp_referral_access(uid, option["service"])
+        _require_market_permission(uid, option["service"], rid)
+        if _active_count(uid) >= 3:
+            raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
         quote = quote_range(rid, load_number_prices(), option["iso"] or None)
@@ -1207,7 +1257,15 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
         add_number_taken(uid, 1)
         last_range[uid] = rid
         range_display = rid + "XXX"
-        lease_id = assign_active_number(uid, normalized, range_display)
+        try:
+            lease_id = assign_active_number(uid, normalized, range_display, charge_cents=charge)
+        except Exception:
+            if charge:
+                balances = load_data(USER_DATA_FILE)
+                balances[str(uid)]["balance"] = round(
+                    (round(float(balances[str(uid)]["balance"]) * 100) + charge) / 100, 2)
+                save_data(balances, USER_DATA_FILE)
+            raise
         save_number_range_info(uid, normalized, range_display)
         order = {
             "id": lease_id, "label": option["service"].upper(),
@@ -1531,6 +1589,9 @@ def main_keyboard(user_id):
         ])
     if api_sales_store._read().get("visible"):
         rows.append([InlineKeyboardButton("🛒 API SATIŞI", callback_data="menu_api_sales")])
+    rows.append([InlineKeyboardButton("💳 BALANSI ARTIR", callback_data="menu_topup")])
+    if is_admin(user_id):
+        rows.append([InlineKeyboardButton("🔐 iVASMS XİDMƏTLƏRİ (ADMIN)", callback_data="market_admin_open")])
     rows.append([InlineKeyboardButton("📥 NÖMRƏLƏRİM — TXT", callback_data="menu_numbers_txt")])
     return InlineKeyboardMarkup(rows)
 
@@ -1567,6 +1628,8 @@ def admin_main_keyboard():
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
         [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
         [KeyboardButton("🛒 API SATIŞI (ADMIN)")],
+        [KeyboardButton("🔐 iVASMS XİDMƏTLƏRİ")],
+        [KeyboardButton("💳 GÖZLƏYƏN ÇEKLƏR")],
         [KeyboardButton("📣 SAATLIQ NÖMRƏ ELANLARI")],
         [KeyboardButton("🔙 ƏSAS MENYUYA QAYIT")],
     ]
@@ -2144,7 +2207,7 @@ def get_flag_by_prefix(range_str):
     return None
 
 
-def _build_services_keyboard(services):
+def _build_services_keyboard(services, *, allow_custom=False):
     buttons = []
     emoji_map = {
         "whatsapp": "💚",
@@ -2189,12 +2252,9 @@ def _build_services_keyboard(services):
             InlineKeyboardButton(display, callback_data=f"svcidx_{i}", style=color)
         )
     rows = [buttons[j : j + 2] for j in range(0, len(buttons), 2)]
-    rows.append(
-        [
-            InlineKeyboardButton("⚙️ CUSTOM RANGE", callback_data="custom_range", style="danger"),
-            InlineKeyboardButton("🔙 BACK TO MAIN", callback_data="back_to_main"),
-        ]
-    )
+    if allow_custom:
+        rows.append([InlineKeyboardButton("⚙️ CUSTOM RANGE", callback_data="custom_range", style="danger")])
+    rows.append([InlineKeyboardButton("🔙 BACK TO MAIN", callback_data="back_to_main")])
     return InlineKeyboardMarkup(rows)
 
 
@@ -2354,6 +2414,8 @@ async def show_all_countries(update, context, page=0, refresh=True):
     lang = get_user_language(uid)
     if refresh or "all_country_rows" not in context.user_data:
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
         context.user_data["all_country_rows"] = build_all_country_rows(services)
     countries = context.user_data["all_country_rows"]
     page_size = 25
@@ -2412,7 +2474,9 @@ async def show_app_selection(update, context):
             reply_markup=main_keyboard(uid),
         )
         return
-    # Show every service currently returned by the upstream API.
+    if not is_admin(uid):
+        services = market_catalog.public(services)
+    # Show only admin-published provider services to ordinary users.
     # New services (for example Bolt) appear automatically without a code update.
     filtered_services = dict(sorted(services.items()))
     if not filtered_services:
@@ -2423,7 +2487,7 @@ async def show_app_selection(update, context):
         )
         return
     context.user_data["la_services"] = filtered_services
-    keyboard = _build_services_keyboard(filtered_services)
+    keyboard = _build_services_keyboard(filtered_services, allow_custom=is_admin(uid))
     await update.effective_message.reply_text(
         "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
         "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
@@ -2516,11 +2580,11 @@ async def monitor_loop(app):
                         sent_otps.add(key)
                         details = active_numbers[num]
                         uid = details["uid"]
+                        rental_ledger.received(details.get("lease_id"))
                         service_name = detect_service(full_sms)
                         is_free_service = service_name in ("TELEGRAM", "WHATSAPP")
                         if not is_free_service:
-                            user_rate = get_user_otp_rate(uid)
-                            await update_db_balance(uid, user_rate)
+                            # SMS is a successful purchased rental, never a wallet reward.
                             add_otp_received(uid)
                             log_global_activity(
                                 uid,
@@ -2561,8 +2625,7 @@ async def monitor_loop(app):
                                 "xoş sözdər eşidəsən ay qa)"
                             )
                         else:
-                            user_rate = get_user_otp_rate(uid)
-                            balance_msg = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            balance_msg = "✅ SMS qəbul edildi. Balansa əlavə bonus verilmir."
                         # One cheerful, non-sensitive caption shared in both notifications.
                         congratulations = random.choice(OTP_SUCCESS_CHEERS)
                         user_msg = (
@@ -2650,6 +2713,12 @@ async def monitor_loop(app):
             monitor_diagnostics["state"] = "error"
             monitor_diagnostics["last_error"] = type(e).__name__
             print(f"Monitor Error: {type(e).__name__}")
+        try:
+            if user_backup.ready:
+                rental_ledger.settle_due(lambda: load_data(USER_DATA_FILE),
+                                         lambda rows: save_data(rows, USER_DATA_FILE))
+        except (OSError, ValueError, RuntimeError) as exc:
+            print("[rental-refunds] retrying after " + type(exc).__name__, flush=True)
         await asyncio.sleep(CHECK_INTERVAL)
 
 
@@ -2785,11 +2854,8 @@ async def show_active_numbers(update, context):
             f"🟢 Status: AKTİV\n"
             f"⏳ Qalan vaxt: {mins:02d}:{secs:02d}</blockquote>"
         )
-        if lease_id:
-            buttons.append([InlineKeyboardButton(
-                f"❌ Ləğv et · …{normalize_number(number)[-4:]}",
-                callback_data=f"cancel_number_{lease_id}", style="danger")])
-    lines.append("\nℹ️ Gözləmə limiti 3 dəqiqədir. Ləğv provayder ödənişini geri qaytarmır.")
+        # Active rentals cannot be cancelled.
+    lines.append("\nℹ️ 3 dəqiqə ərzində ləğv yoxdur. SMS gəlməsə ödəniş geri qaytarılır.")
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(buttons) if buttons else main_keyboard(uid))
@@ -2879,9 +2945,7 @@ async def number_choice_callback(update, context):
             [InlineKeyboardButton(
                 "🔄 Yenə 5 nömrə göstər",
                 callback_data=f"same_range_{rid}_{service}")],
-            [InlineKeyboardButton(
-                "❌ Ləğv et",
-                callback_data=f"cancel_number_{selected['lease_id']}")],
+            [InlineKeyboardButton("⏳ 3 dəqiqə limit", callback_data="menu_active_numbers")],
             [InlineKeyboardButton(
                 "📋 Aktiv nömrələr", callback_data="menu_active_numbers")],
         ]),
@@ -3010,10 +3074,11 @@ async def perform_otp_search(update, context, target_num):
                         service_name = detect_service(full_sms)
                         is_free = service_name in ("TELEGRAM", "WHATSAPP")
                         if not is_free:
-                            user_rate = get_user_otp_rate(int(uid))
-                            await update_db_balance(uid, user_rate)
+                            assigned = active_numbers.get(target_num)
+                            if assigned and str(assigned.get("uid")) == uid:
+                                rental_ledger.received(assigned.get("lease_id"))
                             add_otp_received(uid)
-                            payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            payment_status = "✅ SMS qəbul edildi, əlavə bonus yoxdur."
                         else:
                             add_otp_received(uid)
                             payment_status = (
@@ -4273,6 +4338,13 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     uid = update.effective_user.id
     text = normalize_button_input(update.message.text.strip())
+
+    if text == "🔐 iVASMS XİDMƏTLƏRİ" and is_admin(uid):
+        await market_bot_ui.admin_services(update, context)
+        return
+    if text == "💳 GÖZLƏYƏN ÇEKLƏR" and is_admin(uid):
+        await market_bot_ui.topups_command(update, context)
+        return
 
     if text == "📣 SAATLIQ NÖMRƏ ELANLARI" and is_admin(uid):
         await bot_promo_admin_menu(update.effective_message)
@@ -5605,12 +5677,11 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         if cancel_active_number(uid, lease_id):
             await query.edit_message_text(
                 "❌ <b>SİFARİŞ LƏĞV EDİLDİ</b>\n\n"
-                "Nömrə üçün OTP gözlənilməsi dayandırıldı. "
-                "Bu əməliyyat provayder ödənişini geri qaytarmır.",
+                "Bu nömrə üçün əməliyyat tamamlandı.",
                 parse_mode="HTML")
         else:
             await query.message.reply_text(
-                "⚠️ Sifariş artıq aktiv deyil, sizə aid deyil və ya 3 dəqiqəsi bitib.")
+                "⏳ Nömrə 3 dəqiqə ərzində ləğv edilmir. SMS gəlməsə məbləğ qaytarılır.")
         return
 
     # USER INLINE MENU
@@ -5628,6 +5699,12 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
     if data == "menu_get_number":
         await show_app_selection(update, context)
+        return
+    if data == "menu_topup":
+        await market_bot_ui.topup_command(update, context)
+        return
+    if data == "market_admin_open" and is_admin(uid):
+        await market_bot_ui.admin_services(update, context)
         return
     if data == "menu_active_numbers":
         await show_active_numbers(update, context)
@@ -5779,6 +5856,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
             return
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
         if service not in services:
             await query.answer('Bu xidmət hazırda mövcud deyil.', show_alert=True)
             return
@@ -5811,6 +5890,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     # CUSTOM RANGE
     if data in ("custom_range", "custom_range_single"):
+        if not is_admin(uid):
+            await query.message.reply_text("🔒 Fərdi diapazon yalnız admin üçündür.")
+            return
         context.user_data["mode"] = ("custom_range" if data == "custom_range_single" else "custom_range_collect")
         await query.message.edit_text(
             ("⚙️ <b>CUSTOM RANGE — TƏK NÖMRƏ</b>\n\n" if data == "custom_range_single" else
@@ -5836,12 +5918,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # BACK TO SERVICES
     if data == "back_services":
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
         if not services:
             await query.message.edit_text('❌ Heç bir xidmət mövcud deyil.')
             return
         displayed_services = dict(sorted(services.items()))
         context.user_data["la_services"] = displayed_services
-        keyboard = _build_services_keyboard(displayed_services)
+        keyboard = _build_services_keyboard(displayed_services, allow_custom=is_admin(uid))
         await query.message.edit_text(
             "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
             "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
@@ -5907,10 +5991,13 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "back_to_services":
         services = await fetch_services_cached()
+        if not is_admin(uid):
+            services = market_catalog.public(services)
+        context.user_data["la_services"] = services
         if not services:
             await query.edit_message_text('❌ Heç bir xidmət mövcud deyil.')
             return
-        keyboard = _build_services_keyboard(services)
+        keyboard = _build_services_keyboard(services, allow_custom=is_admin(uid))
         await query.edit_message_text(
             "📡✨ XİDMƏT SEÇİN ✨📡\n\n"
             "<blockquote>API-də hazırda mövcud olan bütün xidmətlər aşağıda göstərilir.</blockquote>",
@@ -6007,6 +6094,8 @@ async def webapp_data_handler(update: Update, context: ContextTypes.DEFAULT_TYPE
 
     if action == "get_number":
         await show_app_selection(update, context)
+    elif action == "topup":
+        await market_bot_ui.topup_command(update, context)
     elif action == "active_numbers":
         await show_active_numbers(update, context)
     elif action == "search_otp":
@@ -6604,8 +6693,8 @@ async def miniapp_orders_api(request):
                 o["status"]="Ləğv edildi"
                 miniapp_history.setdefault(uid,[]).append(_safe_order(uid,o))
                 return _miniapp_cors(web.json_response({"ok":True}))
-        return _miniapp_cors(web.json_response({"error":"not_found",
-            "message":"Sifariş tapılmadı və ya vaxtı bitib."},status=404))
+        return _miniapp_cors(web.json_response({"error":"cancellation_locked",
+            "message":"3 dəqiqə ərzində ləğv mümkün deyil. SMS gəlməsə balans geri qaytarılır."},status=409))
     return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
 
 async def miniapp_test_sms(request):
@@ -7343,6 +7432,9 @@ async def post_init(application):
         print(f"[user-backup] Initial restore unavailable: {type(exc).__name__}", flush=True)
     # Recover an ongoing three-minute allocation if the instance was replaced.
     restored_count = _restore_active_leases()
+    if user_backup.ready:
+        rental_ledger.settle_due(lambda: load_data(USER_DATA_FILE),
+                                 lambda rows: save_data(rows, USER_DATA_FILE))
     print(f"[startup] Restored {restored_count} unexpired active leases", flush=True)
     application.bot_data["user_backup_task"] = asyncio.create_task(user_backup.run())
     await asyncio.to_thread(number_archive.import_legacy, load_range_db())
@@ -7363,6 +7455,7 @@ async def post_init(application):
 
 
 def register_handlers(app):
+    market_bot_ui.register(app)
     register_whatsapp_handlers(app, is_admin)
     register_admin_test_tools(app, is_admin, admin_main_keyboard)
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
@@ -7573,6 +7666,8 @@ async def miniapp_services_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
+    if not is_admin(uid):
+        services = market_catalog.public(services)
     return _miniapp_cors(web.json_response({
         "services": services,
         "az_available": any(
@@ -7596,6 +7691,8 @@ async def miniapp_countries_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
+    if not is_admin(uid):
+        services = market_catalog.public(services)
     countries = build_all_country_rows(services)
     iso = str(request.query.get("iso", "")).upper().strip()
     if iso:
@@ -7832,7 +7929,9 @@ async def miniapp_get_number_api(request):
     range_display = rid + "XXX"
     
     # Aktif numaralara ekliyoruz
-    lease_id = assign_active_number(uid, clean_num, range_display)
+    lease_id = active_numbers.get(clean_num, {}).get("lease_id")
+    if not lease_id:
+        return _miniapp_cors(web.json_response({"error": "lease_unavailable"}, status=503))
     save_number_range_info(uid, clean_num, range_display)
     
     # Mini App sipariş listesine ekliyoruz
@@ -7857,6 +7956,16 @@ async def miniapp_get_number_api(request):
     }))
 
 
+
+market_bot_ui = MarketBotUI(
+    catalog=market_catalog, topups=manual_topups, backup=user_backup,
+    is_admin=is_admin, is_banned=is_user_banned,
+    services=fetch_services_cached, user=get_user,
+    load_users=lambda: load_data(USER_DATA_FILE),
+    save_users=lambda rows: save_data(rows, USER_DATA_FILE),
+    quote=lambda rid: quote_range(rid, load_number_prices()),
+    admins=ADMINS,
+)
 
 if __name__ == "__main__":
     main()
