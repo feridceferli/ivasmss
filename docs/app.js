@@ -100,6 +100,7 @@ async function api(path, options = {}) {
             country_mismatch: "Ölkə və range uyğun gəlmir.",
             price_changed: "API qiyməti dəyişib. Kataloqdan yenidən təsdiqləyin.",
             insufficient_balance: "Balansınız kifayət etmir.",
+            price_not_configured: "Admin bu xidmət üçün hələ pullu qiymət təyin etməyib.",
             unavailable: "API hazırda satışda deyil.",
             invalid_price: "Qiymət 0.01–10000 AZN arasında olmalıdır. Məsələn: 2.50.",
             missing_secret: "API açarını və ya giriş məlumatını daxil edin.",
