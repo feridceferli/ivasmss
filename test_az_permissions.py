@@ -9,6 +9,7 @@ import unittest
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock
+from service_policy import is_visible as service_is_visible
 
 
 SOURCE = Path(__file__).with_name("main.py").read_text(encoding="utf-8")
@@ -170,6 +171,8 @@ class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
             "USER_DATA_FILE": "users.json",
             "save_data": lambda *_: None,
             "get_user": lambda uid: {"balance": 0.0},
+            "load_system_config": lambda: {},
+            "service_is_visible": service_is_visible,
             # This suite isolates access control from accounting. The journal
             # itself is independently exercised in test_rental_ledger.py.
             "_reserve_number_lease": lambda uid, charge: "a" * 16,
