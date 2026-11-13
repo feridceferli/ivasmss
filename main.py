@@ -935,8 +935,8 @@ def _active_count(uid):
 
 
 def _require_market_permission(uid, service, rid):
-    if not is_admin(int(uid)) and not market_catalog.allowed(str(service).lower(), str(rid)):
-        raise PricingError("service_unavailable", "Xidmət və diapazon admin tərəfindən aktiv edilməyib.")
+    """Pre-November service visibility: upstream availability governs access."""
+    return None
 
 
 _number_purchase_locks = {}
@@ -2335,8 +2335,6 @@ async def show_all_countries(update, context, page=0, refresh=True):
     lang = get_user_language(uid)
     if refresh or "all_country_rows" not in context.user_data:
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         context.user_data["all_country_rows"] = build_all_country_rows(services)
     countries = context.user_data["all_country_rows"]
     page_size = 25
@@ -2395,9 +2393,7 @@ async def show_app_selection(update, context):
             reply_markup=main_keyboard(uid),
         )
         return
-    if not is_admin(uid):
-        services = market_catalog.public(services)
-    # Show only admin-published provider services to ordinary users.
+    # Show provider-advertised services to ordinary users.
     # New services (for example Bolt) appear automatically without a code update.
     filtered_services = dict(sorted(services.items()))
     if not filtered_services:
@@ -5570,8 +5566,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
             await query.answer("Xidmət siyahısı yenilənib. Yenidən açın.", show_alert=True)
             return
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         if service not in services:
             await query.answer('Bu xidmət hazırda mövcud deyil.', show_alert=True)
             return
@@ -5632,8 +5626,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     # BACK TO SERVICES
     if data == "back_services":
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         if not services:
             await query.message.edit_text('❌ Heç bir xidmət mövcud deyil.')
             return
@@ -5705,8 +5697,6 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data == "back_to_services":
         services = await fetch_services_cached()
-        if not is_admin(uid):
-            services = market_catalog.public(services)
         context.user_data["la_services"] = services
         if not services:
             await query.edit_message_text('❌ Heç bir xidmət mövcud deyil.')
@@ -7058,7 +7048,6 @@ async def run_combined_server():
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
-    server.router.add_route("*", "/api/admin/publish-services", miniapp_publish_services_api)
     server.router.add_route("*", "/api/prices", miniapp_prices_api)
     server.router.add_route("*", "/api/topup-details", miniapp_topup_details_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
@@ -7155,29 +7144,6 @@ def main():
 # ==================== MİNİ APP GƏLƏN SMS VƏ XİDMƏTLƏR API ====================
 miniapp_incoming_sms = {}  # { uid: [ {service, number, otp, message, time}, ... ] }
 
-async def miniapp_publish_services_api(request):
-    """Authenticated admin-only bulk publishing; never expose upstream ranges implicitly."""
-    if request.method == "OPTIONS":
-        return _miniapp_cors(web.Response(status=204))
-    tg_user, err = _miniapp_auth(request)
-    if not tg_user:
-        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
-    if not is_admin(int(tg_user["id"])):
-        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-    if request.method != "POST":
-        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
-    if not user_backup.ready:
-        return _miniapp_cors(web.json_response({"error": "backup_unavailable",
-            "message": "Yaddaş ehtiyat nüsxəsi hazır deyil."}, status=503))
-    upstream = await fetch_services_cached()
-    if not upstream:
-        return _miniapp_cors(web.json_response({"error": "provider_unavailable",
-            "message": "Provayder xidmət siyahısı boşdur."}, status=503))
-    count = market_catalog.publish_all(upstream)
-    return _miniapp_cors(web.json_response({"success": True,
-        "services": len(upstream), "ranges": count}))
-
-
 async def miniapp_services_api(request):
     if request.method == "OPTIONS":
         return _miniapp_cors(web.Response(status=204))
@@ -7189,8 +7155,6 @@ async def miniapp_services_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
-    if not is_admin(uid):
-        services = market_catalog.public(services)
     return _miniapp_cors(web.json_response({
         "services": services,
         "az_available": any(
@@ -7214,8 +7178,6 @@ async def miniapp_countries_api(request):
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
     services = await fetch_services_cached()
-    if not is_admin(uid):
-        services = market_catalog.public(services)
     countries = build_all_country_rows(services)
     iso = str(request.query.get("iso", "")).upper().strip()
     if iso:
