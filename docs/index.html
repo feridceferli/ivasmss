@@ -495,8 +495,23 @@
                     </div>
                     <p class="notice-mini">Dəvətlər yalnız yeni Telegram hesablarına görə hesablanır. Digər xidmətlər üçün dəvət tələbi yoxdur.</p>
                 </div>
+                <div class="card" id="profile-topup-card" style="margin-top:12px">
+                    <h4 style="margin:0 0 8px">💳 Balans artırma — kart köçürməsi</h4>
+                    <p class="notice-mini">Kart məlumatları admin tərəfindən verilir. Köçürmədən sonra çek şəklini göndərin; balans yalnız admin təsdiqlədikdə artır.</p>
+                    <p id="topup-card-details" class="notice-mini" style="white-space:pre-wrap">Ödəniş məlumatları yüklənir...</p>
+                    <p id="topup-state" class="notice-mini" role="status"></p>
+                    <div class="catalog-tools">
+                        <input id="topup-amount" class="admin-input" type="number" min="1" max="10000" step="0.01"
+                               inputmode="decimal" placeholder="Məbləğ (AZN)" aria-label="Balans artırma məbləği">
+                        <input id="topup-receipt" class="admin-input" type="file" accept="image/jpeg,image/png"
+                               aria-label="Ödəniş çekinin şəkli">
+                    </div>
+                    <button type="button" class="action-small" id="topup-submit" onclick="submitTopup()">📷 Çeki adminə göndər</button>
+                    <p id="topup-result" class="notice-mini" role="status"></p>
+                    <p class="notice-mini">Çek göndərilməsi avtomatik ödəniş deyil. Şəkil 650 KB-dan kiçik JPG/PNG olmalıdır. Heç vaxt CVV və PIN paylaşmayın.</p>
+                </div>
                 <div class="catalog-tools">
-                    <select id="profile-language' class="admin-input" aria-label="Dil seç">
+                    <select id="profile-language" class="admin-input" aria-label="Dil seç">
                         <option value="az">🇦🇿 Azərbaycan dili</option>
                         <option value="tr">🇹🇷 Türkçe</option>
                         <option value="en">🇬🇧 English</option>
@@ -630,6 +645,8 @@
                 <p class="notice-mini">Bölməni seçərək birbaşa idarəetmə alətlərinə keçin. Səlahiyyətlər serverdə yoxlanılır.</p>
                 <div class="admin-nav-grid">
                     <button class="action-small" onclick="adminJump('admin-users-section')">👥 İstifadəçilər</button>
+                    <button class="action-small" onclick="adminJump('admin-services-section')">📡 Xidmətləri idarə et</button>
+                    <button class="action-small" onclick="adminJump('admin-topups-section')">💳 Çekləri təsdiqlə</button>
                     <button class="action-small" onclick="adminJump('admin-wa-referral-section')">🎁 WhatsApp dəvətləri</button>
                     <button class="action-small" onclick="adminJump('admin-api-sales-section')">🛒 API Satışı</button>
                     <button class="action-small" onclick="adminJump('admin-hourly-promos-section')">📣 Saatlıq bot elanları</button>
@@ -647,6 +664,26 @@
                     <button class="action-small" onclick="adminJump('admin-ivasmsper-section')">🔌 Ivasmsper (admin)</button>
                 </div>
             </div>
+            <section class="card" id="admin-services-section" style="margin-top:12px">
+                <h4>📡 Aktiv xidmətlərə icazə ver / gizlət</h4>
+                <p class="notice-mini">Bu siyahı canlı provayder kataloquna əsaslanır; keçmiş nömrələr arxivi aktiv inventar sayılmır. Dəyişikliklər şəxsi GitHub arxivinə yedəklənir.</p>
+                <p id="admin-services-status" class="notice-mini" role="status">Xidmətlər yoxlanır...</p>
+                <button class="action-small" type="button" onclick="fetchAdminServices()">🔄 Xidmətləri yenilə</button>
+                <div id="admin-services-list" class="catalog-scroll" style="max-height:420px;overflow:auto" aria-live="polite"></div>
+            </section>
+            <section class="card" id="admin-topups-section" style="margin-top:12px">
+                <h4>💳 Balans köçürmələri — admin təsdiqi</h4>
+                <p class="notice-mini">Alıcı kartını təyin edin. Çeklər admin Telegram çatına göndərilir; burada təsdiqləmə balansı yalnız bir dəfə artırır.</p>
+                <div class="catalog-tools">
+                    <input id="admin-topup-card" type="text" class="admin-input" maxlength="180"
+                           placeholder="Kart / IBAN | Alıcı adı" aria-label="Köçürmə kartı">
+                    <button class="action-small" type="button" onclick="saveAdminTopupCard()">💾 Kartı saxla</button>
+                    <button class="action-small" type="button" onclick="fetchAdminTopups()">🔄 Çekləri yenilə</button>
+                </div>
+                <p id="admin-topups-status" class="notice-mini" role="status">Ödənişlər yoxlanır...</p>
+                <div id="admin-topups-list" class="catalog-scroll" style="max-height:420px;overflow:auto" aria-live="polite"></div>
+                <p class="notice-mini">Təsdiqdən əvvəl bankda ödənişin həqiqətən daxil olduğunu yoxlayın. CVV, PIN və kartın bitmə tarixini saxlamayın.</p>
+            </section>
             <section class="card" id="admin-sms-lab-section" style="margin-top:12px">
                 <h4>🧪 SMS simulyasiya bölməsini idarə et</h4>
                 <p class="notice-mini">Standart rejim yalnız admindir. Hamıya açdıqda istifadəçilər yalnız SMS göndərməyən simulyatordan yararlanacaqlar. Real SMS göndərişi heç vaxt aktivləşdirilmir.</p>
