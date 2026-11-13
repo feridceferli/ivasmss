@@ -443,6 +443,7 @@ async function fetchServices() {
     try {
         const data = await api("/api/services");
         state.services = data.services || {};
+        state.serviceOrder = Array.isArray(data.service_order) ? data.service_order : [];
         state.azCatalog = data.az_catalog || [];
         state.azApproved = !!data.az_approved;
         renderWhatsappReferrals(data.whatsapp_referrals);
@@ -458,7 +459,11 @@ function renderServices() {
     const container = document.getElementById("services-grid-container");
     container.replaceChildren();
     const query = String(state.serviceQuery || "").trim().toLocaleLowerCase();
-    const services = Object.keys(state.services).sort().filter(service =>
+    const services = Object.keys(state.services).sort((a,b) => {
+        const ai = (state.serviceOrder || []).indexOf(a.toLowerCase());
+        const bi = (state.serviceOrder || []).indexOf(b.toLowerCase());
+        return (ai < 0 ? 10000 : ai) - (bi < 0 ? 10000 : bi) || a.localeCompare(b);
+    }).filter(service =>
         service.toLocaleLowerCase().includes(query)
     );
     if (!services.length) {
@@ -1406,12 +1411,40 @@ function filterAdminUsers() {
     });
 }
 
+async function saveRentalSettings() {
+    if (!state.isAdmin) return;
+    const rental_minutes = Number(document.getElementById("admin-rental-minutes").value);
+    const max_active_numbers = Number(document.getElementById("admin-rental-maximum").value);
+    const service_order = document.getElementById("admin-service-order").value
+        .split(/\r?\n/).map(x => x.trim().toLowerCase()).filter(Boolean);
+    const status = document.getElementById("admin-rental-status");
+    if (!Number.isInteger(rental_minutes) || rental_minutes < 1 || rental_minutes > 60 ||
+        !Number.isInteger(max_active_numbers) || max_active_numbers < 1 || max_active_numbers > 10) {
+        status.textContent = "Vaxt 1–60, nömrə limiti 1–10 arası tam ədəd olmalıdır.";
+        return;
+    }
+    try {
+        await api("/api/admin", {method:"POST", body:{
+            action:"rental_settings", rental_minutes, max_active_numbers, service_order
+        }});
+        status.textContent = "✅ Parametrlər yadda saxlandı.";
+        await fetchServices();
+    } catch (err) { status.textContent = "⚠️ " + err.message; }
+}
+
 async function fetchAdminUsers() {
     if (!state.isAdmin) return;
     const container = document.getElementById("admin-users-list");
     try {
         const data = await api("/api/admin");
         adminUsersCache = data.users || [];
+        const cfg = data.config || {};
+        const minutes = document.getElementById("admin-rental-minutes");
+        const maximum = document.getElementById("admin-rental-maximum");
+        const order = document.getElementById("admin-service-order");
+        if (minutes) minutes.value = cfg.rental_minutes ?? 3;
+        if (maximum) maximum.value = cfg.max_active_numbers ?? 3;
+        if (order) order.value = (cfg.service_order || []).join("\n");
         const monitor = data.monitor || {};
         const sys = document.getElementById("admin-system-status");
         sys.textContent = "👥 Cəmi: " + (data.user_count || 0) +
