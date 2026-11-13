@@ -4227,7 +4227,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             raise
         return
 
-    # Fake OTP settings processing
 
     # Withdraw flow
     if context.user_data.get("withdraw_mode") == "select_method":
@@ -6333,7 +6332,7 @@ async def miniapp_dashboard(request):
     }))
 
 
-# Mini App safe order/test-SMS state (no real SMS/OTP content)
+# Mini App order state
 miniapp_orders = {}
 miniapp_history = {}
 
@@ -6408,16 +6407,6 @@ async def miniapp_orders_api(request):
         return _miniapp_cors(web.json_response({"error":"cancellation_locked",
             "message":"3 dəqiqə ərzində ləğv mümkün deyil. SMS gəlməsə balans geri qaytarılır."},status=409))
     return _miniapp_cors(web.json_response({"error":"bad_action"},status=400))
-
-async def miniapp_test_sms(request):
-    if request.method == "OPTIONS": return _miniapp_cors(web.Response(status=204))
-    tg_user, err = _miniapp_auth(request)
-    if not tg_user: return _miniapp_cors(web.json_response({"error":"unauthorized","reason":err},status=401))
-    uid=int(tg_user["id"]); oid=request.query.get("order_id","")
-    owned=any(o["id"]==oid for o in miniapp_orders.get(uid,[]))
-    if not owned: return _miniapp_cors(web.json_response({"error":"not_found"},status=404))
-    return _miniapp_cors(web.json_response({"messages":[{"id":"demo-1","sender":"Sandbox","text":"Bu test SMS-dir. Kod: 583921","code":"583921","is_test":True,"label":"Test məlumatı"}]}))
-
 
 async def miniapp_api_sales_api(request):
     """Same catalog and account purchase history for website and Telegram Mini App."""
@@ -7000,7 +6989,6 @@ async def run_combined_server():
     server.router.add_route("OPTIONS", "/api/dashboard", miniapp_dashboard)
     server.router.add_route("*", "/api/avatar", miniapp_avatar_api)
     server.router.add_route("*", "/api/orders", miniapp_orders_api)
-    server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
