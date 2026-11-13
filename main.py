@@ -223,7 +223,7 @@ def active_number_remaining(info, now=None):
     if not isinstance(timestamp, datetime):
         return 0
     age = max(0, int(((now or datetime.now()) - timestamp).total_seconds()))
-    return max(0, rental_wait_seconds() - age)
+    return max(0, (globals().get("rental_wait_seconds") or (lambda: 180))() - age)
 
 
 def _persist_active_leases():
@@ -295,7 +295,7 @@ def _restore_active_leases():
 
 
 def assign_active_number(uid, number, range_display, charge_cents=0):
-    if _active_count(uid) >= rental_max_active():
+    if _active_count(uid) >= (globals().get("rental_max_active") or (lambda: 3))():
         raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
     normalized = normalize_number(number)
     if normalized in active_numbers and active_number_remaining(active_numbers[normalized]) > 0:
@@ -972,7 +972,7 @@ async def get_number_from_api(rid: str, requester_id=None, country_iso=None,
     async with lock:
         ensure_whatsapp_referral_access(requester_id, service)
         _require_market_permission(requester_id, service, digits)
-        if _active_count(requester_id) >= rental_max_active():
+        if _active_count(requester_id) >= (globals().get("rental_max_active") or (lambda: 3))():
             raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(digits, load_number_prices(), country_iso)
         # A paid purchase must never change price after the user's approval.
@@ -1111,7 +1111,7 @@ async def prepare_number_choices(uid, rid, service="CUSTOM", country_iso="",
     async with lock:
         ensure_whatsapp_referral_access(uid, service)
         _require_market_permission(uid, service, rid)
-        if _active_count(uid) >= rental_max_active():
+        if _active_count(uid) >= (globals().get("rental_max_active") or (lambda: 3))():
             raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         quote = quote_range(rid, load_number_prices(), country_iso or None)
         if (not is_admin(uid) and expected_price_cents is not None
@@ -1167,7 +1167,7 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
         rid = option["rid"]
         ensure_whatsapp_referral_access(uid, option["service"])
         _require_market_permission(uid, option["service"], rid)
-        if _active_count(uid) >= rental_max_active():
+        if _active_count(uid) >= (globals().get("rental_max_active") or (lambda: 3))():
             raise PricingError("too_many_active", "Eyni anda maksimum 3 nömrə götürə bilərsiniz.")
         if is_user_banned(uid) or (is_az_range(rid) and not az_range_allowed(uid)):
             raise PricingError("unauthorized", "Bu nömrəni seçməyə icazə yoxdur.")
@@ -1218,7 +1218,7 @@ async def confirm_number_choice(uid, token, index, expected_price_cents=None):
             "number_masked": "+" + mask_number(normalized),
             "full_number": selected, "range": range_display,
             "status": "Aktiv", "created_at": time.time(),
-            "remaining_seconds": rental_wait_seconds(),
+            "remaining_seconds": (globals().get("rental_wait_seconds") or (lambda: 180))(),
         }
         miniapp_orders.setdefault(uid, []).append(order)
         return {
@@ -6421,11 +6421,11 @@ def _safe_order(uid, order):
     result = {
         "id": order["id"], "label": order["label"],
         "number_masked": order["number_masked"], "range": order["range"],
-        "status": order["status"], "remaining_seconds": max(0, rental_wait_seconds() - age),
+        "status": order["status"], "remaining_seconds": max(0, (globals().get("rental_wait_seconds") or (lambda: 180))() - age),
         "created_at": order["created_at"],
     }
     digits = normalize_number(order.get("full_number") or "")
-    if digits and order.get("status") == "Aktiv" and age < rental_wait_seconds():
+    if digits and order.get("status") == "Aktiv" and age < (globals().get("rental_wait_seconds") or (lambda: 180))():
         assigned = active_numbers.get(digits)
         if (assigned and int(assigned.get("uid", 0)) == int(uid)
                 and assigned.get("lease_id") == order.get("id")
@@ -6442,7 +6442,7 @@ async def miniapp_orders_api(request):
     if request.method == "GET":
         active=[_safe_order(uid,o) for o in miniapp_orders.get(uid,[])
                 if o["status"]=="Aktiv"
-                and time.time() - o["created_at"] < rental_wait_seconds()
+                and time.time() - o["created_at"] < (globals().get("rental_wait_seconds") or (lambda: 180))()
                 and (not o.get("full_number") or (
                     active_numbers.get(normalize_number(o["full_number"]), {}).get("lease_id") == o["id"]
                     and active_numbers.get(normalize_number(o["full_number"]), {}).get("uid") == uid))]
@@ -6466,7 +6466,7 @@ async def miniapp_orders_api(request):
         for o in miniapp_orders.get(uid,[]):
             if (o.get("id")==oid and oid.startswith("T") and
                     o["status"]=="Aktiv" and
-                    time.time() - o["created_at"] < rental_wait_seconds()):
+                    time.time() - o["created_at"] < (globals().get("rental_wait_seconds") or (lambda: 180))()):
                 o["status"]="Ləğv edildi"
                 miniapp_history.setdefault(uid,[]).append(_safe_order(uid,o))
                 return _miniapp_cors(web.json_response({"ok":True}))
@@ -7462,7 +7462,7 @@ async def miniapp_get_number_api(request):
         "range": range_display,
         "status": "Aktiv",
         "created_at": time.time(),
-        "remaining_seconds": rental_wait_seconds()
+        "remaining_seconds": (globals().get("rental_wait_seconds") or (lambda: 180))()
     }
     miniapp_orders.setdefault(uid, []).append(order)
 
