@@ -3833,11 +3833,10 @@ async def admin_change_otp_rate_amount(update, context):
 
 # ==================== ADMIN PANEL - PER-USER OTP RATE ====================
 async def admin_set_user_otp_rate_start(update, context):
-    context.user_data["admin_set_otp_rate_mode"] = "user"
+    context.user_data["admin_set_otp_rate_mode"] = None
     await update.effective_message.reply_text(
-        '🔧 **İSTİFADƏÇİ OTP DƏRƏCƏSİNİ TƏYİN ET**\n\nZəhmət olmasa istifadəçi ID-sini daxil edin (yalnız rəqəm):',
-        parse_mode="Markdown",
-        reply_markup=cancel_keyboard(),
+        "✅ Fərdi SMS/OTP balans bonusları da ləğv edilib. Yeni tarif təyin edilmir.",
+        reply_markup=system_config_keyboard(),
     )
 
 
