@@ -170,6 +170,15 @@ class ProviderAllocationTests(unittest.IsolatedAsyncioTestCase):
             "USER_DATA_FILE": "users.json",
             "save_data": lambda *_: None,
             "get_user": lambda uid: {"balance": 0.0},
+            # This suite isolates access control from accounting. The journal
+            # itself is independently exercised in test_rental_ledger.py.
+            "_reserve_number_lease": lambda uid, charge: "a" * 16,
+            "_set_number_lease": lambda uid, oid, num: None,
+            "_refund_number_lease": lambda uid, oid: None,
+            "normalize_number": lambda value: re.sub(r"\D", "", str(value or "")),
+            "active_numbers": {},
+            "active_number_remaining": lambda info: 180,
+            "assign_active_number": lambda uid, num, rid, lease_id: lease_id,
         }
         for name in ("is_admin", "is_az_range", "az_range_allowed"):
             self.ns[name] = extract(name, self.ns)
