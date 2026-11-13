@@ -325,6 +325,19 @@
                     <button class="action-small" onclick="switchTab('guide')">📖 Necə istifadə etməli?</button>
                 </div>
             </div>
+            <div class="card" id="manual-buy-panel">
+                <div class="row" style="display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap">
+                    <h3 style="margin:0">🛒 Manual Buy — Nömrə al</h3>
+                    <button type="button" class="action-small" onclick="switchTab('topup')">💳 Balans artır</button>
+                </div>
+                <p class="notice-mini">5SIM tipli manual seçim: xidməti seçin, ölkə və range-i müəyyən edin, qiyməti təsdiqləyib nömrə alın.</p>
+                <div class="dashboard-stats" aria-label="Manual alış mərhələləri">
+                    <div class="dashboard-stat"><strong>1</strong><span>Xidmət seçimi</span></div>
+                    <div class="dashboard-stat"><strong>2</strong><span>Ölkə / operator</span></div>
+                    <div class="dashboard-stat"><strong>3</strong><span>Qiymət və alış</span></div>
+                </div>
+                <p id="manual-buy-selection" class="notice-mini" role="status" aria-live="polite">1-ci addım: Aşağıdan xidmət seçin.</p>
+            </div>
             <div class="card">
                 <h4 style="margin: 0 0 10px 0;">🌍 Mövcud Xidmətlər və Ölkələr</h4>
                 <p class="notice-mini">Xidməti seçin → ölkə kodunu və range-i seçin → həmin range-dən nömrə almağa cəhd edin. Nömrə mövcudluğu API-dən asılıdır.</p>
