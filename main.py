@@ -2519,6 +2519,7 @@ async def monitor_loop(app):
     sent_otps = set()
     while True:
         try:
+            _reconcile_expired_rentals()
             monitor_diagnostics["state"] = "checking"
             monitor_diagnostics["last_check"] = _monitor_diag_time()
             r = await client_async.get(f"{BASE_URL}/success-otp")
@@ -2561,9 +2562,8 @@ async def monitor_loop(app):
                         uid = details["uid"]
                         service_name = detect_service(full_sms)
                         is_free_service = service_name in ("TELEGRAM", "WHATSAPP")
+                        _complete_number_lease(uid, num)
                         if not is_free_service:
-                            user_rate = get_user_otp_rate(uid)
-                            await update_db_balance(uid, user_rate)
                             add_otp_received(uid)
                             log_global_activity(
                                 uid,
@@ -2604,8 +2604,7 @@ async def monitor_loop(app):
                                 "xoş sözdər eşidəsən ay qa)"
                             )
                         else:
-                            user_rate = get_user_otp_rate(uid)
-                            balance_msg = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            balance_msg = "✅ SMS alındı · əlavə balans bonusu yoxdur"
                         # One cheerful, non-sensitive caption shared in both notifications.
                         congratulations = random.choice(OTP_SUCCESS_CHEERS)
                         user_msg = (
@@ -2686,6 +2685,7 @@ async def monitor_loop(app):
                         entry["timestamp"] = current_time
                     elif active_number_remaining(entry, current_time) == 0:
                         del active_numbers[num_key]
+                        _persist_active_leases()
             else:
                 monitor_diagnostics["state"] = "upstream_error"
                 monitor_diagnostics["last_error"] = f"API code: {upstream_code}"
@@ -2828,11 +2828,7 @@ async def show_active_numbers(update, context):
             f"🟢 Status: AKTİV\n"
             f"⏳ Qalan vaxt: {mins:02d}:{secs:02d}</blockquote>"
         )
-        if lease_id:
-            buttons.append([InlineKeyboardButton(
-                f"❌ Ləğv et · …{normalize_number(number)[-4:]}",
-                callback_data=f"cancel_number_{lease_id}", style="danger")])
-    lines.append("\nℹ️ Gözləmə limiti 3 dəqiqədir. Ləğv provayder ödənişini geri qaytarmır.")
+    lines.append("\nℹ️ 3 dəqiqə ərzində ləğv bağlıdır. SMS gəlməsə, ödəniş geri qaytarılır.")
     await update.effective_message.reply_text(
         "\n".join(lines), parse_mode="HTML",
         reply_markup=InlineKeyboardMarkup(buttons) if buttons else main_keyboard(uid))
@@ -2923,9 +2919,6 @@ async def number_choice_callback(update, context):
                 "🔄 Yenə 5 nömrə göstər",
                 callback_data=f"same_range_{rid}_{service}")],
             [InlineKeyboardButton(
-                "❌ Ləğv et",
-                callback_data=f"cancel_number_{selected['lease_id']}")],
-            [InlineKeyboardButton(
                 "📋 Aktiv nömrələr", callback_data="menu_active_numbers")],
         ]),
     )
@@ -3001,18 +2994,17 @@ async def perform_otp_search(update, context, target_num):
             "🚫 YOU ARE BANNED 🚫", reply_markup=main_keyboard(int(uid))
         )
         return
-    if is_az_range(target_num):
-        if not az_range_allowed(uid):
-            await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+    if is_az_range(target_num) and not az_range_allowed(uid):
+        await update.effective_message.reply_text(AZ_ACCESS_DENIED)
+        return
+    # A user may see OTPs only for their own unexpired allocation.
+    if not is_admin(int(uid)):
+        assigned = active_numbers.get(normalize_number(target_num))
+        if (not assigned or str(assigned.get("uid")) != uid
+                or active_number_remaining(assigned) <= 0):
+            await update.effective_message.reply_text(
+                "🔒 Yalnız sizə ayrılmış aktiv nömrənin SMS-ni görə bilərsiniz.")
             return
-        # Approval to obtain an AZ number must not expose other users' codes.
-        if not is_admin(int(uid)):
-            assigned = active_numbers.get(normalize_number(target_num))
-            if not assigned or str(assigned.get("uid")) != uid:
-                await update.effective_message.reply_text(
-                    "🔒 Yalnız sizə ayrılmış Azərbaycan nömrəsinin mesajlarını yoxlaya bilərsiniz."
-                )
-                return
     status_msg = await update.effective_message.reply_text("🔍 SEARCHING IN SERVER...")
     try:
         r = await client_async.get(f"{BASE_URL}/success-otp")
@@ -3053,10 +3045,9 @@ async def perform_otp_search(update, context, target_num):
                         service_name = detect_service(full_sms)
                         is_free = service_name in ("TELEGRAM", "WHATSAPP")
                         if not is_free:
-                            user_rate = get_user_otp_rate(int(uid))
-                            await update_db_balance(uid, user_rate)
+                            _complete_number_lease(int(uid), target_num)
                             add_otp_received(uid)
-                            payment_status = f"💵 ADD BALANCE FOR {user_rate:.2f} AZN"
+                            payment_status = "✅ SMS alındı · balans bonusu yoxdur"
                         else:
                             add_otp_received(uid)
                             payment_status = (
@@ -5645,15 +5636,9 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if data.startswith("cancel_number_"):
         lease_id = data.removeprefix("cancel_number_")
-        if cancel_active_number(uid, lease_id):
-            await query.edit_message_text(
-                "❌ <b>SİFARİŞ LƏĞV EDİLDİ</b>\n\n"
-                "Nömrə üçün OTP gözlənilməsi dayandırıldı. "
-                "Bu əməliyyat provayder ödənişini geri qaytarmır.",
-                parse_mode="HTML")
-        else:
-            await query.message.reply_text(
-                "⚠️ Sifariş artıq aktiv deyil, sizə aid deyil və ya 3 dəqiqəsi bitib.")
+        await query.message.reply_text(
+            "⏳ Nömrə 3 dəqiqə tamamlanana qədər ləğv edilə bilməz. "
+            "SMS gəlməsə, balans avtomatik geri qaytarılır.")
         return
 
     # USER INLINE MENU
@@ -6637,8 +6622,12 @@ async def miniapp_orders_api(request):
     if action=="cancel":
         oid=str(body.get("id",""))
         if cancel_active_number(uid, oid):
-            return _miniapp_cors(web.json_response({"ok":True,
-                "message":"Sifariş ləğv edildi. Provayder ödənişi geri qaytarılmır."}))
+            return _miniapp_cors(web.json_response({"ok":True}))
+        if re.fullmatch(r"[0-9a-f]{16}", oid):
+            return _miniapp_cors(web.json_response({
+                "error": "cancel_locked",
+                "message": "3 dəqiqə ərzində ləğv bağlıdır. SMS gəlməsə balans qaytarılacaq."
+            }, status=409))
         # Sandbox orders are synthetic and may be cancelled independently.
         for o in miniapp_orders.get(uid,[]):
             if (o.get("id")==oid and oid.startswith("T") and
