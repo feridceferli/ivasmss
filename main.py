@@ -36,6 +36,7 @@ from rental_ledger import (RentalError, reserve as reserve_rental,
                            refund as refund_rental,
                            refund_expired as refund_expired_rentals)
 from api_sales import ApiSalesStore, ApiSalesError
+from topup_web import parse_amount_cents, decode_receipt
 from topup_ledger import (TopupError, create_request as topup_create_request,
                           resolve_request as topup_resolve_request,
                           pending_requests as topup_pending_requests)
@@ -81,6 +82,7 @@ from telegram import (
     InlineKeyboardButton,
     InlineKeyboardMarkup,
     CopyTextButton,
+    InputFile,
     WebAppInfo,
     MenuButtonWebApp,
 )
@@ -7718,6 +7720,9 @@ async def run_combined_server():
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
+    server.router.add_route("*", "/api/admin-services", miniapp_admin_services_api)
+    server.router.add_route("*", "/api/topup", miniapp_topup_api)
+    server.router.add_route("*", "/api/admin-topups", miniapp_admin_topups_api)
     server.router.add_route("*", "/api/prices", miniapp_prices_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
     server.router.add_route("*", "/api/withdrawals", miniapp_withdrawals_api)
@@ -7812,6 +7817,224 @@ def main():
 
 # ==================== MİNİ APP GƏLƏN SMS VƏ XİDMƏTLƏR API ====================
 miniapp_incoming_sms = {}  # { uid: [ {service, number, otp, message, time}, ... ] }
+
+
+async def miniapp_admin_services_api(request):
+    """All provider service visibility controls, scoped to authenticated admins."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if not is_admin(uid) or is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    live = await fetch_services_cached()
+    if request.method == "POST":
+        try:
+            body = await request.json()
+        except (ValueError, TypeError):
+            body = None
+        if not isinstance(body, dict) or type(body.get("visible")) is not bool:
+            return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+        sid = str(body.get("service", "")).strip().lower()
+        if sid not in live:
+            return _miniapp_cors(web.json_response({
+                "error": "unknown_service",
+                "message": "Bu xidmət hal-hazırda provayder kataloqunda yoxdur."
+            }, status=404))
+        config = load_system_config()
+        set_service_visibility(config, sid, body["visible"])
+        save_system_config(config)
+    elif request.method != "GET":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    config = load_system_config()
+    return _miniapp_cors(web.json_response({
+        "ok": True,
+        "services": [
+            {"id": sid, "range_count": len(ranges),
+             "visible": service_is_visible(config, sid)}
+            for sid, ranges in sorted(live.items())
+        ],
+        "provider_available": bool(live),
+        "backup_ready": bool(user_backup.ready),
+    }, headers={"Cache-Control": "no-store"}))
+
+
+async def miniapp_topup_api(request):
+    """Show bank-transfer details and accept authenticated receipt photos.
+
+    Sending a receipt never credits funds; only an administrator approves it.
+    """
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    card = str(load_system_config().get("topup_card") or "").strip()
+    if request.method == "GET":
+        user = get_user(uid)
+        pending = sum(1 for item in user.get("topup_requests", {}).values()
+                      if isinstance(item, dict) and item.get("status") == "pending")
+        return _miniapp_cors(web.json_response({
+            "enabled": bool(card), "card": card,
+            "balance": format_balance(user.get("balance", 0)),
+            "pending_count": pending, "backup_ready": bool(user_backup.ready),
+        }, headers={"Cache-Control": "no-store"}))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    if not card:
+        return _miniapp_cors(web.json_response({
+            "error": "card_not_configured", "message": "Admin hələ ödəniş kartını əlavə etməyib."
+        }, status=409))
+    if not user_backup.ready:
+        return _miniapp_cors(web.json_response({
+            "error": "backup_unavailable",
+            "message": "Balans arxivi hazır deyil. Pul köçürməzdən əvvəl adminlə əlaqə saxlayın."
+        }, status=503))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise TopupError("invalid_request", "Yanlış sorğu.")
+        cents = parse_amount_cents(body.get("amount"))
+        image_bytes, filename = decode_receipt(body.get("receipt"))
+    except (TopupError, ValueError, TypeError) as exc:
+        return _miniapp_cors(web.json_response({
+            "error": getattr(exc, "code", "invalid_request"),
+            "message": str(exc)[:180],
+        }, status=400))
+    users = load_data(USER_DATA_FILE)
+    if str(uid) not in users:
+        get_user(uid)
+        users = load_data(USER_DATA_FILE)
+    pending = users[str(uid)].get("topup_requests", {})
+    if isinstance(pending, dict) and sum(
+            1 for item in pending.values()
+            if isinstance(item, dict) and item.get("status") == "pending") >= 3:
+        return _miniapp_cors(web.json_response({
+            "error": "pending_limit", "message": "Əvvəlki üç çekin təsdiqini gözləyin."
+        }, status=429))
+    request_id = secrets.token_hex(8)
+    bot = request.app["telegram_bot"]
+    recipient = None
+    uploaded = None
+    for admin_id in ADMINS:
+        try:
+            uploaded = await bot.send_photo(
+                chat_id=admin_id,
+                photo=InputFile(io.BytesIO(image_bytes), filename=filename),
+                caption=f"💳 Balans çeki — yoxlanılır\nİstifadəçi: {uid}\nMəbləğ: {cents / 100:.2f} AZN\nSorğu: {request_id}",
+            )
+            recipient = admin_id
+            break
+        except TelegramError:
+            continue
+    if not uploaded or not uploaded.photo:
+        return _miniapp_cors(web.json_response({
+            "error": "admin_delivery_failed",
+            "message": "Çek adminə göndərilmədi. Balans sorğusu yaradılmadı."
+        }, status=503))
+    file_id = uploaded.photo[-1].file_id
+    users = load_data(USER_DATA_FILE)
+    try:
+        topup_create_request(users, uid, request_id, cents, file_id)
+    except TopupError as exc:
+        return _miniapp_cors(web.json_response({"error": exc.code, "message": str(exc)}, status=409))
+    save_data(users, USER_DATA_FILE)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("✅ Təsdiqlə", callback_data=f"topup:approve:{uid}:{request_id}"),
+        InlineKeyboardButton("❌ Rədd et", callback_data=f"topup:reject:{uid}:{request_id}"),
+    ]])
+    try:
+        await bot.edit_message_reply_markup(
+            chat_id=recipient, message_id=uploaded.message_id, reply_markup=kb)
+    except TelegramError:
+        pass  # /topup_pending can recover the saved request.
+    for admin_id in ADMINS:
+        if admin_id == recipient:
+            continue
+        try:
+            await bot.send_photo(
+                chat_id=admin_id, photo=file_id,
+                caption=f"💳 Balans çeki\nİstifadəçi: {uid}\nMəbləğ: {cents / 100:.2f} AZN\nSorğu: {request_id}",
+                reply_markup=kb)
+        except TelegramError:
+            continue
+    return _miniapp_cors(web.json_response({
+        "ok": True, "request_id": request_id,
+        "message": "Çek adminə göndərildi. Balans yalnız admin təsdiqləyəndə artacaq."
+    }))
+
+
+async def miniapp_admin_topups_api(request):
+    """Review receipt requests and configure transfer instructions in the Mini App."""
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, err = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response({"error": "unauthorized", "reason": err}, status=401))
+    admin_id = int(tg_user["id"])
+    if not is_admin(admin_id) or is_user_banned(admin_id):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    if request.method == "GET":
+        rows = topup_pending_requests(load_data(USER_DATA_FILE), limit=30)
+        return _miniapp_cors(web.json_response({
+            "card": str(load_system_config().get("topup_card") or ""),
+            "backup_ready": bool(user_backup.ready),
+            "pending": [{"user_id": uid, "request_id": oid,
+                         "amount": f"{int(row['amount_cents']) / 100:.2f}"}
+                        for uid, oid, row in rows],
+        }, headers={"Cache-Control": "no-store"}))
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+    except (ValueError, TypeError):
+        return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+    action = body.get("action")
+    if action == "card":
+        details = body.get("card")
+        if not isinstance(details, str) or len(details) > 180:
+            return _miniapp_cors(web.json_response({"error": "invalid_card"}, status=400))
+        if re.search(r"\b(?:cvv|cvc|pin)\b", details, re.I):
+            return _miniapp_cors(web.json_response({
+                "error": "unsafe_card_details", "message": "CVV/PIN məlumatı daxil etməyin."
+            }, status=400))
+        cfg = load_system_config()
+        cfg["topup_card"] = details.strip()
+        save_system_config(cfg)
+        return _miniapp_cors(web.json_response({"ok": True}))
+    if action not in ("approve", "reject"):
+        return _miniapp_cors(web.json_response({"error": "unknown_action"}, status=400))
+    if not user_backup.ready:
+        return _miniapp_cors(web.json_response({
+            "error": "backup_unavailable",
+            "message": "Balans arxivi hazır deyil. Təsdiqləmə dayandırılıb."
+        }, status=503))
+    target = str(body.get("user_id") or "").strip()
+    request_id = str(body.get("request_id") or "").strip()
+    if not re.fullmatch(r"[0-9]{1,20}", target) or not re.fullmatch(r"[0-9a-f]{16}", request_id):
+        return _miniapp_cors(web.json_response({"error": "invalid_request"}, status=400))
+    users = load_data(USER_DATA_FILE)
+    try:
+        row = topup_resolve_request(
+            users, target, request_id, action == "approve", admin_id)
+    except TopupError as exc:
+        return _miniapp_cors(web.json_response({"error": exc.code, "message": str(exc)}, status=409))
+    save_data(users, USER_DATA_FILE)
+    try:
+        await request.app["telegram_bot"].send_message(
+            chat_id=int(target),
+            text=f"{'✅ Təsdiqləndi' if action == 'approve' else '❌ Rədd edildi'}: {row['amount_cents'] / 100:.2f} AZN balans sorğunuz.")
+    except TelegramError:
+        pass
+    return _miniapp_cors(web.json_response({"ok": True}))
+
 
 async def miniapp_services_api(request):
     if request.method == "OPTIONS":
@@ -8082,8 +8305,22 @@ async def miniapp_get_number_api(request):
     add_number_taken(uid, 1)
     range_display = rid + "XXX"
     
-    # Aktif numaralara ekliyoruz
-    lease_id = assign_active_number(uid, clean_num, range_display)
+    # /getnum already reserved, charged and assigned this exact rental.
+    # Reassigning with a fresh lease id could disconnect order/SMS/refund state.
+    active = active_numbers.get(clean_num)
+    if not active or int(active.get("uid", 0)) != uid:
+        return _miniapp_cors(web.json_response({
+            "error": "rental_state_missing",
+            "message": "Nömrə aktivləşdirilməsi təsdiqlənmədi. Adminə bildirin."
+        }, status=503))
+    lease_id = active.get("lease_id")
+    journal = load_data(USER_DATA_FILE).get(str(uid), {}).get("rental_orders", {})
+    record = journal.get(lease_id) if isinstance(journal, dict) else None
+    if not record or record.get("status") != "pending" or record.get("number") != clean_num:
+        return _miniapp_cors(web.json_response({
+            "error": "rental_journal_mismatch",
+            "message": "Sifariş uçotu təsdiqlənmədi. Adminə bildirin."
+        }, status=503))
     save_number_range_info(uid, clean_num, range_display)
     
     # Mini App sipariş listesine ekliyoruz
