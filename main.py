@@ -2600,9 +2600,7 @@ async def monitor_loop(app):
                         safe_full_sms = html.escape(str(full_sms))
                         safe_otp_code = html.escape(str(otp_code))
                         if is_free_service:
-                            balance_msg = (
-                                "xoş sözdər eşidəsən ay qa)"
-                            )
+                            balance_msg = "✅ SMS alındı · balans bonusu yoxdur"
                         else:
                             balance_msg = "✅ SMS alındı · əlavə balans bonusu yoxdur"
                         # One cheerful, non-sensitive caption shared in both notifications.
@@ -3044,8 +3042,8 @@ async def perform_otp_search(update, context, target_num):
                     else:
                         service_name = detect_service(full_sms)
                         is_free = service_name in ("TELEGRAM", "WHATSAPP")
+                        _complete_number_lease(int(uid), target_num)
                         if not is_free:
-                            _complete_number_lease(int(uid), target_num)
                             add_otp_received(uid)
                             payment_status = "✅ SMS alındı · balans bonusu yoxdur"
                         else:
