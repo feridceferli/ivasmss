@@ -1,10 +1,5 @@
 import asyncio
 from data_storage import data_path, atomic_save
-from admin_provider_feeds import (
-    ProviderFeedError, configured_status, feed_snapshot, run_ivasmsper_websocket,
-)
-from admin_provider_numbers import AdminNumberStock, NumberStockError, PROVIDERS
-from sms_test_diagnostics import SmsDiagnosticStore, SmsDiagnosticError
 from number_archive import NumberArchive, txt_chunks
 from otp_leaderboard import otp_leaderboards, leaderboard_page
 from user_backup import UserProfileBackup
@@ -92,7 +87,6 @@ from premium_ui import (premium_inline_button, premium_html_emoji, premium_icons
                         disable_premium_icons, is_premium_emoji_error)
 
 from whatsapp_safe import register_whatsapp_handlers
-from admin_test_tools import register_admin_test_tools
 
 # ==================== CONFIG SECTION ====================
 
@@ -123,17 +117,12 @@ SYSTEM_CONFIG_FILE = data_path("system_config.json")
 NUMBER_PRICES_FILE = data_path("number_prices.json")
 USER_OTP_RATE_FILE = data_path("user_otp_rates.json")
 REQUIRED_CHANNELS_FILE = data_path("required_channels.json")
-FAKE_OTP_CONFIG_FILE = data_path("fake_otp_config.json")
 ACTIVE_LEASES_FILE = data_path("active_leases.json")
 API_SALES_FILE = data_path("api_sales_private.json")
 BOT_PROMO_FILE = data_path("bot_user_promos.json")
-ADMIN_PROVIDER_NUMBERS_FILE = data_path("admin_provider_numbers.json")
-admin_provider_numbers = AdminNumberStock(ADMIN_PROVIDER_NUMBERS_FILE)
 MARKET_CATALOG_FILE = data_path("market_catalog.json")
 RENTAL_LEDGER_FILE = data_path("rental_ledger.json")
 MANUAL_TOPUPS_FILE = data_path("manual_topups.json")
-SMS_TEST_DIAGNOSTICS_FILE = data_path("sms_test_diagnostics_private.json")
-sms_diagnostic_store = SmsDiagnosticStore(SMS_TEST_DIAGNOSTICS_FILE)
 number_archive = NumberArchive(os.environ.get("DB_FOLDER", "").strip() or ".")
 user_backup = UserProfileBackup(
     USER_DATA_FILE, STATS_FILE, ACTIVITY_LOGS_FILE,
@@ -148,14 +137,11 @@ user_backup = UserProfileBackup(
         "banned_users": BANNED_USERS_FILE,
         "withdraw_requests": WITHDRAW_DATA_FILE,
         "datarange": DATA_RANGE_FILE,
-        "fake_otp_config": FAKE_OTP_CONFIG_FILE,
         "world_news_settings": data_path("world_news_settings.json"),
         "ai_post_settings": data_path("ai_post_settings.json"),
         "active_leases": ACTIVE_LEASES_FILE,
         "api_sales": API_SALES_FILE,
         "bot_user_promos": BOT_PROMO_FILE,
-        "admin_provider_numbers": ADMIN_PROVIDER_NUMBERS_FILE,
-        "sms_test_diagnostics": SMS_TEST_DIAGNOSTICS_FILE,
         "market_catalog": MARKET_CATALOG_FILE,
         "rental_ledger": RENTAL_LEDGER_FILE,
         "manual_topups": MANUAL_TOPUPS_FILE,
@@ -697,58 +683,6 @@ def set_user_otp_rate(user_id, rate):
         if uid_str in rates:
             del rates[uid_str]
     save_user_otp_rates(rates)
-
-
-# ==================== FAKE OTP CONFIG FUNCTIONS ====================
-def load_fake_otp_config():
-    if not os.path.exists(FAKE_OTP_CONFIG_FILE):
-        default = {
-            "enabled": False,
-            "service": "DEMO",
-            "range": "",
-            "interval": 10,
-            "running": False,
-            "otp_digits": 6,
-            "sent_count": 0,
-        }
-        save_fake_otp_config(default)
-        return default
-    try:
-        with open(FAKE_OTP_CONFIG_FILE, "r") as f:
-            config = json.load(f)
-            changed = False
-            if "otp_digits" not in config:
-                config["otp_digits"] = 6
-                changed = True
-            if "sent_count" not in config:
-                config["sent_count"] = 0
-                changed = True
-            if changed:
-                save_fake_otp_config(config)
-            return config
-    except:
-        default = {
-            "enabled": False,
-            "service": "DEMO",
-            "range": "",
-            "interval": 10,
-            "running": False,
-            "otp_digits": 6,
-            "sent_count": 0,
-        }
-        save_fake_otp_config(default)
-        return default
-
-
-def save_fake_otp_config(config):
-    _save_persistent_json(config, FAKE_OTP_CONFIG_FILE)
-
-
-def update_fake_otp_config(**kwargs):
-    config = load_fake_otp_config()
-    for key, value in kwargs.items():
-        config[key] = value
-    save_fake_otp_config(config)
 
 
 # ==================== REQUIRED CHANNELS / GROUPS FUNCTIONS ====================
@@ -1624,9 +1558,8 @@ def cancel_keyboard():
 def admin_main_keyboard():
     keyboard = [
         [KeyboardButton("👥 İSTİFADƏÇİ İDARƏETMƏSİ"), KeyboardButton("⚙️ SİSTEM KONFİQURASİYASI")],
-        [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR"), KeyboardButton("⚡ FAKE OTP")],
+        [KeyboardButton("🔗 TƏLƏB OLUNAN KANALLAR")],
         [KeyboardButton("🛠 BİLDİRİŞ ALƏTLƏRİ")],
-        [KeyboardButton("🧪 TEST ALƏTLƏRİ")],
         [KeyboardButton("🛒 API SATIŞI (ADMIN)")],
         [KeyboardButton("🔐 iVASMS XİDMƏTLƏRİ")],
         [KeyboardButton("💳 GÖZLƏYƏN ÇEKLƏR")],
@@ -1694,18 +1627,6 @@ def required_channels_keyboard():
     keyboard = [
         [KeyboardButton("➕ KANAL ƏLAVƏ ET"), KeyboardButton("❌ KANALI SİL")],
         [KeyboardButton("📋 KANALLARIN SİYAHISI"), KeyboardButton("🔙 İNZİBATÇI PANELİNƏ QAYIT")],
-    ]
-    return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
-
-
-def fake_otp_keyboard():
-    config = load_fake_otp_config()
-    status = "✅ AKTİV" if config.get("running", False) else "❌ DEAKTİV"
-    keyboard = [
-        [KeyboardButton(f"📊 STATUS: {status}")],
-        [KeyboardButton("▶️ START"), KeyboardButton("⏹ STOP")],
-        [KeyboardButton("⚙️ SETTINGS"), KeyboardButton("📈 TEST STATİSTİKASI")],
-        [KeyboardButton("🔙 İNZİBATÇI PANELİNƏ QAYIT")],
     ]
     return ReplyKeyboardMarkup(keyboard, resize_keyboard=True)
 
@@ -2720,59 +2641,6 @@ async def monitor_loop(app):
         except (OSError, ValueError, RuntimeError) as exc:
             print("[rental-refunds] retrying after " + type(exc).__name__, flush=True)
         await asyncio.sleep(CHECK_INTERVAL)
-
-
-# ==================== FAKE OTP LOOP ====================
-async def fake_otp_loop(app):
-    """Admin-controlled synthetic OTP demo generator. Never uses real numbers or real SMS data."""
-    while True:
-        try:
-            config = load_fake_otp_config()
-            if not config.get("running", False):
-                await asyncio.sleep(3)
-                continue
-
-            interval = max(10, int(config.get("interval", 10)))
-            otp_digits = min(8, max(4, int(config.get("otp_digits", 6))))
-            service = str(config.get("service", "DEMO")).strip() or "DEMO"
-
-            # Synthetic-only test data. The phone field is intentionally non-dialable/masked.
-            demo_id = "TEST-" + "".join(random.choices(string.ascii_uppercase + string.digits, k=8))
-            otp_code = "".join(random.choices(string.digits, k=otp_digits))
-            masked_phone = "+994 50 XXX XX " + "".join(random.choices(string.digits, k=2))
-            safe_service = html.escape(service.upper())
-            safe_demo_id = html.escape(demo_id)
-            safe_phone = html.escape(masked_phone)
-            safe_otp = html.escape(otp_code)
-
-            # Keep the card visually close to a normal status card, while retaining a clear
-            # disclosure so synthetic authentication data is never presented as genuine.
-            group_msg = (
-                "🇦🇿 <b>Azərbaycan</b>\n\n"
-                f"📱 <code>{safe_phone}</code>\n"
-                f"🔐 <code>{safe_otp}</code>\n"
-                f"📦 <b>{safe_service}</b>\n"
-                "🟢 <b>Aktiv</b>\n\n"
-                "<i>Test məlumatı</i>"
-            )
-
-            try:
-                await app.bot.send_message(
-                    OTP_GROUP_ID, group_msg, parse_mode="HTML",
-                    reply_markup=otp_copy_keyboard(otp_code),
-                )
-                config = load_fake_otp_config()
-                config["sent_count"] = int(config.get("sent_count", 0)) + 1
-                save_fake_otp_config(config)
-                log_global_activity("SYSTEM", "DEMO_OTP_SENT", {"test_id": demo_id})
-            except Exception as e:
-                print(f"❌ Demo OTP göndərilmədi: {e}")
-
-            await asyncio.sleep(interval)
-        except Exception as e:
-            print(f"Demo OTP loop error: {e}")
-            await asyncio.sleep(5)
-
 
 
 async def download_numbers_txt(update, context, all_numbers=False):
@@ -4006,99 +3874,6 @@ async def admin_list_channels(update, context):
     )
 
 
-# ==================== ADMIN PANEL - FAKE OTP ====================
-async def admin_fake_otp_menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    config = load_fake_otp_config()
-    status = "✅ AKTİV" if config.get("running", False) else "❌ DEAKTİV"
-    await update.effective_message.reply_text(
-        "🧪 **TEST OTP SİSTEMİ** 🧪\n\n"
-        "Bu rejim yalnız demo və botun test edilməsi üçündür. Real nömrə, real SMS və real autentifikasiya məlumatı istifadə etmir.\n\n"
-        f"📊 Status: {status}\n"
-        f"📈 Göndərilən test sayı: `{config.get('sent_count', 0)}`",
-        parse_mode="Markdown", reply_markup=fake_otp_keyboard())
-
-async def admin_fake_otp_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    config = load_fake_otp_config()
-    if config.get("running", False):
-        await update.effective_message.reply_text("⚠️ Test OTP sistemi artıq aktivdir.", reply_markup=fake_otp_keyboard())
-        return
-    config["running"] = True
-    save_fake_otp_config(config)
-    await update.effective_message.reply_text("✅ Test OTP sistemi aktiv edildi. Sintetik test mesajları qrupa göndəriləcək.", reply_markup=fake_otp_keyboard())
-
-async def admin_fake_otp_stop(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    config = load_fake_otp_config()
-    config["running"] = False
-    save_fake_otp_config(config)
-    await update.effective_message.reply_text("⏹ Test OTP sistemi dayandırıldı.", reply_markup=fake_otp_keyboard())
-
-async def admin_fake_otp_stats(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    config = load_fake_otp_config()
-    await update.effective_message.reply_text(
-        f"📈 **TEST STATİSTİKASI**\n\nGöndərilən sintetik test mesajları: `{config.get('sent_count', 0)}`\n"
-        f"Status: {'✅ AKTİV' if config.get('running', False) else '❌ DEAKTİV'}",
-        parse_mode="Markdown", reply_markup=fake_otp_keyboard())
-
-async def admin_fake_otp_settings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    config = load_fake_otp_config()
-    msg = (
-        "⚙️ **TEST OTP PARAMETRLƏRİ**\n\n"
-        f"🏷️ Test etiketi: `{config.get('service', 'DEMO')}`\n"
-        f"⏱ Interval: `{config.get('interval', 10)} saniyə`\n"
-        f"🔢 Kod uzunluğu: `{config.get('otp_digits', 6)}`\n\n"
-        "Test mesajları həmişə DEMO kimi işarələnir və real nömrələrdən istifadə etmir."
-    )
-    keyboard = [[KeyboardButton("📱 SET SERVICE")], [KeyboardButton("⏱ SET INTERVAL")],
-                [KeyboardButton("🔢 SET OTP DIGITS")], [KeyboardButton("🔙 BACK TO FAKE OTP")]]
-    await update.effective_message.reply_text(msg, parse_mode="Markdown", reply_markup=ReplyKeyboardMarkup(keyboard, resize_keyboard=True))
-    context.user_data["fake_otp_settings_mode"] = True
-
-async def admin_fake_otp_set_service(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("🏷️ Demo etiketi yazın (məsələn: TEST-SERVICE):", reply_markup=cancel_keyboard())
-    context.user_data["fake_otp_setting"] = "service"
-
-async def admin_fake_otp_set_range(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("ℹ️ Demo rejimində real nömrə/range istifadə edilmir.", reply_markup=fake_otp_keyboard())
-
-async def admin_fake_otp_set_interval(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("⏱ Intervalı saniyə ilə yazın (minimum 10):", reply_markup=cancel_keyboard())
-    context.user_data["fake_otp_setting"] = "interval"
-
-async def admin_fake_otp_set_otp_digits(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("🔢 Test kodunun uzunluğunu yazın (4-8):", reply_markup=cancel_keyboard())
-    context.user_data["fake_otp_setting"] = "otp_digits"
-
-async def admin_fake_otp_process_setting(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    setting = context.user_data.get("fake_otp_setting")
-    if not setting:
-        return
-    text = normalize_button_input(update.message.text.strip())
-    if text == "❌ CANCEL":
-        context.user_data["fake_otp_setting"] = None
-        context.user_data["fake_otp_settings_mode"] = False
-        await update.effective_message.reply_text("❌ Ləğv edildi.", reply_markup=fake_otp_keyboard())
-        return
-    config = load_fake_otp_config()
-    try:
-        if setting == "service":
-            config["service"] = (text[:32] or "DEMO")
-        elif setting == "interval":
-            val = int(text)
-            if val < 10: raise ValueError
-            config["interval"] = val
-        elif setting == "otp_digits":
-            val = int(text)
-            if not 4 <= val <= 8: raise ValueError
-            config["otp_digits"] = val
-        save_fake_otp_config(config)
-    except ValueError:
-        await update.effective_message.reply_text("❌ Dəyər düzgün deyil. Interval minimum 10 saniyə, kod uzunluğu 4-8 olmalıdır.", reply_markup=cancel_keyboard())
-        return
-    context.user_data["fake_otp_setting"] = None
-    context.user_data["fake_otp_settings_mode"] = False
-    await update.effective_message.reply_text("✅ Parametr yadda saxlanıldı.", reply_markup=fake_otp_keyboard())
-
-
 # ==================== SHOW MAIN MENU HELPER ====================
 async def show_main_menu(update, context, uid):
     await context.bot.send_message(
@@ -4453,9 +4228,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     # Fake OTP settings processing
-    if context.user_data.get("fake_otp_setting") and is_admin(uid):
-        await admin_fake_otp_process_setting(update, context)
-        return
 
     # Withdraw flow
     if context.user_data.get("withdraw_mode") == "select_method":
@@ -4520,25 +4292,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if context.user_data.get("remove_channel_mode") and is_admin(uid):
         await admin_process_remove_channel(update, context)
         return
-
-    # Fake OTP settings menu navigation (admin)
-    if context.user_data.get("fake_otp_settings_mode") and is_admin(uid):
-        if text == "📱 SET SERVICE":
-            await admin_fake_otp_set_service(update, context)
-            return
-        elif text == "📶 SET RANGE":
-            await admin_fake_otp_set_range(update, context)
-            return
-        elif text == "⏱ SET INTERVAL":
-            await admin_fake_otp_set_interval(update, context)
-            return
-        elif text == "🔢 SET OTP DIGITS":
-            await admin_fake_otp_set_otp_digits(update, context)
-            return
-        elif text == "🔙 BACK TO FAKE OTP":
-            context.user_data["fake_otp_settings_mode"] = False
-            await admin_fake_otp_menu(update, context)
-            return
 
     # Collect number-only TXT results for one custom range.
     if context.user_data.get("mode") == "custom_range_collect":
@@ -4714,7 +4467,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         context.user_data["user_management_mode"] = None
         context.user_data["system_config_mode"] = None
         context.user_data["required_channels_mode"] = None
-        context.user_data["fake_otp_settings_mode"] = False
         context.user_data["admin_mode"] = "main"
         await update.effective_message.reply_text(
             "🔙 Back to admin panel.", reply_markup=admin_main_keyboard()
@@ -4753,46 +4505,6 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             "🔗 Required Channels / Groups Management:",
             reply_markup=required_channels_keyboard(),
         )
-        return
-
-    if (
-        text == "⚡ FAKE OTP"
-        and context.user_data.get("admin_mode") == "main"
-        and is_admin(uid)
-    ):
-        await admin_fake_otp_menu(update, context)
-        return
-
-    if (
-        text == "▶️ START"
-        and context.user_data.get("admin_mode") == "main"
-        and is_admin(uid)
-    ):
-        await admin_fake_otp_start(update, context)
-        return
-
-    if (
-        text == "⏹ STOP"
-        and context.user_data.get("admin_mode") == "main"
-        and is_admin(uid)
-    ):
-        await admin_fake_otp_stop(update, context)
-        return
-
-    if (
-        text == "⚙️ SETTINGS"
-        and context.user_data.get("admin_mode") == "main"
-        and is_admin(uid)
-    ):
-        await admin_fake_otp_settings(update, context)
-        return
-
-    if (
-        text == "📈 TEST STATİSTİKASI"
-        and context.user_data.get("admin_mode") == "main"
-        and is_admin(uid)
-    ):
-        await admin_fake_otp_stats(update, context)
         return
 
     # Required channels submenu
@@ -7007,10 +6719,6 @@ async def miniapp_admin_tools_api(request):
             "notification_group_configured": bool(NOTIFY_GROUP_ID),
             "whatsapp": {"status": wa_status, "test_recipient": cfg.masked_recipient()
                          if wa_status == "configured" else ""},
-            "demo": {
-                "running": bool(load_fake_otp_config().get("running")),
-                "sent_count": int(load_fake_otp_config().get("sent_count", 0)),
-            },
             "archive_sync": {"status": str(number_archive.status)[:250]},
             "user_backup": {"status": str(user_backup.status)[:250], "ready": user_backup.ready},
             "ai_posts": public_ai_status(),
@@ -7168,257 +6876,6 @@ async def miniapp_admin_tools_api(request):
     return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
 
 
-async def _sync_sms_diagnostics():
-    """Ensure settings and phone-test history survive ephemeral Render redeploys."""
-    user_backup.changed()
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
-        await user_backup.sync_once(client)
-
-
-async def miniapp_sms_diagnostics_api(request):
-    """Dry-run only. Never invokes any third-party SMS/OTP endpoint."""
-    if request.method == "OPTIONS":
-        return _miniapp_cors(web.Response(status=204))
-    user, reason = _miniapp_auth(request)
-    if not user:
-        return _miniapp_cors(web.json_response(
-            {"error": "unauthorized", "reason": reason}, status=401))
-    uid = int(user["id"])
-    if is_user_banned(uid):
-        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    admin = bool(is_admin(uid))
-    if request.method == "GET":
-        try:
-            payload = sms_diagnostic_store.snapshot(uid, admin)
-        except SmsDiagnosticError as exc:
-            return _miniapp_cors(web.json_response({"error": exc.code}, status=503))
-        payload["backup_ready"] = bool(user_backup.ready) if admin else None
-        result = _miniapp_cors(web.json_response(payload))
-        result.headers["Cache-Control"] = "no-store"
-        return result
-    if request.method != "POST":
-        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
-    if request.content_length is not None and request.content_length > 2000:
-        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=413))
-    if not user_backup.ready:
-        return _miniapp_cors(web.json_response({"error": "storage_not_ready"}, status=503))
-    try:
-        body = await request.json()
-    except (ValueError, TypeError):
-        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
-    if not isinstance(body, dict):
-        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
-    action = body.get("action")
-    try:
-        if action == "visibility":
-            if not admin:
-                return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-            payload = await sms_diagnostic_store.set_visibility(body.get("enabled"))
-        elif action == "simulate":
-            payload = await sms_diagnostic_store.simulate(
-                uid, body.get("number"), body.get("consent"), is_admin=admin)
-        else:
-            return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
-    except SmsDiagnosticError as exc:
-        response_status = 503 if exc.code == "storage_unavailable" else (
-            403 if exc.code == "feature_disabled" else
-            429 if exc.code in ("rate_limited", "daily_limit") else 400)
-        return _miniapp_cors(web.json_response({"error": exc.code}, status=response_status))
-    try:
-        await _sync_sms_diagnostics()
-    except (OSError, RuntimeError, ValueError, httpx.HTTPError) as exc:
-        print("[sms-diagnostics] private sync pending: " + type(exc).__name__, flush=True)
-        return _miniapp_cors(web.json_response(
-            {"error": "backup_failed", "saved_locally": True}, status=503))
-    result = _miniapp_cors(web.json_response({
-        "ok": True, "result": payload, "mode": "dry_run_no_sms_sent",
-    }))
-    result.headers["Cache-Control"] = "no-store"
-    return result
-
-
-async def miniapp_admin_provider_feeds_api(request):
-    """Private provider feeds; the admin check is enforced on every request."""
-    if request.method == "OPTIONS":
-        return _miniapp_cors(web.Response(status=204))
-    user, error = _miniapp_auth(request)
-    if not user:
-        return _miniapp_cors(web.json_response(
-            {"error": "unauthorized", "reason": error}, status=401))
-    uid = int(user["id"])
-    if not is_admin(uid) or is_user_banned(uid):
-        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-    if request.method != "GET":
-        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
-    provider = request.query.get("provider", "").strip()
-    if not provider:
-        payload = {"providers": configured_status()}
-    else:
-        try:
-            limit = int(request.query.get("limit", "20"))
-            if not 1 <= limit <= 30:
-                raise ValueError("limit")
-        except ValueError:
-            return _miniapp_cors(web.json_response({"error": "invalid_limit"}, status=400))
-        try:
-            payload = await feed_snapshot(provider, limit)
-        except ProviderFeedError as exc:
-            response = _miniapp_cors(web.json_response(
-                {"error": exc.code}, status=exc.http_status))
-            response.headers["Cache-Control"] = "no-store"
-            return response
-    response = _miniapp_cors(web.json_response(payload))
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
-async def _commit_admin_number_changes():
-    """Only report durable import success after the private backup accepts it."""
-    user_backup.changed()
-    async with httpx.AsyncClient(timeout=20.0, follow_redirects=False) as client:
-        await user_backup.sync_once(client)
-
-
-async def miniapp_admin_provider_numbers_api(request):
-    """List/import/delete numbers from admin-owned inventories only."""
-    if request.method == "OPTIONS":
-        return _miniapp_cors(web.Response(status=204))
-    user, err = _miniapp_auth(request)
-    if not user:
-        return _miniapp_cors(web.json_response(
-            {"error": "unauthorized", "reason": err}, status=401))
-    uid = int(user["id"])
-    if not is_admin(uid) or is_user_banned(uid):
-        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
-    provider = request.query.get("provider", "").strip()
-    if provider not in PROVIDERS:
-        return _miniapp_cors(web.json_response({"error": "invalid_provider"}, status=400))
-    if request.method == "GET":
-        try:
-            snapshot = admin_provider_numbers.list(provider)
-        except NumberStockError as exc:
-            return _miniapp_cors(web.json_response({"error": exc.code}, status=503))
-        response = _miniapp_cors(web.json_response({
-            **snapshot, "backup_ready": bool(user_backup.ready),
-        }))
-        response.headers["Cache-Control"] = "no-store"
-        return response
-    if request.method != "POST":
-        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
-    if not user_backup.ready:
-        return _miniapp_cors(web.json_response({"error": "backup_not_ready"}, status=503))
-    try:
-        body = await request.json()
-    except (ValueError, TypeError):
-        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
-    if not isinstance(body, dict):
-        return _miniapp_cors(web.json_response({"error": "invalid_body"}, status=400))
-    action = body.get("action")
-    try:
-        if action == "import":
-            result = await admin_provider_numbers.import_text(provider, body.get("numbers"))
-        elif action == "delete":
-            result = await admin_provider_numbers.delete(provider, body.get("number"))
-        else:
-            return _miniapp_cors(web.json_response({"error": "unsupported_action"}, status=400))
-    except NumberStockError as exc:
-        return _miniapp_cors(web.json_response({"error": exc.code}, status=400
-            if exc.code not in ("inventory_unavailable",) else 503))
-    try:
-        await _commit_admin_number_changes()
-    except (OSError, RuntimeError, ValueError, httpx.HTTPError) as exc:
-        print("[admin-number-stock] backup pending: " + type(exc).__name__, flush=True)
-        return _miniapp_cors(web.json_response(
-            {"error": "backup_failed", "saved_locally": True}, status=503))
-    response = _miniapp_cors(web.json_response({"ok": True, **result}))
-    response.headers["Cache-Control"] = "no-store"
-    return response
-
-
-async def admin_provider_number_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    """Private Telegram commands: /green_sms and /ivasmsper (no OTP forwarding)."""
-    if not update.effective_user or not update.effective_chat:
-        return
-    if update.effective_chat.type != "private" or not is_admin(update.effective_user.id):
-        return
-    provider = "green_sms" if update.message.text.split()[0].split("@")[0] == "/green_sms" else "ivasmsper"
-    args = context.args or []
-    if args and args[0].lower() == "status":
-        state = configured_status()[provider]
-        rest = "aktiv konfiqurasiya" if state.get("rest_configured") else "HTTPS API açarı/ünvanı yoxdur"
-        websocket = ""
-        if provider == "ivasmsper":
-            websocket = ("\\nWebSocket: " +
-                         ("qoşulub" if state.get("live_connected") else
-                          "konfiqurasiya var, bağlantı yoxdur" if state.get("websocket_configured")
-                          else "konfiqurasiya edilməyib"))
-        await update.message.reply_text(
-            f"🔐 {provider}\\nREST: {rest}" + websocket +
-            "\\nProvayder mesajlarına baxmaq üçün /" + provider + " sms yazın."
-        )
-        return
-    if args and args[0].lower() in ("sms", "messages"):
-        try:
-            response = await feed_snapshot(provider, limit=5)
-        except ProviderFeedError as exc:
-            explanations = {
-                "provider_not_configured": "HTTPS API ünvanı və şəxsi açar mövcud deyil.",
-                "upstream_unauthorized": "API açarı qəbul edilmədi (401).",
-                "upstream_forbidden": "API girişə icazə vermir (403).",
-                "upstream_endpoint_missing": "API endpoint tapılmadı (404).",
-                "upstream_rate_limited": "Provayder sorğu limitini keçib (429).",
-                "upstream_unreachable_or_invalid": "Provayderə qoşulmaq mümkün olmadı.",
-                "invalid_provider_response": "API gözlənilməyən cavab qaytardı.",
-            }
-            await update.message.reply_text(
-                "⚠️ " + explanations.get(exc.code, "Mənbə xətası: " + exc.code))
-            return
-        rows = response.get("records", [])[:5]
-        if not rows:
-            await update.message.reply_text(
-                "📭 Bu provayderin hesabında hazırda oxuna bilən SMS yoxdur. "
-                "Nömrə ehtiyatı SMS axınından ayrıca idarə olunur."
-            )
-            return
-        lines = []
-        for record in rows:
-            number = str(record.get("number") or "—")[:30]
-            service = str(record.get("service") or "SMS")[:40]
-            message = str(record.get("message") or "Mətn yoxdur")[:350]
-            lines.append(f"📱 {number} | {service}\\n{message}")
-        await update.message.reply_text("🔐 Şəxsi SMS görünüşü:\\n\\n" + "\\n\\n".join(lines))
-        return
-    if args and args[0].lower() == "add":
-        if not user_backup.ready:
-            await update.message.reply_text("⛔ Şəxsi arxiv bağlantısı hazır deyil; əlavə etmək dayandırıldı.")
-            return
-        try:
-            result = await admin_provider_numbers.import_text(provider, "\n".join(args[1:]))
-            await _commit_admin_number_changes()
-        except NumberStockError as exc:
-            await update.message.reply_text("⚠️ Nömrə formatı və ya limit xətası: " + exc.code)
-            return
-        except (OSError, RuntimeError, ValueError, httpx.HTTPError):
-            await update.message.reply_text("⚠️ Yerli yaddaş yeniləndi, şəxsi arxivə sinxronizasiya alınmadı.")
-            return
-        await update.message.reply_text(f"✅ {result['added']} yeni nömrə əlavə edildi. Cəmi: {result['count']}.")
-        return
-    try:
-        items = admin_provider_numbers.list(provider)
-    except NumberStockError:
-        await update.message.reply_text("⚠️ Nömrə arxivi oxunmur.")
-        return
-    title = "Green SMS" if provider == "green_sms" else "Ivasmsper"
-    first = [row["number"] for row in items["numbers"][:5]]
-    await update.message.reply_text(
-        f"🔐 {title} — admin nömrələri: {items['count']}\n" +
-        ("\n".join(first) if first else "Hazırda idxal edilmiş nömrə yoxdur.") +
-        f"\n\nƏlavə et: /{provider} add +994501234567\n"
-        "SMS-lər: /" + provider + " sms · Bağlantı: /" + provider + " status\\n"
-        "Daha çox nömrə üçün sayt və Mini App → Admin bölməsini açın."
-    )
-
-
 async def post_init(application):
     # Preserve administrator-edited news settings across restarts.
     # Restore users, referrals, permissions and preferences BEFORE workers start.
@@ -7439,14 +6896,9 @@ async def post_init(application):
     application.bot_data["user_backup_task"] = asyncio.create_task(user_backup.run())
     await asyncio.to_thread(number_archive.import_legacy, load_range_db())
     application.bot_data["number_archive_task"] = asyncio.create_task(number_archive.run())
-    # Optional authorized Ivasmsper WebSocket source. Kept separate from public feeds.
-    if configured_status()["ivasmsper"]["websocket_configured"]:
-        application.bot_data["ivasmsper_ws_task"] = asyncio.create_task(
-            run_ivasmsper_websocket())
     for _ in range(20):
         asyncio.create_task(worker())
     asyncio.create_task(monitor_loop(application))
-    asyncio.create_task(fake_otp_loop(application))
     asyncio.create_task(country_availability_loop(application))
     application.bot_data["hourly_user_promo_task"] = asyncio.create_task(
         bot_hourly_promo_loop(application))
@@ -7457,12 +6909,9 @@ async def post_init(application):
 def register_handlers(app):
     market_bot_ui.register(app)
     register_whatsapp_handlers(app, is_admin)
-    register_admin_test_tools(app, is_admin, admin_main_keyboard)
     app.add_handler(CommandHandler("numbers_txt", numbers_txt_command))
     app.add_handler(CommandHandler("all_numbers_txt", all_numbers_txt_command))
     app.add_handler(CommandHandler("numbers_status", numbers_status_command))
-    app.add_handler(CommandHandler("green_sms", admin_provider_number_command))
-    app.add_handler(CommandHandler("ivasmsper", admin_provider_number_command))
     app.add_handler(CommandHandler("start", start))
     app.add_handler(CommandHandler("referral", referral_command))
     app.add_handler(CommandHandler("menu", legacy_menu_command))
@@ -7554,9 +7003,6 @@ async def run_combined_server():
     server.router.add_route("*", "/api/test-sms", miniapp_test_sms)
     server.router.add_route("*", "/api/admin", miniapp_admin_api)
     server.router.add_route("*", "/api/admin-tools", miniapp_admin_tools_api)
-    server.router.add_route("*", "/api/admin-provider-feeds", miniapp_admin_provider_feeds_api)
-    server.router.add_route("*", "/api/admin-provider-numbers", miniapp_admin_provider_numbers_api)
-    server.router.add_route("*", "/api/sms-diagnostics", miniapp_sms_diagnostics_api)
     server.router.add_route("*", "/api/bot-promos", miniapp_bot_promos_api)
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
