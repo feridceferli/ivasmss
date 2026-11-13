@@ -8046,9 +8046,11 @@ async def miniapp_services_api(request):
     uid = int(tg_user["id"])
     if is_user_banned(uid):
         return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
-    services = _visible_services_for_user(uid, await fetch_services_cached())
+    provider_services = await fetch_services_cached()
+    services = _visible_services_for_user(uid, provider_services)
     return _miniapp_cors(web.json_response({
         "services": services,
+        "provider_available": bool(provider_services),
         "az_available": any(
             is_az_range(item)
             for ranges in services.values() for item in ranges
