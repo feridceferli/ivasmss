@@ -98,6 +98,17 @@ class RentalLedger:
         atomic_save(data, self.filename)
         self.on_change()
 
+    def abort(self, lease_id):
+        """End an uncommitted allocation; no expiry refund is due."""
+        data = self._all()
+        row = data.get(str(lease_id))
+        if not row or row.get("status") != "pending":
+            return False
+        row["status"] = "aborted"
+        atomic_save(data, self.filename)
+        self.on_change()
+        return True
+
     def received(self, lease_id, *, now=None):
         data = self._all()
         row = data.get(str(lease_id))
