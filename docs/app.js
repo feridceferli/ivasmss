@@ -6,7 +6,7 @@ const tg = window.Telegram?.WebApp || { initData: "", expand() {} };
 tg.expand();
 
 const API_BASE = "https://ivasmss.onrender.com";
-const TABS = ["services", "countries", "azerbaijan", "active", "history", "api-sales", "leaderboard", "profile", "guide", "admin"];
+const TABS = ["services", "countries", "azerbaijan", "active", "history", "api-sales", "leaderboard", "profile", "topup", "guide", "admin"];
 const state = {
     activeTab: "services",
     services: {},
@@ -156,7 +156,10 @@ function switchTab(tab) {
         fetchLeaderboard();
     } else if (tab === "profile") {
         fetchProfile();
+    } else if (tab === "topup") {
+        loadTopupDetails();
     } else if (tab === "admin") {
+        loadTopupDetails();
         fetchAdminUsers();
         loadAdminTools();
         fetchPrices();
@@ -265,8 +268,8 @@ async function fetchDashboard() {
         void updateTelegramAvatar(user);
         state.isAdmin = !!user.is_admin;
         state.azApproved = !!user.az_approved;
-        window.loadSmsDiagnosticsAvailability?.();
         renderWhatsappReferrals(data.whatsapp_referrals);
+        if (state.activeTab === "topup") void loadTopupDetails();
         const adminButton = document.getElementById("admin-tab-button");
         adminButton.hidden = !state.isAdmin;
         document.getElementById("tab-admin").hidden = !state.isAdmin;
@@ -1101,6 +1104,90 @@ async function fetchIncomingSms() {
     } catch (err) { clearAndText(container, err.message); }
 }
 
+
+
+async function loadTopupDetails() {
+    const status = document.getElementById("topup-status");
+    const cardEl = document.getElementById("topup-card");
+    const botLink = document.getElementById("topup-bot-link");
+    const contactLink = document.getElementById("topup-contact-link");
+    const history = document.getElementById("topup-history");
+    try {
+        const data = await api("/api/topup-details");
+        cardEl.textContent = data.card || "Admin hələ kart nömrəsi əlavə etməyib";
+        botLink.hidden = !data.card || !data.bot_url;
+        if (data.bot_url && /^https:\/\/t\.me\/[A-Za-z0-9_]+\?start=topup$/.test(data.bot_url)) {
+            botLink.href = data.bot_url;
+        } else {
+            botLink.hidden = true;
+        }
+        contactLink.hidden = !data.contact;
+        if (data.contact && /^https:\/\/t\.me\/[A-Za-z0-9_]+$/.test(data.contact)) {
+            contactLink.href = data.contact;
+        } else {
+            contactLink.hidden = true;
+        }
+        status.textContent = data.card
+            ? "Köçürmədən sonra botda məbləği yazıb bank çekini göndərin."
+            : "⚠️ Ödəniş kartı hələ təyin edilməyib. Adminlə əlaqə saxlayın.";
+        history.replaceChildren();
+        const labels = {pending: "⏳ Admin təsdiqi gözlənilir",
+                        approved: "✅ Balansa əlavə edildi",
+                        rejected: "❌ Rədd edildi"};
+        const rows = Array.isArray(data.requests) ? data.requests : [];
+        if (!rows.length) history.appendChild(node("p", "Hələ ödəniş sorğunuz yoxdur.", "notice-mini"));
+        for (const item of rows) {
+            const div = node("div", null, "card");
+            div.appendChild(node("strong", Number(item.amount).toFixed(2) + " AZN"));
+            div.appendChild(node("p", labels[item.status] || "Naməlum status", "notice-mini"));
+            history.appendChild(div);
+        }
+        if (data.is_admin) {
+            const cardInput = document.getElementById("admin-topup-card");
+            const contactInput = document.getElementById("admin-topup-contact");
+            if (cardInput && document.activeElement !== cardInput) cardInput.value = data.card || "";
+            if (contactInput && document.activeElement !== contactInput) contactInput.value = data.contact || "";
+        }
+    } catch (err) {
+        status.textContent = "❌ Ödəniş məlumatları yüklənmədi: " + err.message;
+        botLink.hidden = true;
+    }
+}
+
+async function copyTopupCard() {
+    const card = document.getElementById("topup-card").textContent.trim();
+    if (!/^([0-9][ -]?){13,19}$/.test(card)) {
+        toast("Kart nömrəsi hələ təyin edilməyib.", "error");
+        return;
+    }
+    try {
+        await navigator.clipboard.writeText(card.replace(/\s/g, ""));
+        toast("Kart nömrəsi kopyalandı.", "success");
+    } catch (_) {
+        toast("Kartı seçib əl ilə kopyalayın.", "error");
+    }
+}
+
+async function saveTopupSettings(action) {
+    const status = document.getElementById("admin-topup-status");
+    const value = action === "set_card"
+        ? document.getElementById("admin-topup-card").value.trim()
+        : document.getElementById("admin-topup-contact").value.trim();
+    try {
+        await api("/api/topup-details", {
+            method: "POST", body: action === "set_card"
+                ? {action, card: value} : {action, contact: value}
+        });
+        status.textContent = "✅ Məlumat saxlanıldı.";
+        await loadTopupDetails();
+    } catch (err) {
+        status.textContent = "❌ " + err.message;
+    }
+}
+
+window.loadTopupDetails = loadTopupDetails;
+window.copyTopupCard = copyTopupCard;
+window.saveTopupSettings = saveTopupSettings;
 
 async function fetchProfile() {
     const display = document.getElementById("profile-name");

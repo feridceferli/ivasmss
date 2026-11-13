@@ -5026,6 +5026,9 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if confirm_referral(db, uid):
         save_data(db, USER_DATA_FILE)
     args = context.args
+    if args and args[0] == "topup":
+        await market_bot_ui.topup_command(update, context)
+        return
     if args and str(args[0]).startswith("connect_"):
         # A browser can link an account only after its Telegram owner approves here.
         token = str(args[0])[len("connect_"):]
@@ -6009,6 +6012,67 @@ def _miniapp_cors(resp):
     resp.headers["Vary"] = "Origin"
     return resp
 
+
+
+async def miniapp_topup_details_api(request):
+    """Authenticated payment instructions and per-user receipt status.
+
+    Actual receipt submission remains in the bot's private /topup flow.
+    Only an administrator may configure the payment card or contact.
+    """
+    if request.method == "OPTIONS":
+        return _miniapp_cors(web.Response(status=204))
+    tg_user, reason = _miniapp_auth(request)
+    if not tg_user:
+        return _miniapp_cors(web.json_response(
+            {"error": "unauthorized", "reason": reason}, status=401))
+    uid = int(tg_user["id"])
+    if is_user_banned(uid):
+        return _miniapp_cors(web.json_response({"error": "banned"}, status=403))
+    if request.method == "GET":
+        try:
+            details = manual_topups.details()
+            records = manual_topups._load()["requests"]
+        except (ValueError, OSError, TypeError):
+            return _miniapp_cors(web.json_response(
+                {"error": "payment_storage_unavailable"}, status=503))
+        mine = [
+            {"id": ident, "amount": round(row["cents"] / 100, 2),
+             "status": row["status"], "created_at": row.get("created_at", 0)}
+            for ident, row in records.items()
+            if row.get("uid") == str(uid)
+        ]
+        mine.sort(key=lambda row: row["created_at"], reverse=True)
+        response = _miniapp_cors(web.json_response({
+            "card": details["card"], "contact": details["contact"],
+            "bot_url": "https://t.me/" + request.app["bot_username"] + "?start=topup",
+            "requests": mine[:20], "is_admin": bool(is_admin(uid)),
+            "storage_ready": bool(user_backup.ready),
+        }))
+        response.headers["Cache-Control"] = "no-store"
+        return response
+    if request.method != "POST":
+        return _miniapp_cors(web.json_response({"error": "method_not_allowed"}, status=405))
+    if not is_admin(uid):
+        return _miniapp_cors(web.json_response({"error": "forbidden"}, status=403))
+    if not user_backup.ready:
+        return _miniapp_cors(web.json_response({"error": "storage_not_ready"}, status=503))
+    try:
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError()
+        action = body.get("action")
+        if action == "set_card":
+            manual_topups.set_card(body.get("card"))
+        elif action == "set_contact":
+            manual_topups.set_contact(body.get("contact"))
+        else:
+            return _miniapp_cors(web.json_response(
+                {"error": "unsupported_action"}, status=400))
+    except (ValueError, TypeError) as exc:
+        return _miniapp_cors(web.json_response(
+            {"error": "invalid_payment_settings", "message": str(exc)}, status=400))
+    return _miniapp_cors(web.json_response({"ok": True}))
 
 
 async def miniapp_prices_api(request):
@@ -6995,6 +7059,7 @@ async def run_combined_server():
     server.router.add_route("*", "/api/api-sales", miniapp_api_sales_api)
     server.router.add_route("*", "/api/services", miniapp_services_api)
     server.router.add_route("*", "/api/prices", miniapp_prices_api)
+    server.router.add_route("*", "/api/topup-details", miniapp_topup_details_api)
     server.router.add_route("*", "/api/profile", miniapp_profile_api)
     server.router.add_route("*", "/api/withdrawals", miniapp_withdrawals_api)
     server.router.add_route("*", "/api/leaderboard", miniapp_leaderboard_api)
